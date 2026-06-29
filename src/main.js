@@ -7,6 +7,12 @@ import {
   hasResearchKey,
   upgradeCost,
 } from './systems/economy.js';
+import {
+  DEFAULT_STATION,
+  buildPath as buildTrackPath,
+  samplePathAt,
+  speedAtPath,
+} from './systems/path.js';
 
 const THREE = window.THREE;
 if (!THREE) {
@@ -196,238 +202,29 @@ function disposeGroup(grp, keepGeometry=false){
 }
 
 // =========================================================================
-//  TRACK PATH  (centerline samples with explicit frames + physics)
+//  TRACK PATH
 // =========================================================================
-const SEG_SAMPLES=24, LOOP_SAMPLES=48, CORK_SAMPLES=46;
+const STATION = DEFAULT_STATION;
 
-function catmull(p0,p1,p2,p3,t){
-  const t2=t*t,t3=t2*t;
-  const f=(a,b,c,d)=>0.5*((2*b)+(-a+c)*t+(2*a-5*b+4*c-d)*t2+(-a+3*b-3*c+d)*t3);
-  return new THREE.Vector3(f(p0.x,p1.x,p2.x,p3.x),f(p0.y,p1.y,p2.y,p3.y),f(p0.z,p1.z,p2.z,p3.z));
-}
-const horiz=v=>{const h=new THREE.Vector3(v.x,0,v.z);return h.lengthSq()<1e-6?new THREE.Vector3(1,0,0):h.normalize();};
-
-// ── fixed station ───────────────────────────────────────────────────────────
-// Points 0 & 1 are the two ends of the station: a fixed, flat, straight
-// boarding straightaway whose length always matches the platform.
-const STATION = { cx:0, cz:9.0, y:0.7 };
-function stationLength(){ return 3.5 + Math.min(1+UPGRADES.car.level,8)*2.2; }  // == platform length
-function syncStationPoints(){
-  const half=stationLength()/2, a=ctrlPts[0], b=ctrlPts[1];
-  if(a){ a.x=STATION.cx+half; a.z=STATION.cz; a.y=STATION.y; a.station=true; a.seg='station'; }  // entrance (train arrives)
-  if(b){ b.x=STATION.cx-half; b.z=STATION.cz; b.y=STATION.y; b.station=true; b.seg='plain';   }  // exit (out to the track)
-}
-
-// build raw centerline (positions + per-sample kind + optional featureUp)
-function buildCenterline(){
-  const n=ctrlPts.length;
-  const P=ctrlPts.map(p=>new THREE.Vector3(p.x,p.y,p.z));
-  const out=[];
-  const at=i=>P[((i%n)+n)%n];
-  for(let i=0;i<n;i++){
-    const node=ctrlPts[i];
-    const seg=node.seg||'plain';
-    const p0=at(i-1),p1=at(i),p2=at(i+1),p3=at(i+2);
-
-    if(seg==='loop'){
-      // vertical loop detour, returns to p1, then plain spline to p2
-      const fwd=horiz(new THREE.Vector3().subVectors(p1,p0));
-      const R=2.3;
-      const C=p1.clone().addScaledVector(WORLD_UP,R);
-      for(let k=0;k<LOOP_SAMPLES;k++){
-        const th=(k/LOOP_SAMPLES)*Math.PI*2;
-        const pos=C.clone().addScaledVector(fwd,Math.sin(th)*R).addScaledVector(WORLD_UP,-Math.cos(th)*R);
-        const up=new THREE.Vector3().subVectors(C,pos).normalize();
-        out.push({pos,kind:'loop',featureUp:up});
-      }
-      for(let k=0;k<SEG_SAMPLES;k++){
-        const t=k/SEG_SAMPLES;
-        out.push({pos:catmull(p0,p1,p2,p3,t),kind:'plain'});
-      }
-    } else if(seg==='corkscrew'){
-      // helix from p1 to p2 (radius eased to 0 at both ends -> continuous)
-      const axis=new THREE.Vector3().subVectors(p2,p1);
-      const L=axis.length(); const axisN=axis.clone().normalize();
-      let ref=Math.abs(axisN.y)>0.9?new THREE.Vector3(1,0,0):WORLD_UP;
-      const n1=new THREE.Vector3().crossVectors(axisN,ref).normalize();
-      const n2=new THREE.Vector3().crossVectors(axisN,n1).normalize();
-      const r0=Math.min(1.7,L*0.34), turns=1;
-      for(let k=0;k<CORK_SAMPLES;k++){
-        const t=k/CORK_SAMPLES;
-        const r=r0*Math.sin(Math.PI*t);
-        const phi=Math.PI*2*turns*t;
-        const center=p1.clone().addScaledVector(axisN,L*t);
-        const off=n1.clone().multiplyScalar(Math.cos(phi)*r).addScaledVector(n2,Math.sin(phi)*r);
-        const pos=center.clone().add(off);
-        const up=r>0.05?off.clone().normalize():WORLD_UP.clone();
-        out.push({pos,kind:'corkscrew',featureUp:up});
-      }
-    } else if(seg==='station'){
-      // dead-straight, flat boarding straightaway between the two fixed ends
-      for(let k=0;k<SEG_SAMPLES;k++){
-        const t=k/SEG_SAMPLES;
-        out.push({pos:p1.clone().lerp(p2,t),kind:'station'});
-      }
-    } else {
-      for(let k=0;k<SEG_SAMPLES;k++){
-        const t=k/SEG_SAMPLES;
-        out.push({pos:catmull(p0,p1,p2,p3,t),kind:seg});
-      }
-    }
-  }
-  return out;
-}
-
-function transportUp(prevUp,t0,t1){
-  const axis=new THREE.Vector3().crossVectors(t0,t1);
-  const len=axis.length(); const u=prevUp.clone();
-  if(len>1e-6){axis.multiplyScalar(1/len);u.applyAxisAngle(axis,Math.atan2(len,t0.dot(t1)));}
-  u.addScaledVector(t1,-u.dot(t1));
-  if(u.lengthSq()<1e-9){u.copy(WORLD_UP).addScaledVector(t1,-t1.y); if(u.lengthSq()<1e-9)u.set(1,0,0);}
-  return u.normalize();
-}
-
-// full path build: frames, arc length, speed profile, g-forces, stats
 function buildPath(){
-  syncStationPoints();          // station ends are always fixed, flat & platform-length apart
-  const raw=buildCenterline();
-  const N=raw.length;
-  const pos=raw.map(r=>r.pos);
-  const kind=raw.map(r=>r.kind);
-  const featUp=raw.map(r=>r.featureUp||null);
-
-  // tangents (central difference, closed)
-  const tan=[];
-  for(let i=0;i<N;i++){
-    const a=pos[(i-1+N)%N],b=pos[(i+1)%N];
-    const t=new THREE.Vector3().subVectors(b,a);
-    if(t.lengthSq()<1e-9)t.copy(tan[i-1]||new THREE.Vector3(1,0,0));
-    tan.push(t.normalize());
-  }
-  // arc length & height
-  const cum=[0]; let len=0;
-  for(let i=0;i<N;i++){
-    const d=pos[(i+1)%N].distanceTo(pos[i]); len+=d; cum.push(len);
-  }
-  const height=pos.map(p=>p.y);
-  const hMax=Math.max(...height), hMin=Math.min(...height);
-
-  // speed profile (energy based) + speed upgrade
-  const speedMult=Math.pow(1.08,UPGRADES.speed.level+(hasResearch('launch')?1:0));
-  const E=PHYS.g*hMax+0.5*PHYS.vCrest*PHYS.vCrest;
-  const speed=new Array(N);
-  for(let i=0;i<N;i++){
-    const k=kind[i];
-    if(k==='lift'){ speed[i]=PHYS.liftSpeed; }
-    else if(k==='brake'){ speed[i]=PHYS.brakeSpeed*speedMult; }
-    else if(k==='station'){ speed[i]=PHYS.stationSpeed; }
-    else{
-      const v2=2*(E-PHYS.g*height[i])*(1-PHYS.friction);
-      speed[i]=Math.max(PHYS.vMin, Math.sqrt(Math.max(v2,0)))*speedMult;
-    }
-  }
-
-  // local arc length around sample i (always positive, seam-safe)
-  const localDs=i=>{
-    const dp=pos[i].distanceTo(pos[(i-1+N)%N]);
-    const dn=pos[(i+1)%N].distanceTo(pos[i]);
-    return Math.max(dp+dn,1e-3);
-  };
-  // curvature vector at sample i
-  const curvature=i=>{
-    const a=tan[(i-1+N)%N],b=tan[(i+1)%N];
-    return new THREE.Vector3().subVectors(b,a).multiplyScalar(1/localDs(i));
-  };
-
-  // frames: keep an UNBANKED parallel-transport base for continuity,
-  // then apply banking as a non-accumulating offset on a copy.
-  const up=new Array(N), right=new Array(N), baseUp=new Array(N);
-  let seed=WORLD_UP.clone().addScaledVector(tan[0],-tan[0].y);
-  if(seed.lengthSq()<1e-9)seed.set(1,0,0); seed.normalize();
-  for(let i=0;i<N;i++){
-    let bUp;
-    if(featUp[i]){
-      bUp=featUp[i].clone(); bUp.addScaledVector(tan[i],-bUp.dot(tan[i]));
-      if(bUp.lengthSq()<1e-9)bUp.copy(i?baseUp[i-1]:seed); bUp.normalize();
-    } else {
-      bUp=(i===0)?seed.clone():transportUp(baseUp[i-1],tan[i-1],tan[i]);
-    }
-    baseUp[i]=bUp.clone();
-    let fUp=bUp.clone();
-    if(!featUp[i]){
-      const kv=curvature(i);
-      const rTmp=new THREE.Vector3().crossVectors(bUp,tan[i]).normalize();
-      const aLat=speed[i]*speed[i]*kv.dot(rTmp);
-      const bank=Math.max(-PHYS.maxBank,Math.min(PHYS.maxBank,Math.atan2(aLat,PHYS.g)));
-      fUp.applyAxisAngle(tan[i],-bank);
-    }
-    right[i]=new THREE.Vector3().crossVectors(fUp,tan[i]).normalize();
-    up[i]=new THREE.Vector3().crossVectors(tan[i],right[i]).normalize();
-  }
-
-  // g-forces + stats (per-sample g clamped so one tight sample can't dominate)
-  const GCAP=5.0;
-  let maxSpeed=0,maxVertG=-99,minVertG=99,maxLatG=0,airCount=0,dirChanges=0,lapTime=0;
-  let prevLatSign=0, maxDrop=0, runDrop=0;
-  for(let i=0;i<N;i++){
-    const ds=(cum[i+1]-cum[i])||0.001;
-    lapTime+=ds/Math.max(speed[i],0.5);
-    maxSpeed=Math.max(maxSpeed,speed[i]);
-    // descent run
-    const dh=height[(i+1)%N]-height[i];
-    if(dh<0){ runDrop-=dh; maxDrop=Math.max(maxDrop,runDrop); } else { runDrop=0; }
-    // curvature vector (seam-safe) → felt accel = centripetal + gravity-support
-    const ac=curvature(i).multiplyScalar(speed[i]*speed[i]);
-    const felt=ac.add(new THREE.Vector3(0,PHYS.g,0));
-    let gV=felt.dot(up[i])/PHYS.g, gL=felt.dot(right[i])/PHYS.g;
-    gV=Math.max(-GCAP,Math.min(GCAP,gV)); gL=Math.max(-GCAP,Math.min(GCAP,gL));
-    maxVertG=Math.max(maxVertG,gV); minVertG=Math.min(minVertG,gV);
-    maxLatG=Math.max(maxLatG,Math.abs(gL));
-    if(gV<0.2)airCount++;
-    if(Math.abs(gL)>0.4){ const sgn=Math.sign(gL); if(prevLatSign!==0&&sgn!==prevLatSign)dirChanges++; prevLatSign=sgn; }
-  }
-  dirChanges=Math.min(dirChanges,20);
-  const airBonus=Math.min(airCount,Math.round(N*0.25));
-  const sp=maxSpeed;
-
-  const inversions=ctrlPts.filter(p=>p.seg==='loop'||p.seg==='corkscrew').length;
-  let excitement=2 + maxDrop*2.2 + sp*0.5 + inversions*7 + airBonus*0.12 + len*0.13 + Math.min(maxVertG,4)*1.1;
-  let intensity =4 + sp*0.55 + maxVertG*5 + maxLatG*6 + inversions*5;
-  let nausea    =maxLatG*7 + inversions*6 + dirChanges*0.7 + Math.max(0,intensity-55)*0.3;
-  if(intensity>80)excitement*=0.85;      // RCT: punishing rides lose appeal
-  if(intensity>120)excitement*=0.8;
-  excitement=Math.max(0,excitement);
-
-  const stats={length:Math.round(len),lapTime,maxSpeed,maxVertG,minVertG,maxLatG,
-               inversions,airCount,dirChanges,maxDrop,
-               excitement:+excitement.toFixed(1),intensity:+intensity.toFixed(1),nausea:+nausea.toFixed(1)};
-
-  path={N,pos,tan,up,right,kind,cum,len,height,speed,stats};
+  path = buildTrackPath({
+    ctrlPts,
+    upgrades: UPGRADES,
+    researchDone: research.done,
+    physics: PHYS,
+    Vector3: THREE.Vector3,
+    worldUp: WORLD_UP,
+    station: STATION,
+  });
   return path;
 }
 
-// arc-length sampling
 function sampleAt(s){
-  const L=path.len; s=((s%L)+L)%L;
-  const cum=path.cum, N=path.N;
-  let lo=0,hi=N; while(lo<hi){const m=(lo+hi)>>1; if(cum[m]<=s)lo=m+1; else hi=m;}
-  const i=Math.max(0,lo-1); const i2=(i+1)%N;
-  const t=(s-cum[i])/((cum[i+1]-cum[i])||1);
-  const pos=path.pos[i].clone().lerp(path.pos[i2],t);
-  const tan=path.tan[i].clone().lerp(path.tan[i2],t).normalize();
-  let up=path.up[i].clone().lerp(path.up[i2],t);
-  up.addScaledVector(tan,-up.dot(tan)); if(up.lengthSq()<1e-9)up.copy(path.up[i]); up.normalize();
-  const right=new THREE.Vector3().crossVectors(up,tan).normalize();
-  up=new THREE.Vector3().crossVectors(tan,right).normalize();
-  return {pos,tan,up,right};
+  return samplePathAt(path, s, THREE.Vector3);
 }
+
 function speedAt(s){
-  const L=path.len; s=((s%L)+L)%L;
-  const cum=path.cum,N=path.N;
-  let lo=0,hi=N; while(lo<hi){const m=(lo+hi)>>1; if(cum[m]<=s)lo=m+1; else hi=m;}
-  const i=Math.max(0,lo-1); const i2=(i+1)%N;
-  const t=(s-cum[i])/((cum[i+1]-cum[i])||1);
-  return path.speed[i]*(1-t)+path.speed[i2]*t;
+  return speedAtPath(path, s);
 }
 
 // =========================================================================

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "python -m http.server 4321",
-    "check": "node --check src/main.js && node --check src/systems/economy.js",
-    "test": "node tests/economy.test.mjs"
+    "check": "node --check src/main.js && node --check src/systems/economy.js && node --check src/systems/path.js",
+    "test": "node tests/economy.test.mjs && node tests/path.test.mjs"
   }
 }
