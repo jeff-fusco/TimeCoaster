@@ -30,6 +30,7 @@ import {
   setTrainOccupancy,
 } from './render/train.js';
 import { initBuildControls } from './input/buildControls.js';
+import { createHudShop } from './ui/hudShop.js';
 
 const THREE = window.THREE;
 if (!THREE) {
@@ -106,7 +107,6 @@ const CATS = [
   {id:'marketing',icon:'📣', name:'Promo'},
   {id:'research', icon:'🔬', name:'R&D'},
 ];
-let activeTab='ride';
 
 // ── research (constant money drain → research points → permanent unlocks) ─────
 const RESEARCH = {
@@ -462,71 +462,44 @@ function tick(){
 }
 
 // =========================================================================
-//  HUD
+//  HUD / SHOP
 // =========================================================================
 const $=id=>document.getElementById(id);
 const fmt=formatMoney;
-
-function buildShop(){
-  const shop=$('shop');
-  shop.innerHTML='';
-  const tabs=document.createElement('div'); tabs.className='shop-tabs';
-  CATS.forEach(c=>{
-    const t=document.createElement('div'); t.className='tab'+(c.id===activeTab?' active':''); t.id='tab-'+c.id;
-    t.innerHTML=`<div class="ti">${c.icon}</div><div class="tl">${c.name}</div>`;
-    t.addEventListener('click',()=>{ activeTab=c.id; document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active'); renderShop(); });
-    tabs.appendChild(t);
-  });
-  shop.appendChild(tabs);
-  const body=document.createElement('div'); body.className='shop-body'; body.id='shopBody'; shop.appendChild(body);
-  renderShop();
-}
-
-function renderShop(){
-  const body=$('shopBody'); if(!body)return;
-  body.innerHTML='';
-  if(activeTab==='research'){ renderResearch(body); return; }
-  SHOP_ORDER.filter(k=>UPGRADES[k].cat===activeTab).forEach(key=>{
-    const u=UPGRADES[key];
-    const el=document.createElement('div');el.className='ticket';el.id='up-'+key;
-    el.innerHTML=`<div class="ic">${u.icon}</div><div class="body"><div class="nm">${u.name}</div><div class="ds">${u.desc}</div><div class="lv" id="lv-${key}"></div></div><div class="cost" id="cost-${key}"></div>`;
-    el.addEventListener('click',()=>buy(key)); body.appendChild(el);
-  });
-  refreshHUD();
-}
-
-function renderResearch(body){
-  // budget + points card
-  const card=document.createElement('div'); card.className='rcard';
-  const rpm=Math.round(research.budget/10);   // research points per minute
-  card.innerHTML=`<div class="rh">Research Points</div>
-    <div class="rpts" id="rpts">${Math.floor(research.points)} RP</div>
-    <div class="rsub">Funding research drains <b>$${research.budget}/min</b> → <b>${rpm} RP/min</b></div>
-    <div class="budgets" id="budgets"></div>`;
-  body.appendChild(card);
-  const bdiv=card.querySelector('#budgets');
-  BUDGETS.forEach(b=>{
-    const el=document.createElement('div'); el.className='budget'+(b===research.budget?' active':'');
-    el.textContent = b===0?'Off':'$'+b;
-    el.addEventListener('click',()=>{ research.budget=b; renderShop(); saveGame(); });
-    bdiv.appendChild(el);
-  });
-  // project list
-  RESEARCH_ORDER.forEach(key=>{
-    const p=RESEARCH[key], done=hasResearch(key), ready=!done&&research.points>=p.rp;
-    const el=document.createElement('div');
-    el.className='proj'+(done?' done':ready?' ready':'');
-    el.innerHTML=`<div class="ic">${p.icon}</div><div><div class="nm">${p.name}</div><div class="ds">${p.desc}</div></div>
-      <div class="rp">${done?'✓ Done':p.rp+' RP'}</div>`;
-    if(!done) el.addEventListener('click',()=>researchProject(key));
-    body.appendChild(el);
-  });
-}
+const ui=createHudShop({
+  document,
+  categories: CATS,
+  upgrades: UPGRADES,
+  shopOrder: SHOP_ORDER,
+  research: {
+    projects: RESEARCH,
+    get budget(){ return research.budget; },
+    set budget(next){ research.budget = next; },
+    get points(){ return research.points; },
+  },
+  researchOrder: RESEARCH_ORDER,
+  budgets: BUDGETS,
+  derived,
+  getPath: () => path,
+  getState: () => state,
+  getSim: () => sim,
+  hasResearch,
+  gradeFor,
+  upgradeCost,
+  fmt,
+  mph: MPH,
+  onBuy: buy,
+  onResearchProject: researchProject,
+  onSetResearchBudget: budget => { research.budget = budget; saveGame(); },
+});
+function buildShop(){ ui.buildShop(); }
+function renderShop(){ ui.renderShop(); }
+function refreshHUD(){ ui.refreshHUD(); }
 
 function researchProject(key){
   const p=RESEARCH[key];
   if(hasResearch(key))return;
-  if(research.points<p.rp){ showToast(`Need ${p.rp} RP — fund research to earn points`); return; }
+  if(research.points<p.rp){ showToast(`Need ${p.rp} RP - fund research to earn points`); return; }
   research.points-=p.rp; research.done[key]=true;
   applyResearchEffects();
   if(key==='launch') buildPath();              // free speed level changes the physics
@@ -539,7 +512,7 @@ function buy(key){
   const c=upgradeCost(u); if(state.money<c)return;
   state.money-=c; u.level+=1;
   if(key==='car'){
-    // a longer station spreads the fixed endpoints → reflow the whole track (free; not a manual edit)
+    // a longer station spreads the fixed endpoints and reflows the track for free.
     rebuildAll(true); paidLength=path.len; rebuildTrains();
     trains.forEach((tr,i)=>{tr.s=(i/trains.length)*path.len;tr.prevS=tr.s;tr.L=path.len;tr.mode='run';tr.phase='';tr.timer=0;});
   }
@@ -550,42 +523,6 @@ function buy(key){
   else if(key==='speed'){buildPath();} // re-derive speed profile/stats
   refreshHUD(); saveGame();
 }
-function refreshHUD(){
-  const d=derived(); const st=path?path.stats:null;
-  $('money').textContent=fmt(state.money);
-  $('rate').textContent='$'+fmt(d.ratePerMin)+' / min';
-  $('riders').textContent=d.seatsCap;
-  $('perride').textContent='$'+fmt(d.perRideFull);
-  $('queue').textContent=Math.round(sim.queue)+'/'+d.queueCap;
-  if(st){
-    $('topspeed').textContent=Math.round(st.maxSpeed*MPH);
-    $('trackLen').textContent=st.length+'m';
-    $('laptime').textContent=st.lapTime.toFixed(1)+'s';
-    const exc=st.excitement,intn=st.intensity,nau=st.nausea;
-    $('vExc').textContent=exc.toFixed(0); $('vInt').textContent=intn.toFixed(0); $('vNau').textContent=nau.toFixed(0);
-    $('fExc').style.width=Math.min(100,exc)+'%';
-    $('fInt').style.width=Math.min(100,intn)+'%';
-    $('fNau').style.width=Math.min(100,nau)+'%';
-    $('grade').textContent=gradeFor(exc,intn);
-  }
-  SHOP_ORDER.forEach(key=>{
-    const el=$('up-'+key); if(!el)return;          // only the active tab's tickets exist
-    const u=UPGRADES[key],lv=$('lv-'+key),costEl=$('cost-'+key);
-    const maxed=(u.max!==undefined&&u.level>=u.max);
-    if(maxed){el.className='ticket maxed';costEl.textContent='MAX';lv.textContent='Lv '+u.level;return;}
-    const c=upgradeCost(u);costEl.textContent='$'+fmt(c);lv.textContent=u.level>0?'Lv '+u.level:'New';
-    el.className='ticket '+(state.money>=c?'affordable':'locked');
-  });
-  const rp=$('rpts'); if(rp){
-    rp.textContent=Math.floor(research.points)+' RP';
-    // refresh ready-state highlight on project rows
-    document.querySelectorAll('#shopBody .proj').forEach((el,i)=>{
-      const key=RESEARCH_ORDER[i]; if(!key)return;
-      if(hasResearch(key))return;
-      el.classList.toggle('ready', research.points>=RESEARCH[key].rp);
-    });
-  }
-}
 const _v=new THREE.Vector3();
 function spawnCoin(worldPos,amount){
   _v.copy(worldPos).project(camera);
@@ -593,7 +530,7 @@ function spawnCoin(worldPos,amount){
 }
 function spawnCoinScreen(x,y,amount,spend){
   const el=document.createElement('div');el.className='pop'+(spend?' spend':'');
-  el.textContent=(spend?'−$':'+$')+fmt(amount);el.style.left=x+'px';el.style.top=y+'px';
+  el.textContent=(spend?'-$':'+$')+fmt(amount);el.style.left=x+'px';el.style.top=y+'px';
   document.body.appendChild(el);setTimeout(()=>el.remove(),1000);
 }
 let toastTimer;
