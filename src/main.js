@@ -29,6 +29,7 @@ import {
   rebuildTrains as renderRebuildTrains,
   setTrainOccupancy,
 } from './render/train.js';
+import { initBuildControls } from './input/buildControls.js';
 
 const THREE = window.THREE;
 if (!THREE) {
@@ -337,287 +338,51 @@ function rebuildAll(includeStation=true){
 }
 
 // =========================================================================
-//  BUILD MODE
+//  BUILD / INPUT CONTROLS
 // =========================================================================
-const raycaster=new THREE.Raycaster();
-const mouseNDC=new THREE.Vector2();
-const bm={active:false,handleGrp:new THREE.Group(),handles:[],selectedIdx:-1,hoveredIdx:-1,dragging:false,placingMode:false,snapGrid:false,dragSnapshot:null,needsRebuild:false};
-scene.add(bm.handleGrp);
-
-const HG_NORM=new THREE.SphereGeometry(0.55,12,9);
-const HG_STN =new THREE.SphereGeometry(0.65,12,9);
-
-function setMouseNDC(e){const r=renderer.domElement.getBoundingClientRect();mouseNDC.x=((e.clientX-r.left)/r.width)*2-1;mouseNDC.y=-((e.clientY-r.top)/r.height)*2+1;}
-
-function createHandles(){
-  disposeGroup(bm.handleGrp, true); bm.handles=[];
-  ctrlPts.forEach((p,i)=>{
-    const isStn=!!p.station;
-    const mat=new THREE.MeshStandardMaterial({color:isStn?COL.handleStn:COL.handleNorm,roughness:.4,metalness:.3});
-    const mesh=new THREE.Mesh(isStn?HG_STN:HG_NORM,mat);
-    mesh.position.set(p.x,p.y,p.z);mesh.castShadow=true;
-    bm.handleGrp.add(mesh);bm.handles.push({mesh,idx:i});
-  });
-  updateHandleColors();
-}
-function updateHandleColors(){
-  bm.handles.forEach(({mesh,idx})=>{
-    const isStn=!!ctrlPts[idx]?.station,isSel=idx===bm.selectedIdx,isHov=idx===bm.hoveredIdx;
-    mesh.material.color.setHex(isSel?COL.handleSel:isHov?COL.handleHov:isStn?COL.handleStn:COL.handleNorm);
-    mesh.scale.setScalar(isSel?1.25:isHov?1.1:1.0);
-  });
-}
-function refreshHandlePositions(){bm.handles.forEach(({mesh,idx})=>{const p=ctrlPts[idx];if(p)mesh.position.set(p.x,p.y,p.z);});}
-const snapVal=v=>bm.snapGrid?Math.round(v*2)/2:v;
-
-function updateFeatureButtons(){
-  const idx=bm.selectedIdx;
-  const row=document.getElementById('featRow');
-  if(idx<0||ctrlPts[idx]?.seg==='station'){ row.style.display='none'; return; }
-  row.style.display='flex';
-  const cur=ctrlPts[idx].seg||'plain';
-  row.querySelectorAll('.bp-btn').forEach(b=>{
-    const feat=b.dataset.feat;
-    const locked=!featureUnlocked(feat);
-    b.classList.toggle('feat-active',feat===cur);
-    b.classList.toggle('locked-feat',locked);
-    b.title=locked?'Unlock in the R&D shop tab (Research)':'';
-  });
-}
-
-function selectHandle(idx){
-  bm.selectedIdx=idx;
-  const isStn=idx>=0&&!!ctrlPts[idx]?.station;
-  const canDel=idx>=0&&!isStn&&ctrlPts.filter(p=>!p.station).length>2;
-  document.getElementById('delBtn').disabled=!canDel;
-  // station ends are fully fixed → no height controls
-  document.getElementById('heightRow').style.display=(idx>=0&&!isStn)?'flex':'none';
-  if(idx>=0){
-    document.getElementById('heightVal').textContent=ctrlPts[idx].y.toFixed(1);
-    document.getElementById('pointInfo').textContent=isStn
-      ? `Station end — fixed · always flat and the length of the platform`
-      : `Point ${idx+1}/${ctrlPts.length} · drag to move · scroll for height · pick a segment type below`;
-  } else {
-    document.getElementById('pointInfo').textContent='Click a handle to select · drag to move · scroll to change height';
-  }
-  updateHandleColors(); updateFeatureButtons();
-}
-
-function raycastHandles(){raycaster.setFromCamera(mouseNDC,camera);const hits=raycaster.intersectObjects(bm.handles.map(h=>h.mesh));return hits.length?bm.handles.findIndex(h=>h.mesh===hits[0].object):-1;}
-function raycastGround(yLevel=0){const plane=new THREE.Plane(new THREE.Vector3(0,1,0),-yLevel);raycaster.setFromCamera(mouseNDC,camera);const tgt=new THREE.Vector3();raycaster.ray.intersectPlane(plane,tgt);return tgt;}
-
-renderer.domElement.addEventListener('mousedown',onMouseDown);
-renderer.domElement.addEventListener('mousemove',onMouseMove);
-renderer.domElement.addEventListener('mouseup',onMouseUp);
-renderer.domElement.addEventListener('contextmenu',e=>e.preventDefault());
-
-// ── camera drag: left = pan, right = rotate/tilt, middle = pan ───────────────
-// In build mode the left button edits points, so left-pan only applies in play mode.
-let dragMode=null, dragX=0, dragY=0;
-renderer.domElement.addEventListener('mousedown',e=>{
-  if(e.button===2)                    dragMode='rotate';      // right → rotate
-  else if(e.button===1)               dragMode='pan';         // middle → pan
-  else if(e.button===0 && !bm.active) dragMode='pan';         // left (play mode) → pan
-  else return;
-  if(e.button!==0) e.preventDefault();                        // suppress autoscroll / context menu
-  dragX=e.clientX; dragY=e.clientY;
+const buildControls=initBuildControls({
+  THREE,
+  scene,
+  renderer,
+  camera,
+  host,
+  colors: COL,
+  constants: {
+    COST_PER_M,
+    FEATURE_COST,
+    FEATURE_REFUND,
+    MIN_FRUSTUM,
+    MAX_FRUSTUM,
+    STATION_Y: STATION.y,
+  },
+  state,
+  getCtrlPts: () => ctrlPts,
+  setCtrlPts: next => { ctrlPts = next; },
+  getPath: () => path,
+  getPaidLength: () => paidLength,
+  setPaidLength: next => { paidLength = next; },
+  getTrains: () => trains,
+  getFrustum: () => frustum,
+  setFrustum: next => { frustum = next; },
+  getAzimuth: () => azimuth,
+  setAzimuth: next => { azimuth = next; },
+  getCamHeight: () => camHeight,
+  setCamHeight: next => { camHeight = next; },
+  camTarget,
+  resize,
+  buildPath,
+  buildTrackGeometry,
+  rebuildAll,
+  disposeGroup,
+  featureUnlocked,
+  refreshHUD,
+  saveGame,
+  showToast,
+  spawnCoinScreen,
+  fmt: formatMoney,
 });
-window.addEventListener('mousemove',e=>{
-  if(!dragMode)return;
-  const dx=e.clientX-dragX, dy=e.clientY-dragY; dragX=e.clientX; dragY=e.clientY;
-  if(dragMode==='rotate'){
-    azimuth  -= dx*0.01;
-    camHeight = Math.max(18, Math.min(132, camHeight-dy*0.4));
-  } else {                                                    // pan across the ground plane
-    const scale=frustum/host.clientHeight;                   // world units per pixel (scales with zoom)
-    const sr=new THREE.Vector3(Math.sin(azimuth),0,-Math.cos(azimuth));   // screen-right on ground
-    const su=new THREE.Vector3(-Math.cos(azimuth),0,-Math.sin(azimuth));  // screen-up on ground
-    camTarget.addScaledVector(sr,-dx*scale).addScaledVector(su,dy*scale);
-    camTarget.x=Math.max(-60,Math.min(60,camTarget.x));
-    camTarget.z=Math.max(-60,Math.min(60,camTarget.z));
-  }
-});
-window.addEventListener('mouseup',()=>{ dragMode=null; });
-window.addEventListener('blur',()=>{ dragMode=null; });
-
-function onMouseDown(e){
-  if(!bm.active||e.button!==0)return; setMouseNDC(e);
-  if(bm.placingMode){
-    const pos=raycastGround(1.5); if(!pos)return;
-    const insertIdx=bm.selectedIdx>=0?bm.selectedIdx+1:ctrlPts.length;
-    const lenBefore=path.len;
-    ctrlPts.splice(insertIdx,0,{x:snapVal(pos.x),y:1.5,z:snapVal(pos.z),seg:'plain'});
-    buildPath();
-    const addCost=Math.ceil((path.len-lenBefore)*COST_PER_M);
-    if(addCost>state.money){
-      ctrlPts.splice(insertIdx,1); rebuildAll(false);
-      showToast(`Need $${fmt(addCost)} to extend the track`);
-      stopPlacing(); return;
-    }
-    state.money-=addCost; paidLength=path.len;
-    spawnCoinScreen(e.clientX,e.clientY,addCost,true);
-    buildTrackGeometry(); createHandles(); selectHandle(insertIdx);
-    stopPlacing(); refreshHUD(); saveGame();
-    showToast(`+${(path.len-lenBefore).toFixed(1)}m of track  ·  −$${fmt(addCost)}`);
-    return;
-  }
-  const hit=raycastHandles();
-  if(hit>=0){
-    selectHandle(hit);
-    if(!ctrlPts[hit]?.station){   // station ends are fixed — selectable for info, not draggable
-      bm.dragging=true;
-      bm.dragSnapshot=ctrlPts.map(p=>({...p}));
-    }
-    e.stopPropagation();
-  } else selectHandle(-1);
-}
-function onMouseMove(e){
-  if(!bm.active)return; setMouseNDC(e);
-  if(bm.dragging&&bm.selectedIdx>=0){
-    const p=ctrlPts[bm.selectedIdx];
-    const pos=raycastGround(p.y); if(!pos)return;
-    p.x=snapVal(pos.x); p.z=snapVal(pos.z); if(p.station)p.y=0.7;
-    refreshHandlePositions();
-    bm.needsRebuild=true;   // coalesced: the rAF loop rebuilds once per frame
-    document.getElementById('pointInfo').textContent=`Point ${bm.selectedIdx+1}: (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})`;
-    return;
-  }
-  const hit=raycastHandles();
-  if(hit!==bm.hoveredIdx){bm.hoveredIdx=hit;updateHandleColors();}
-}
-function onMouseUp(){
-  if(!bm.dragging)return;
-  bm.dragging=false;
-  if(bm.needsRebuild){ buildPath(); buildTrackGeometry(); bm.needsRebuild=false; }  // flush pending drag frame
-  commitTrackEdit(bm.dragSnapshot);
-  selectHandle(bm.selectedIdx); saveGame();
-}
-
-// Charge (or refund) for the track-length change since it was last paid for.
-// If an extension is unaffordable, revert ctrlPts to `snapshot`. Returns false on revert.
-function commitTrackEdit(snapshot){
-  const delta=path.len-paidLength;
-  if(delta>0.05){
-    const cost=Math.ceil(delta*COST_PER_M);
-    if(cost>state.money){
-      ctrlPts=snapshot.map(p=>({...p}));
-      buildPath(); buildTrackGeometry(); refreshHandlePositions();
-      showToast(`Not enough funds — needed $${fmt(cost)} for ${delta.toFixed(1)}m`);
-      refreshHUD(); updateBuildCost(); return false;
-    }
-    state.money-=cost; paidLength=path.len;
-    showToast(`Track +${delta.toFixed(1)}m  ·  −$${fmt(cost)}`);
-  } else if(delta<-0.05){
-    const refund=Math.floor(-delta*COST_PER_M*FEATURE_REFUND);
-    state.money+=refund; paidLength=path.len;
-    if(refund>0)showToast(`Track −${(-delta).toFixed(1)}m  ·  +$${fmt(refund)} refunded`);
-  }
-  refreshHUD(); updateBuildCost(); return true;
-}
-
-renderer.domElement.addEventListener('wheel',e=>{
-  e.preventDefault();
-  if(bm.active&&bm.selectedIdx>=0&&!ctrlPts[bm.selectedIdx]?.station){
-    const snap=ctrlPts.map(p=>({...p}));
-    const step=e.shiftKey?0.1:0.5; const p=ctrlPts[bm.selectedIdx];
-    p.y=Math.max(0.2,Math.round((p.y-Math.sign(e.deltaY)*step)*10)/10);
-    refreshHandlePositions(); buildPath(); buildTrackGeometry();
-    commitTrackEdit(snap);
-    document.getElementById('heightVal').textContent=ctrlPts[bm.selectedIdx].y.toFixed(1);
-  } else {
-    zoomBy(e.deltaY>0?1.12:1/1.12);   // smooth multiplicative zoom (works in build mode too)
-  }
-},{passive:false});
-
-// ── build panel buttons ─────────────────────────────────────────────────
-function stopPlacing(){
-  bm.placingMode=false;
-  const b=document.getElementById('addBtn'); b.textContent='＋ Add Point'; b.classList.remove('placing');
-}
-document.getElementById('addBtn').addEventListener('click',()=>{
-  bm.placingMode=!bm.placingMode;
-  const b=document.getElementById('addBtn');
-  if(bm.placingMode){b.textContent='✕ Cancel';b.classList.add('placing');document.getElementById('pointInfo').textContent='Click the ground to place a new point (charged per metre added)';}
-  else stopPlacing();
-});
-document.getElementById('delBtn').addEventListener('click',()=>{
-  const idx=bm.selectedIdx;
-  if(idx<0||ctrlPts[idx]?.station||ctrlPts.filter(p=>!p.station).length<=2)return;
-  const wasFeat=ctrlPts[idx].seg;
-  ctrlPts.splice(idx,1);
-  buildPath();
-  // refund both feature (if any) and shortened track
-  if(FEATURE_COST[wasFeat]) state.money+=Math.floor(FEATURE_COST[wasFeat]*FEATURE_REFUND);
-  const delta=path.len-paidLength;
-  if(delta<0)state.money+=Math.floor(-delta*COST_PER_M*FEATURE_REFUND);
-  paidLength=path.len;
-  rebuildAll(false); createHandles(); selectHandle(-1); refreshHUD(); saveGame();
-  showToast('Point removed · partial refund');
-});
-document.getElementById('snapBtn').addEventListener('click',()=>{
-  bm.snapGrid=!bm.snapGrid; const b=document.getElementById('snapBtn');
-  b.textContent=bm.snapGrid?'Grid On':'Grid Off';
-  b.style.background=bm.snapGrid?'var(--good)':''; b.style.color=bm.snapGrid?'#fff':'';
-});
-const adjHeight=(d)=>{
-  if(bm.selectedIdx<0||ctrlPts[bm.selectedIdx]?.station)return;
-  const snap=ctrlPts.map(p=>({...p}));
-  const p=ctrlPts[bm.selectedIdx];
-  p.y=Math.max(0.2,Math.round((p.y+d)*10)/10);
-  refreshHandlePositions(); buildPath(); buildTrackGeometry();
-  commitTrackEdit(snap);
-  document.getElementById('heightVal').textContent=ctrlPts[bm.selectedIdx].y.toFixed(1);
-};
-document.getElementById('hUp').addEventListener('click',()=>adjHeight(0.5));
-document.getElementById('hDown').addEventListener('click',()=>adjHeight(-0.5));
-
-// feature buttons
-document.getElementById('featRow').addEventListener('click',e=>{
-  const btn=e.target.closest('.bp-btn'); if(!btn)return;
-  const idx=bm.selectedIdx; if(idx<0||ctrlPts[idx]?.station)return;
-  const next=btn.dataset.feat; const cur=ctrlPts[idx].seg||'plain';
-  if(next===cur)return;
-  if(!featureUnlocked(next)){ showToast(`🔒 ${next} is locked — research it in the R&D shop tab first`); return; }
-  const net=(FEATURE_COST[next]||0)-Math.floor((FEATURE_COST[cur]||0)*FEATURE_REFUND);
-  if(net>state.money){ showToast(`Need $${fmt(net)} for ${next}`); return; }
-  ctrlPts[idx].seg=next;
-  state.money-=net;
-  rebuildAll(false);
-  paidLength=path.len;                  // feature detour length is covered by its fee
-  createHandles(); selectHandle(idx);
-  refreshHUD(); updateBuildCost(); saveGame();
-  showToast(net>=0?`${next} added · −$${fmt(net)}`:`${next} · +$${fmt(-net)} refunded`);
-});
-
-function updateBuildCost(){
-  if(!path)return;
-  document.getElementById('buildCost').innerHTML=
-    `Track: <b>${path.stats.length}m</b> · EXC <b>${path.stats.excitement}</b> / INT <b>${path.stats.intensity}</b> · build <b>$${COST_PER_M}/m</b>`;
-}
-
-function enterBuildMode(){
-  bm.active=true;bm.selectedIdx=-1;stopPlacing();
-  createHandles();
-  document.getElementById('buildPanel').classList.remove('hidden');
-  document.getElementById('modeBadge').classList.add('visible');
-  document.getElementById('buildToggle').classList.add('active');
-  document.getElementById('shop').classList.add('hidden');
-  selectHandle(-1); updateBuildCost();
-  showToast('Build Mode — yellow: track · red: station · pay per metre & per feature');
-}
-function exitBuildMode(){
-  bm.active=false;bm.selectedIdx=-1;bm.hoveredIdx=-1;bm.dragging=false;stopPlacing();
-  disposeGroup(bm.handleGrp, true);bm.handles=[];
-  document.getElementById('buildPanel').classList.add('hidden');
-  document.getElementById('modeBadge').classList.remove('visible');
-  document.getElementById('buildToggle').classList.remove('active');
-  document.getElementById('shop').classList.remove('hidden');
-  rebuildAll(true);
-  trains.forEach((tr,i)=>{tr.s=(i/trains.length)*path.len;tr.prevS=tr.s;tr.L=path.len;tr.mode='run';tr.phase='';tr.timer=0;});
-  refreshHUD(); saveGame();
-  showToast(`Track saved! Excitement ${path.stats.excitement}`);
-}
-document.getElementById('buildToggle').addEventListener('click',()=>bm.active?exitBuildMode():enterBuildMode());
+const bm=buildControls.state;
+function updateBuildCost(){ buildControls.updateBuildCost(); }
 
 // =========================================================================
 //  GAME LOOP
@@ -833,35 +598,6 @@ function spawnCoinScreen(x,y,amount,spend){
 }
 let toastTimer;
 function showToast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600);}
-
-// =========================================================================
-//  CAMERA CONTROLS
-// =========================================================================
-function zoomBy(f){ frustum=Math.min(MAX_FRUSTUM,Math.max(MIN_FRUSTUM,frustum*f)); resize(); }
-function rotateView(dir){ azimuth += dir*Math.PI/4; }   // +1 = left, -1 = right
-$('rotL').addEventListener('click',()=>rotateView(+1));
-$('rotR').addEventListener('click',()=>rotateView(-1));
-$('zoomIn').addEventListener('click',()=>zoomBy(0.8));
-$('zoomOut').addEventListener('click',()=>zoomBy(1.25));
-addEventListener('keydown',e=>{
-  if(e.target.tagName==='INPUT')return;
-  const k=e.key.toLowerCase();
-  if(k==='q'||k==='a'||e.key==='ArrowLeft')  rotateView(+1);
-  if(k==='e'||k==='d'||e.key==='ArrowRight') rotateView(-1);
-  if(e.key==='='||e.key==='+')zoomBy(0.8);
-  if(e.key==='-')zoomBy(1.25);
-  if(e.key==='b'||e.key==='B')bm.active?exitBuildMode():enterBuildMode();
-  if(e.key==='Escape'&&bm.active){
-    if(bm.placingMode)stopPlacing();
-    else if(bm.selectedIdx>=0)selectHandle(-1);
-    else exitBuildMode();
-  }
-  if(bm.active&&bm.selectedIdx>=0){
-    if(e.key==='ArrowUp'){adjHeight(0.5);e.preventDefault();}
-    if(e.key==='ArrowDown'){adjHeight(-0.5);e.preventDefault();}
-    if(e.key==='Delete'||e.key==='Backspace'){document.getElementById('delBtn').click();e.preventDefault();}
-  }
-});
 
 // =========================================================================
 //  SAVE / LOAD
