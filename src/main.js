@@ -13,6 +13,22 @@ import {
   samplePathAt,
   speedAtPath,
 } from './systems/path.js';
+import {
+  applySaveData,
+  readSave,
+  writeSave,
+} from './systems/save.js';
+import { buildTrackGeometry as renderTrackGeometry } from './render/track.js';
+import {
+  buildStationAndQueue as renderStationAndQueue,
+  updateQueueVisuals as renderQueueVisuals,
+} from './render/station.js';
+import {
+  CAR_LEN,
+  placeCar as renderPlaceCar,
+  rebuildTrains as renderRebuildTrains,
+  setTrainOccupancy,
+} from './render/train.js';
 
 const THREE = window.THREE;
 if (!THREE) {
@@ -228,185 +244,42 @@ function speedAt(s){
 }
 
 // =========================================================================
-//  TRACK GEOMETRY
+//  TRACK / STATION RENDERING
 // =========================================================================
 const trackGrp=new THREE.Group(); scene.add(trackGrp);
-const GAUGE=1.15;
-
-function buildTrackGeometry(){
-  disposeGroup(trackGrp);
-  const {pos,up,right,tan,kind,N}=path;
-  const railMat =new THREE.MeshStandardMaterial({color:COL.rail,metalness:.6,roughness:.35});
-  const spineMat=new THREE.MeshStandardMaterial({color:COL.track,roughness:.55});
-  const supMat  =new THREE.MeshStandardMaterial({color:COL.support,roughness:.6});
-
-  // spine (round tube – internal frame irrelevant)
-  const centerCurve=new THREE.CatmullRomCurve3(pos.map(p=>p.clone()),true);
-  const spine=new THREE.Mesh(new THREE.TubeGeometry(centerCurve,N,0.16,7,true),spineMat);
-  spine.castShadow=true; trackGrp.add(spine);
-
-  // rails from explicit offsets
-  const leftPts=[],rightPts=[];
-  for(let i=0;i<N;i++){
-    leftPts.push(pos[i].clone().addScaledVector(right[i], GAUGE/2));
-    rightPts.push(pos[i].clone().addScaledVector(right[i],-GAUGE/2));
-  }
-  for(const pts of [leftPts,rightPts]){
-    const c=new THREE.CatmullRomCurve3(pts,true);
-    const m=new THREE.Mesh(new THREE.TubeGeometry(c,N,0.09,6,true),railMat);
-    m.castShadow=true; trackGrp.add(m);
-  }
-
-  // ties (coloured by segment kind) – use explicit frames
-  const tieGeo=new THREE.BoxGeometry(GAUGE+0.5,0.08,0.18);
-  const tieMats={
-    lift:new THREE.MeshLambertMaterial({color:COL.tieLift}),
-    brake:new THREE.MeshLambertMaterial({color:COL.tieBrake}),
-    station:new THREE.MeshLambertMaterial({color:COL.tieStn}),
-    plain:new THREE.MeshLambertMaterial({color:COL.tiePlain}),
-    loop:new THREE.MeshLambertMaterial({color:COL.track}),
-    corkscrew:new THREE.MeshLambertMaterial({color:COL.track}),
-  };
-  for(let i=0;i<N;i+=4){
-    const mat=tieMats[kind[i]]||tieMats.plain;
-    const tie=new THREE.Mesh(tieGeo,mat);
-    tie.position.copy(pos[i]).addScaledVector(up[i],-0.22);
-    tie.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right[i],up[i],tan[i]));
-    tie.castShadow=true; trackGrp.add(tie);
-  }
-
-  // supports – only on roughly-upright, elevated, non-inverting track
-  for(let i=0;i<N;i+=10){
-    if(kind[i]==='loop'||kind[i]==='corkscrew')continue;
-    if(up[i].y<0.45)continue;
-    const h=pos[i].y; if(h<0.9)continue;
-    const col=new THREE.Mesh(new THREE.CylinderGeometry(0.16,0.2,h,8),supMat);
-    col.position.set(pos[i].x,h/2-0.4,pos[i].z); col.castShadow=true; trackGrp.add(col);
-  }
-}
-
-// =========================================================================
-//  STATION + QUEUE (dynamic; anchored to track start)
-// =========================================================================
 const stationGrp=new THREE.Group(); scene.add(stationGrp);
 
+function buildTrackGeometry(){
+  renderTrackGeometry({
+    THREE,
+    trackGrp,
+    path,
+    colors: COL,
+    disposeGroup,
+  });
+}
+
 function buildStationAndQueue(){
-  disposeGroup(stationGrp);
-  stationRefs.queueGuests=[];
-  if(!path)return;
-  const f=sampleAt(0);
-  const d=derived();
-  const visCars=Math.min(d.cars,8);
-
-  // platform spans exactly the two fixed station endpoints (points 0 & 1)
-  const p0=new THREE.Vector3(ctrlPts[0].x,ctrlPts[0].y,ctrlPts[0].z);
-  const p1=new THREE.Vector3(ctrlPts[1].x,ctrlPts[1].y,ctrlPts[1].z);
-  const center=p0.clone().add(p1).multiplyScalar(0.5);
-  const tang=horiz(f.tan);                          // travel direction along the straight station
-  const righ=new THREE.Vector3(f.right.x,0,f.right.z);
-  if(righ.lengthSq()<1e-4)righ.set(1,0,0); righ.normalize();
-
-  const PLAT_LEN=p0.distanceTo(p1), PLAT_W=2.8, PLAT_H=0.5, PLAT_SIDE=PLAT_W/2+0.85;
-  stationRefs.platLen=PLAT_LEN;
-  // lead car stops so the whole train sits centred on the platform straightaway
-  const trainLen=(visCars-1)*CAR_LEN;
-  stationRefs.stopS=Math.min(PLAT_LEN/2+trainLen/2, path.len*0.5);
-
-  const grp=new THREE.Group();
-  grp.setRotationFromMatrix(new THREE.Matrix4().makeBasis(tang,WORLD_UP,righ));
-  grp.position.set(center.x,0,center.z);
-  stationGrp.add(grp);
-
-  box(grp,COL.platform,PLAT_LEN,PLAT_H,PLAT_W,0,PLAT_H/2,PLAT_SIDE,true);
-
-  const postMat=new THREE.MeshLambertMaterial({color:0xcdb884}), postH=2.5;
-  const nPosts=Math.max(2,Math.ceil(PLAT_LEN/2.8));
-  const postZs=[PLAT_SIDE-PLAT_W/2+0.22,PLAT_SIDE+PLAT_W/2-0.22];
-  for(let p=0;p<=nPosts;p++){
-    const px=-PLAT_LEN/2+p*(PLAT_LEN/nPosts);
-    postZs.forEach(pz=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.12,postH,6),postMat);m.position.set(px,PLAT_H+postH/2,pz);m.castShadow=true;grp.add(m);});
-  }
-  box(grp,COL.roof,PLAT_LEN+0.6,0.28,PLAT_W+0.7,0,PLAT_H+postH+0.04,PLAT_SIDE,true);
-  box(grp,0xf5a623,2.0,0.6,0.16,-PLAT_LEN/2+1.0,PLAT_H+postH-0.15,PLAT_SIDE-PLAT_W/2-0.1,false);
-
-  // snack kiosk beside the queue when snack stands are owned
-  if(UPGRADES.snacks.level>0){
-    const kx=PLAT_LEN/2+0.6;
-    box(grp,0xe85d75,1.2,1.0,1.2,kx,0.5,PLAT_SIDE+PLAT_W/2+1.6,true);
-    box(grp,COL.cloud,1.5,0.18,1.5,kx,1.15,PLAT_SIDE+PLAT_W/2+1.6,true);
-  }
-
-  // serpentine switchback queue sized to capacity, with a reusable guest pool
-  const qStart=PLAT_SIDE+PLAT_W/2+0.55;
-  const poolSize=Math.min(60, d.queueCap);
-  buildQueue(grp,PLAT_H,qStart,poolSize,PLAT_LEN);
+  renderStationAndQueue({
+    THREE,
+    stationGrp,
+    path,
+    ctrlPts,
+    colors: COL,
+    upgrades: UPGRADES,
+    derived,
+    sampleAt,
+    stationRefs,
+    carLength: CAR_LEN,
+    headColors: HEADS,
+    guestColors: GUEST_COLS,
+    worldUp: WORLD_UP,
+    disposeGroup,
+  });
 }
 
-// A real theme-park switchback: parallel lanes running along local X, stacked in
-// +Z. Guests walk down a lane, U-turn, walk back the next, etc. The line fills
-// from the front (index 0, nearest the platform) and snakes deeper as it grows.
-function buildQueue(grp,gndY,startZ,poolSize,platLen){
-  const laneLen=Math.max(platLen,6), laneGap=0.95, spacing=0.72, gapW=1.15;
-  const slotsPerLane=Math.max(2,Math.floor(laneLen/spacing));
-  const nLanes=Math.max(1,Math.ceil(poolSize/slotsPerLane));
-  const xL=-laneLen/2, xR=laneLen/2, postH=1.0, railY=gndY+postH*0.78;
-  const postMat=new THREE.MeshLambertMaterial({color:0x7a5a28});
-  const railMat=new THREE.MeshLambertMaterial({color:0xb88030});
-  const railX=(xm,z,len)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,len,5),railMat);m.position.set(xm,railY,z);m.rotation.z=Math.PI/2;grp.add(m);};
-  const railZ=(x,zm,len)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(0.04,0.04,len,5),railMat);m.position.set(x,railY,zm);m.rotation.x=Math.PI/2;grp.add(m);};
-  const post=(x,z)=>{const m=new THREE.Mesh(new THREE.CylinderGeometry(0.055,0.075,postH,6),postMat);m.position.set(x,gndY+postH/2,z);m.castShadow=true;grp.add(m);};
-
-  // lane-boundary rails (nLanes+1 lines along X); internal dividers have a U-turn gap
-  for(let k=0;k<=nLanes;k++){
-    const z=startZ-laneGap/2+k*laneGap;
-    if(k===0){
-      railX(xR-(laneLen-gapW)/2, z, laneLen-gapW);       // front: gap at xL onto the platform
-    } else if(k===nLanes){
-      railX(0,z,laneLen);                                // back wall
-    } else {
-      const turnAtRight=((k-1)%2===0);                   // which end lane k-1 turns at
-      const solid=laneLen-gapW;
-      railX(turnAtRight ? xL+solid/2 : xR-solid/2, z, solid);
-    }
-    post(xL,z); post(xR,z);
-  }
-  // close the outer side of each lane (opposite its U-turn)
-  for(let j=0;j<nLanes;j++){
-    const zc=startZ+j*laneGap;
-    if(j%2===0) railZ(xL,zc,laneGap); else railZ(xR,zc,laneGap);
-  }
-
-  // entrance sign at the back
-  const backZ=startZ-laneGap/2+nLanes*laneGap;
-  post(xR,backZ+0.5);
-  box(grp,COL.roof,2.0,0.42,0.16,xR-1.0,gndY+postH+0.25,backZ+0.02,false);
-
-  // guest pool snaking front→back; index 0 boards next
-  for(let i=0;i<poolSize;i++){
-    const lane=Math.floor(i/slotsPerLane), idx=i%slotsPerLane;
-    const z=startZ+lane*laneGap;
-    const frac=slotsPerLane>1?idx/(slotsPerLane-1):0.5;
-    const x=(lane%2===0) ? THREE.MathUtils.lerp(xL+0.45,xR-0.45,frac)
-                         : THREE.MathUtils.lerp(xR-0.45,xL+0.45,frac);
-    const g=guest(grp,x,gndY,z,i); g.visible=false; stationRefs.queueGuests.push(g);
-  }
-}
 function updateQueueVisuals(){
-  const n=Math.round(sim.queue), pool=stationRefs.queueGuests;
-  for(let i=0;i<pool.length;i++) pool[i].visible = i<n;
-}
-
-function guest(grp,x,gndY,z,ci){
-  const g=new THREE.Group();
-  const body=new THREE.Mesh(new THREE.CylinderGeometry(0.12,0.16,0.42,6),new THREE.MeshLambertMaterial({color:GUEST_COLS[ci%GUEST_COLS.length]}));
-  body.position.y=0.21;
-  const head=new THREE.Mesh(new THREE.SphereGeometry(0.13,8,6),new THREE.MeshLambertMaterial({color:HEADS[ci%HEADS.length]}));
-  head.position.y=0.5;
-  g.add(body,head); g.position.set(x,gndY,z); g.castShadow=true; grp.add(g); return g;
-}
-function box(grp,color,w,h,d,x,y,z,shadow){
-  const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshLambertMaterial({color}));
-  m.position.set(x,y,z); if(shadow){m.castShadow=true;m.receiveShadow=true;} grp.add(m); return m;
+  renderQueueVisuals({ queue: sim.queue, stationRefs });
 }
 
 // =========================================================================
@@ -435,48 +308,23 @@ const clouds=[];
 //  TRAINS
 // =========================================================================
 const trainLayer=new THREE.Group(); scene.add(trainLayer);
-const CAR_LEN=1.7;     // arc-length spacing between cars (metres)
 let trains=[];
 
-function buildCar(){
-  const car=new THREE.Group();
-  const chassis=new THREE.Mesh(new THREE.BoxGeometry(1.1,.55,1.5),new THREE.MeshStandardMaterial({color:COL.car,roughness:.5}));chassis.position.y=.45;chassis.castShadow=true;car.add(chassis);
-  const trim=new THREE.Mesh(new THREE.BoxGeometry(1.16,.16,1.56),new THREE.MeshStandardMaterial({color:COL.carTrim,roughness:.5}));trim.position.y=.2;car.add(trim);
-  const heads=[];
-  [[-0.28,0.42],[0.28,0.42],[-0.28,-0.18],[0.28,-0.18]].forEach((sp,i)=>{
-    const h=new THREE.Mesh(new THREE.SphereGeometry(.16,10,8),new THREE.MeshLambertMaterial({color:HEADS[(i*2)%HEADS.length]}));h.position.set(sp[0],.82,sp[1]);h.castShadow=true;car.add(h);heads.push(h);
-  });
-  car.userData.heads=heads;
-  return car;
-}
-// show exactly `n` occupied seats across the train's cars (front cars fill first)
-function setTrainOccupancy(tr,n){
-  let shown=0;
-  for(const car of tr.cars){
-    for(const h of car.userData.heads){ h.visible = shown<n; shown++; }
-  }
-}
 function rebuildTrains(){
-  const {cars:carCount,trains:trainCount}=derived();
-  const L=path?path.len:1;
-  const oldS=trains.map(t=>t.s/(t.L||L));   // keep relative position
-  while(trainLayer.children.length)trainLayer.remove(trainLayer.children[0]);
-  trains=[];
-  const visCars=Math.min(carCount,8);
-  for(let n=0;n<trainCount;n++){
-    const group=new THREE.Group();const cars=[];
-    for(let c=0;c<visCars;c++){const m=buildCar();group.add(m);cars.push(m);}
-    trainLayer.add(group);
-    const frac=oldS[n]!==undefined?oldS[n]:n/trainCount;
-    const tr={group,s:frac*L,prevS:frac*L,L,cars,mode:'run',phase:'',timer:0,boarded:0,startBoard:0,cycleBoard:0};
-    setTrainOccupancy(tr,0);
-    trains.push(tr);
-  }
+  trains=renderRebuildTrains({
+    THREE,
+    trainLayer,
+    trains,
+    derived,
+    path,
+    colors: COL,
+    headColors: HEADS,
+    carLength: CAR_LEN,
+  });
 }
+
 function placeCar(mesh,s){
-  const f=sampleAt(s);
-  mesh.position.copy(f.pos).addScaledVector(f.up,0.12);
-  mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(f.right,f.up,f.tan));
+  renderPlaceCar({ THREE, mesh, s, sampleAt });
 }
 
 // =========================================================================
@@ -1019,37 +867,28 @@ addEventListener('keydown',e=>{
 //  SAVE / LOAD
 // =========================================================================
 function saveGame(){
-  try{localStorage.setItem('tc3d_v5',JSON.stringify({
-    money:state.money,rides:state.rides,queue:sim.queue,
-    upgrades:Object.fromEntries(Object.entries(UPGRADES).map(([k,v])=>[k,v.level])),
-    research:{budget:research.budget,points:research.points,done:research.done},
-    ctrlPts,paidLength,frustum,azimuth,
-  }));}catch(_){}
+  writeSave(localStorage, {
+    state,
+    sim,
+    upgrades: UPGRADES,
+    research,
+    ctrlPts,
+    paidLength,
+    frustum,
+    azimuth,
+  });
 }
 function loadGame(){
-  try{
-    const raw=localStorage.getItem('tc3d_v5')||localStorage.getItem('tc3d_v4')||localStorage.getItem('tc3d_v3'); if(!raw)return;
-    const d=JSON.parse(raw);
-    if(typeof d.money==='number')state.money=d.money;
-    if(typeof d.rides==='number')state.rides=d.rides;
-    if(typeof d.queue==='number')sim.queue=d.queue;
-    if(d.upgrades)Object.entries(d.upgrades).forEach(([k,lv])=>{
-      if(k==='capacity'&&UPGRADES.seats)UPGRADES.seats.level=lv;  // migrate old key
-      else if(UPGRADES[k])UPGRADES[k].level=lv;
-    });
-    if(d.research){
-      if(typeof d.research.budget==='number')research.budget=d.research.budget;
-      if(typeof d.research.points==='number')research.points=d.research.points;
-      if(d.research.done)research.done={...d.research.done};
-    }
-    if(Array.isArray(d.ctrlPts)&&d.ctrlPts.length>=3){
-      ctrlPts=d.ctrlPts.map(p=>({seg:p.seg||'plain',...p}));
-      if(ctrlPts[0])ctrlPts[0].seg='station';  // first point stays a boarding segment
-    }
-    if(typeof d.paidLength==='number')paidLength=d.paidLength;
-    if(typeof d.frustum==='number')frustum=d.frustum;
-    if(typeof d.azimuth==='number')azimuth=d.azimuth;
-  }catch(_){}
+  const restored = applySaveData(readSave(localStorage), {
+    state,
+    sim,
+    upgrades: UPGRADES,
+    research,
+  });
+  if(restored.ctrlPts)ctrlPts=restored.ctrlPts;
+  if(typeof restored.paidLength==='number')paidLength=restored.paidLength;
+  if(typeof restored.frustum==='number')frustum=restored.frustum;
+  if(typeof restored.azimuth==='number')azimuth=restored.azimuth;
   applyResearchEffects();   // e.g. raise train cap if Block Sections was researched
 }
 setInterval(saveGame,15000);
