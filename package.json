@@ -1,0 +1,11 @@
+{
+  "name": "time-coaster-3d",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "python -m http.server 4321",
+    "check": "node --check src/main.js && node --check src/systems/economy.js",
+    "test": "node tests/economy.test.mjs"
+  }
+}
