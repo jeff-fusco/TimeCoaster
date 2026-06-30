@@ -60,7 +60,15 @@ export function rebuildTrains({
   const { cars: carCount, trains: trainCount } = derived();
   const L = path ? path.len : 1;
   const oldS = trains.map(train => train.s / (train.L || L));
-  while (trainLayer.children.length) trainLayer.remove(trainLayer.children[0]);
+  while (trainLayer.children.length) {
+    const child = trainLayer.children[0];
+    child.traverse(o => {
+      if (o.geometry) o.geometry.dispose();
+      const m = o.material;
+      if (m) (Array.isArray(m) ? m.forEach(x => x.dispose()) : m.dispose());
+    });
+    trainLayer.remove(child);
+  }
 
   const nextTrains = [];
   const visCars = Math.min(carCount, 8);

@@ -1,3 +1,4 @@
+import * as THREE from 'three';
 import {
   applyResearchEffects as applyResearchEffectsModel,
   deriveEconomy,
@@ -29,13 +30,28 @@ import {
   rebuildTrains as renderRebuildTrains,
   setTrainOccupancy,
 } from './render/train.js';
+import { stepTrains } from './systems/trainSim.js';
+import { createScenery } from './render/scenery.js';
 import { initBuildControls } from './input/buildControls.js';
 import { createHudShop } from './ui/hudShop.js';
-
-const THREE = window.THREE;
-if (!THREE) {
-  throw new Error('Three.js must load before src/main.js');
-}
+import {
+  BUDGETS,
+  CATS,
+  COL,
+  COST_PER_M,
+  DEFAULT_CTRL,
+  FEATURE_COST,
+  FEATURE_REFUND,
+  GUEST_COLS,
+  HEADS,
+  MPH,
+  PHYS,
+  RESEARCH,
+  RESEARCH_ORDER,
+  SHOP_ORDER,
+  STN,
+  UPGRADES,
+} from './config/gameData.js';
 
 /* =========================================================================
    TIME COASTER 3D
@@ -43,83 +59,9 @@ if (!THREE) {
    chain lifts / loops / corkscrews · RCT-style excitement/intensity/nausea
    ========================================================================= */
 
-// ── palette ───────────────────────────────────────────────────────────────
-const COL = {
-  grass:0x6fb04a, grassHi:0x7fc057,
-  track:0xe8533f, rail:0xf2f2f2, support:0xf5a623,
-  car:0x2f80ed, carTrim:0xffffff,
-  trunk:0x8a5a2b, leaf:0x4e9c46, leafHi:0x66b85c,
-  cloud:0xffffff, platform:0xd8c79a, roof:0xe8533f,
-  handleNorm:0xffcc00, handleStn:0xff6644, handleSel:0x6c47ff, handleHov:0xffffff,
-  tieLift:0xf5a623, tieBrake:0x444a55, tieStn:0x9a7b4f, tiePlain:0x6b3f1f,
-};
-const HEADS = [0xffd29b,0xf2b27a,0xd99463,0x8a5a3a,0xf6e2c8];
-const GUEST_COLS = [0xe85d75,0x4a8fe7,0x46b06a,0xf2b134,0xa855f7];
 const WORLD_UP = new THREE.Vector3(0,1,0);
 
-// ── physics tuning (gameish, not strictly real-world) ──────────────────────
-const PHYS = {
-  g:18, vMin:4.0, vCrest:3.4,
-  liftSpeed:3.6, brakeSpeed:3.0, stationSpeed:2.6,
-  friction:0.012,                 // gentle drag, keeps closed-loop stable
-  maxBank:0.62,                   // auto-banking limit (rad)
-};
-const MPH = 2.7;                   // display multiplier units/s -> "mph"
-
-// ── build economy ──────────────────────────────────────────────────────────
-const COST_PER_M  = 8;
-const FEATURE_COST = { plain:0, lift:120, brake:60, loop:900, corkscrew:1400 };
-const FEATURE_REFUND = 0.6;
-
-// ── default oval (points 0 & 1 station, locked Y) ──────────────────────────
-const DEFAULT_CTRL = [
-  {x: 2.85, y:0.7, z: 9.0, station:true, seg:'station'},  // 0 station entrance (auto-positioned)
-  {x:-2.85, y:0.7, z: 9.0, station:true, seg:'plain'  },  // 1 station exit      (auto-positioned)
-  {x:-7.5, y:0.9, z: 5.5, seg:'plain'},
-  {x:-9.8, y:1.1, z: 0.0, seg:'plain'},
-  {x:-7.5, y:0.9, z:-5.5, seg:'plain'},
-  {x: 0.0, y:1.3, z:-9.3, seg:'plain'},
-  {x: 7.5, y:0.9, z:-5.5, seg:'plain'},
-  {x: 9.8, y:1.1, z: 0.0, seg:'plain'},
-  {x: 7.5, y:0.9, z: 5.5, seg:'plain'},
-];
-
-// ── upgrades (cat = shop tab) ────────────────────────────────────────────────
-const UPGRADES = {
-  car:     {name:'Add a Car',      desc:'+4 seats · longer platform',     icon:'🚃', base:60,   growth:1.55, level:0,        cat:'ride'},
-  seats:   {name:'Roomier Cars',   desc:'+2 seats per car',               icon:'💺', base:95,   growth:1.60, level:0, max:8, cat:'ride'},
-  speed:   {name:'Faster Track',   desc:'More launch energy',             icon:'⚡', base:80,   growth:1.50, level:0,        cat:'ride'},
-  train:   {name:'Add a Train',    desc:'Another train on track',         icon:'🎢', base:500,  growth:3.20, level:0, max:2, cat:'ride'},
-  queue:   {name:'Bigger Queue',   desc:'+10 people can wait in line',    icon:'🚧', base:110,  growth:1.55, level:0, max:8, cat:'queue'},
-  snacks:  {name:'Snack Stands',   desc:'+$3/min per waiting guest',      icon:'🍿', base:200,  growth:2.00, level:0, max:6, cat:'queue'},
-  loading: {name:'Fast Boarding',  desc:'Quicker load & unload',          icon:'🏃', base:130,  growth:1.65, level:0, max:6, cat:'loading'},
-  express: {name:'Express Lane',   desc:'+$5 bonus per rider',            icon:'🌟', base:350,  growth:1.80, level:0,        cat:'loading'},
-  ticket:  {name:'Ticket Price',   desc:'+$1 per rider',                  icon:'🎟️', base:50,   growth:1.45, level:0,        cat:'marketing'},
-  market:  {name:'Marketing',      desc:'More guests · excitement pays',  icon:'📣', base:160,  growth:1.75, level:0, max:6, cat:'marketing'},
-  hype:    {name:'Theming & Hype', desc:'×1.12 to all earnings',          icon:'🎪', base:120,  growth:1.70, level:0,        cat:'marketing'},
-};
-const SHOP_ORDER = ['car','seats','speed','train','queue','snacks','loading','express','ticket','market','hype'];
-
-const CATS = [
-  {id:'ride',     icon:'🎢', name:'Ride'},
-  {id:'queue',    icon:'🚧', name:'Queue'},
-  {id:'loading',  icon:'🏃', name:'Board'},
-  {id:'marketing',icon:'📣', name:'Promo'},
-  {id:'research', icon:'🔬', name:'R&D'},
-];
-
-// ── research (constant money drain → research points → permanent unlocks) ─────
-const RESEARCH = {
-  brakes: {name:'Block Brakes',  desc:'Unlock 🛑 brake track',      icon:'🛑', rp:60 },
-  loop:   {name:'Vertical Loop', desc:'Unlock 🔁 loop track',       icon:'🔁', rp:150},
-  cork:   {name:'Corkscrew',     desc:'Unlock 🌀 corkscrew track',  icon:'🌀', rp:260},
-  photo:  {name:'On-Ride Photo', desc:'+15% ride income',           icon:'📸', rp:180},
-  launch: {name:'Launch System', desc:'+1 free Faster Track level',  icon:'🚀', rp:220},
-  queue2: {name:'Switchback Pro',desc:'+30 max queue capacity',     icon:'🧱', rp:160},
-  train3: {name:'Block Sections',desc:'Allow a 3rd train',          icon:'🚆', rp:340},
-};
-const RESEARCH_ORDER=['brakes','loop','cork','photo','launch','queue2','train3'];
-const BUDGETS=[0,30,90,240];   // $/min research spend options
+// ── live game state ─────────────────────────────────────────────────────────
 const research = { budget:0, points:0, done:{} };
 const hasResearch = k => hasResearchKey(research.done, k);
 function featureUnlocked(feat){
@@ -128,16 +70,6 @@ function featureUnlocked(feat){
 function applyResearchEffects(){
   applyResearchEffectsModel(UPGRADES, research.done);
 }
-
-// passenger / station tuning
-const STN = {
-  arrivalBase:0.6,     // guests/sec arriving at the queue (before scaling)
-  baseUnload:1.8,      // seconds to unload a full train at loading lvl 0
-  baseLoad:2.2,        // seconds to load
-  snackPerGuest:3,     // $/min per waiting guest, per snack level
-  snackCap:30,         // a snack stand can only serve so many of the line at once
-  queueBase:10, queueStep:10,
-};
 
 const state = { money:0, rides:0 };
 const sim   = { queue:0 };     // live count of guests waiting in line
@@ -163,7 +95,10 @@ function derived(){
 //  THREE.JS SETUP
 // =========================================================================
 const host=document.getElementById('scene');
-const renderer=new THREE.WebGLRenderer({antialias:true});
+const renderer=new THREE.WebGLRenderer({
+  antialias:true,
+  preserveDrawingBuffer: window.__TIME_COASTER_TEST__ === true,
+});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 host.appendChild(renderer.domElement);
@@ -286,24 +221,7 @@ function updateQueueVisuals(){
 // =========================================================================
 //  SCENERY
 // =========================================================================
-const clouds=[];
-(()=>{
-  function tree(x,z,sc){
-    const t=new THREE.Group();
-    const tr=new THREE.Mesh(new THREE.CylinderGeometry(.16,.22,1.1,6),new THREE.MeshLambertMaterial({color:COL.trunk}));tr.position.y=.55;
-    const f1=new THREE.Mesh(new THREE.ConeGeometry(.95,1.5,8),new THREE.MeshLambertMaterial({color:COL.leaf}));f1.position.y=1.5;
-    const f2=new THREE.Mesh(new THREE.ConeGeometry(.7,1.2,8),new THREE.MeshLambertMaterial({color:COL.leafHi}));f2.position.y=2.2;
-    t.add(tr,f1,f2);t.position.set(x,0,z);t.scale.setScalar(sc);t.traverse(o=>o.castShadow=true);scene.add(t);
-  }
-  for(let i=0;i<16;i++){const a=(i/16)*Math.PI*2+0.3,r=19+Math.sin(i*3.1)*2.5;tree(Math.cos(a)*r,Math.sin(a)*r,0.8+(i%3)*.25);}
-  tree(-15,-2,1.1);tree(15,-12,.9);tree(16,10,1);tree(-14,12,.95);
-  function cloud(x,y,z){
-    const c=new THREE.Group();const m=new THREE.MeshLambertMaterial({color:COL.cloud});
-    [[0,0,0,1.4],[1.2,-.1,0,1],[-.8,-.1,0,1],[.4,.5,.3,.9]].forEach(([dx,dy,dz,r])=>{const p=new THREE.Mesh(new THREE.SphereGeometry(r,10,8),m);p.position.set(dx,dy,dz);c.add(p);});
-    c.position.set(x,y,z);scene.add(c);clouds.push(c);
-  }
-  cloud(-18,18,-14);cloud(16,20,-6);cloud(2,22,18);cloud(-22,17,8);
-})();
+const { clouds } = createScenery({ THREE, scene, colors: COL });
 
 // =========================================================================
 //  TRAINS
@@ -391,49 +309,15 @@ let coinThrottle=0, hudAccum=0;
 const stationBusy=()=>trains.some(t=>t.mode==='dwell');
 
 function updateTrains(dt,d){
-  const L=path.len, sStop=stationRefs.stopS;
-  for(const tr of trains){
-    if(tr.mode==='run'){
-      tr.prevS=tr.s;
-      tr.s+=speedAt(tr.s)*dt;
-      let wrapped=false;
-      if(tr.s>=L){ tr.s-=L; tr.prevS-=L; wrapped=true; }
-      // arrive at the platform: stop & begin unloading (unless another train is boarding)
-      if(tr.prevS<sStop && tr.s>=sStop){
-        if(!stationBusy()){
-          tr.s=sStop; tr.mode='dwell'; tr.phase='unload'; tr.timer=0; tr.startBoard=tr.boarded;
-        }
-      }
-    } else { // dwell: unload, then load from the queue
-      tr.timer+=dt;
-      if(tr.phase==='unload'){
-        const ut=Math.max(0.15,d.unloadTime);
-        const frac=Math.min(1,tr.timer/ut);
-        tr.boarded=Math.round(tr.startBoard*(1-frac));
-        if(tr.timer>=ut){
-          tr.boarded=0; tr.phase='load'; tr.timer=0;
-          // reserve guests from the line right away so two trains can't grab the same people
-          tr.cycleBoard=Math.min(d.seatsCap, Math.floor(sim.queue));
-          sim.queue=Math.max(0, sim.queue-tr.cycleBoard);
-        }
-      } else { // load
-        const lt=Math.max(0.15,d.loadTime);
-        const frac=Math.min(1,tr.timer/lt);
-        tr.boarded=Math.round(tr.cycleBoard*frac);
-        if(tr.timer>=lt){
-          tr.boarded=tr.cycleBoard;
-          const income=Math.round(tr.cycleBoard*d.perRider);
-          if(income>0){
-            state.money+=income; state.rides+=1;
-            if(coinThrottle<=0&&tr.cars[0]){ spawnCoin(tr.cars[0].position,income); coinThrottle=0.12; }
-          }
-          tr.mode='run'; tr.phase=''; tr.timer=0; tr.prevS=tr.s;
-        }
-      }
-    }
-    tr.cars.forEach((car,i)=>placeCar(car, tr.s-i*CAR_LEN));
-    setTrainOccupancy(tr, Math.round(tr.boarded));
-  }
+  stepTrains({
+    trains, dt, economy:d, pathLen:path.len, stopS:stationRefs.stopS, sim, state,
+    speedAt, stationBusy,
+    placeTrain: tr => tr.cars.forEach((car,i)=>placeCar(car, tr.s-i*CAR_LEN)),
+    setOccupancy: setTrainOccupancy,
+    onDeposit: (tr, income) => {
+      if(coinThrottle<=0 && tr.cars[0]){ spawnCoin(tr.cars[0].position, income); coinThrottle=0.12; }
+    },
+  });
 }
 
 const clock=new THREE.Clock();

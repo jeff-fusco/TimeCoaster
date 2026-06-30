@@ -3,7 +3,15 @@
     "allow": [
       "mcp__Claude_Preview__preview_start",
       "Bash(npx --version)",
-      "Bash(py --version)"
+      "Bash(py --version)",
+      "Bash(git log *)",
+      "Bash(git branch *)",
+      "Bash(git status *)",
+      "Bash(node scripts/check.mjs)",
+      "Bash(node tests/economy.test.mjs)",
+      "Bash(node tests/path.test.mjs)",
+      "Bash(node tests/save.test.mjs)",
+      "Bash(node tests/trainSim.test.mjs)"
     ]
   }
 }

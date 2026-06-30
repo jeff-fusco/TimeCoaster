@@ -5,7 +5,14 @@
   "type": "module",
   "scripts": {
     "start": "python -m http.server 4321",
-    "check": "node --check src/main.js && node --check src/systems/economy.js && node --check src/systems/path.js && node --check src/systems/save.js && node --check src/render/track.js && node --check src/render/station.js && node --check src/render/train.js && node --check src/input/buildControls.js && node --check src/ui/hudShop.js",
-    "test": "node tests/economy.test.mjs && node tests/path.test.mjs && node tests/save.test.mjs"
+    "check": "node scripts/check.mjs",
+    "test": "node tests/economy.test.mjs && node tests/path.test.mjs && node tests/save.test.mjs && node tests/trainSim.test.mjs",
+    "test:browser": "playwright test"
+  },
+  "dependencies": {
+    "three": "0.128.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0"
   }
 }

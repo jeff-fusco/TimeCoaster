@@ -80,7 +80,13 @@
 <div class="toast" id="toast"></div>
 <div class="title">Time Coaster 3D</div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./node_modules/three/build/three.module.js"
+  }
+}
+</script>
 <script type="module" src="src/main.js"></script>
 </body>
 </html>
