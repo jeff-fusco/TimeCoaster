@@ -34,7 +34,18 @@ function buildCar({ THREE, colors, headColors }) {
     heads.push(head);
   });
   car.userData.heads = heads;
+  car.userData.body = chassis; // glowed when the train is ready to dispatch
   return car;
+}
+
+// Highlight (or clear) a train's cars when it is full and awaiting dispatch.
+export function setTrainGlow(train, on, intensity = 0.6) {
+  for (const car of train.cars) {
+    const mat = car.userData.body?.material;
+    if (!mat) continue;
+    mat.emissive.setHex(on ? 0xf5a623 : 0x000000);
+    mat.emissiveIntensity = on ? intensity : 0;
+  }
 }
 
 export function setTrainOccupancy(train, n) {

@@ -61,13 +61,14 @@ export const UPGRADES = {
   queue: { name: 'Bigger Queue', desc: '+10 people can wait in line', icon: '🚧', base: 110, growth: 1.55, level: 0, max: 8, cat: 'queue' },
   snacks: { name: 'Snack Stands', desc: '+$3/min per waiting guest', icon: '🍿', base: 200, growth: 2.00, level: 0, max: 6, cat: 'queue' },
   loading: { name: 'Fast Boarding', desc: 'Quicker load & unload', icon: '🏃', base: 130, growth: 1.65, level: 0, max: 6, cat: 'loading' },
+  dispatch: { name: 'Dispatch Speed', desc: 'Faster auto-launch (needs Auto Dispatch)', icon: '🚦', base: 180, growth: 1.70, level: 0, max: 8, cat: 'loading' },
   express: { name: 'Express Lane', desc: '+$5 bonus per rider', icon: '🌟', base: 350, growth: 1.80, level: 0, cat: 'loading' },
   ticket: { name: 'Ticket Price', desc: '+$1 per rider', icon: '🎟️', base: 50, growth: 1.45, level: 0, cat: 'marketing' },
   market: { name: 'Marketing', desc: 'More guests · excitement pays', icon: '📣', base: 160, growth: 1.75, level: 0, max: 6, cat: 'marketing' },
   hype: { name: 'Theming & Hype', desc: '×1.12 to all earnings', icon: '🎪', base: 120, growth: 1.70, level: 0, cat: 'marketing' },
 };
 
-export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'loading', 'express', 'ticket', 'market', 'hype'];
+export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'loading', 'dispatch', 'express', 'ticket', 'market', 'hype'];
 
 export const CATS = [
   { id: 'ride', icon: '🎢', name: 'Ride' },
@@ -83,11 +84,12 @@ export const RESEARCH = {
   cork: { name: 'Corkscrew', desc: 'Unlock 🌀 corkscrew track', icon: '🌀', rp: 260 },
   photo: { name: 'On-Ride Photo', desc: '+15% ride income', icon: '📸', rp: 180 },
   launch: { name: 'Launch System', desc: '+1 free Faster Track level', icon: '🚀', rp: 220 },
+  autodispatch: { name: 'Auto Dispatch', desc: 'Ready trains launch themselves', icon: '🤖', rp: 200 },
   queue2: { name: 'Switchback Pro', desc: '+30 max queue capacity', icon: '🧱', rp: 160 },
   train3: { name: 'Block Sections', desc: 'Allow a 3rd train', icon: '🚆', rp: 340 },
 };
 
-export const RESEARCH_ORDER = ['brakes', 'loop', 'cork', 'photo', 'launch', 'queue2', 'train3'];
+export const RESEARCH_ORDER = ['brakes', 'loop', 'cork', 'photo', 'launch', 'autodispatch', 'queue2', 'train3'];
 export const BUDGETS = [0, 30, 90, 240];
 
 export const STN = {
@@ -98,4 +100,8 @@ export const STN = {
   snackCap: 30,
   queueBase: 10,
   queueStep: 10,
+  baseDispatch: 3.0,   // seconds a ready train waits before auto-launch (level 0)
 };
+
+// minimum arc-length gap a following train keeps from the rear of the train ahead
+export const BLOCK_GAP = 2.4;

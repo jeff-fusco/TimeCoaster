@@ -57,7 +57,13 @@ export function deriveEconomy({
   const loadTime = station.baseLoad / loadDiv;
   const dwellTime = unloadTime + loadTime;
   const lapTravel = Math.max(2, st.lapTime);
-  const cycle = lapTravel + dwellTime;
+
+  // dispatch: manual until Auto Dispatch is researched, then auto-launch after a
+  // delay shortened by the Dispatch Speed upgrade.
+  const autoDispatch = hasResearchKey(researchDone, 'autodispatch');
+  const dispatchDelay = Math.max(0.25, (station.baseDispatch ?? 3) / (1 + (U.dispatch?.level || 0) * 0.6));
+  // manual dispatch estimate assumes the player launches promptly (best case)
+  const cycle = lapTravel + dwellTime + (autoDispatch ? dispatchDelay : 0);
 
   const queueCap =
     station.queueBase +
@@ -89,6 +95,8 @@ export function deriveEconomy({
     dwellTime,
     lapTravel,
     cycle,
+    autoDispatch,
+    dispatchDelay,
     queueCap,
     arrivalRate,
     snackPerMin,

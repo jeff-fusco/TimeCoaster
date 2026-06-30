@@ -28,13 +28,15 @@ import {
   CAR_LEN,
   placeCar as renderPlaceCar,
   rebuildTrains as renderRebuildTrains,
+  setTrainGlow,
   setTrainOccupancy,
 } from './render/train.js';
-import { stepTrains } from './systems/trainSim.js';
+import { dispatchTrain, stepTrains } from './systems/trainSim.js';
 import { createScenery } from './render/scenery.js';
 import { initBuildControls } from './input/buildControls.js';
 import { createHudShop } from './ui/hudShop.js';
 import {
+  BLOCK_GAP,
   BUDGETS,
   CATS,
   COL,
@@ -298,6 +300,7 @@ const buildControls=initBuildControls({
   showToast,
   spawnCoinScreen,
   fmt: formatMoney,
+  onPlayClick: (x, y) => tryDispatch(x, y),
 });
 const bm=buildControls.state;
 function updateBuildCost(){ buildControls.updateBuildCost(); }
@@ -305,19 +308,51 @@ function updateBuildCost(){ buildControls.updateBuildCost(); }
 // =========================================================================
 //  GAME LOOP
 // =========================================================================
-let coinThrottle=0, hudAccum=0;
+let coinThrottle=0, hudAccum=0, dispatchHinted=false;
 const stationBusy=()=>trains.some(t=>t.mode==='dwell');
+const dispatchDeposit=(tr,income)=>{
+  if(coinThrottle<=0 && tr.cars[0]){ spawnCoin(tr.cars[0].position, income); coinThrottle=0.12; }
+};
 
 function updateTrains(dt,d){
   stepTrains({
     trains, dt, economy:d, pathLen:path.len, stopS:stationRefs.stopS, sim, state,
     speedAt, stationBusy,
+    carLen:CAR_LEN, blockGap:BLOCK_GAP,
+    autoDispatch:d.autoDispatch, dispatchDelay:d.dispatchDelay,
     placeTrain: tr => tr.cars.forEach((car,i)=>placeCar(car, tr.s-i*CAR_LEN)),
     setOccupancy: setTrainOccupancy,
-    onDeposit: (tr, income) => {
-      if(coinThrottle<=0 && tr.cars[0]){ spawnCoin(tr.cars[0].position, income); coinThrottle=0.12; }
-    },
+    onDeposit: dispatchDeposit,
   });
+  // ready trains glow (pulsing) until launched; hint the player once if manual
+  const pulse=0.45+0.35*Math.sin(performance.now()*0.006);
+  let anyReady=false;
+  for(const tr of trains){
+    const ready=tr.mode==='dwell'&&tr.phase==='ready';
+    if(ready)anyReady=true;
+    setTrainGlow(tr, ready, pulse);
+  }
+  if(anyReady && !d.autoDispatch && !dispatchHinted){
+    dispatchHinted=true;
+    showToast('Train ready — click it to dispatch! (or research Auto Dispatch)');
+  }
+}
+
+// Click a ready train or the station to launch it (manual dispatch).
+const dispatchRay=new THREE.Raycaster();
+const dispatchNDC=new THREE.Vector2();
+function tryDispatch(clientX, clientY){
+  const ready=trains.find(t=>t.mode==='dwell'&&t.phase==='ready');
+  if(!ready) return false;
+  const r=renderer.domElement.getBoundingClientRect();
+  dispatchNDC.x=((clientX-r.left)/r.width)*2-1;
+  dispatchNDC.y=-((clientY-r.top)/r.height)*2+1;
+  dispatchRay.setFromCamera(dispatchNDC, camera);
+  const hits=dispatchRay.intersectObjects([stationGrp, ready.group], true);
+  if(!hits.length) return false;
+  dispatchTrain(ready, { economy:derived(), state, onDeposit:dispatchDeposit });
+  refreshHUD();
+  return true;
 }
 
 const clock=new THREE.Clock();

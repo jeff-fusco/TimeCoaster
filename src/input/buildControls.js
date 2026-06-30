@@ -31,6 +31,7 @@ export function initBuildControls({
   showToast,
   spawnCoinScreen,
   fmt,
+  onPlayClick = () => false,
 }) {
   const { COST_PER_M, FEATURE_COST, FEATURE_REFUND, MIN_FRUSTUM, MAX_FRUSTUM, STATION_Y } = constants;
   const raycaster = new THREE.Raycaster();
@@ -154,6 +155,9 @@ export function initBuildControls({
   let dragMode = null;
   let dragX = 0;
   let dragY = 0;
+  let downX = 0;
+  let downY = 0;
+  let clickCandidate = false; // a left press in play mode that may be a tap (dispatch)
 
   function onCameraMouseDown(e) {
     if (e.button === 2) dragMode = 'rotate';
@@ -163,6 +167,17 @@ export function initBuildControls({
     if (e.button !== 0) e.preventDefault();
     dragX = e.clientX;
     dragY = e.clientY;
+    downX = e.clientX;
+    downY = e.clientY;
+    clickCandidate = e.button === 0 && !controls.active;
+  }
+
+  function onCameraMouseUp(e) {
+    if (clickCandidate && Math.hypot(e.clientX - downX, e.clientY - downY) < 6) {
+      onPlayClick(e.clientX, e.clientY); // a tap (not a pan) → try to dispatch a ready train
+    }
+    dragMode = null;
+    clickCandidate = false;
   }
 
   function onWindowMouseMove(e) {
@@ -495,8 +510,8 @@ export function initBuildControls({
   renderer.domElement.addEventListener('mousedown', onCameraMouseDown);
   renderer.domElement.addEventListener('wheel', onWheel, { passive: false });
   window.addEventListener('mousemove', onWindowMouseMove);
-  window.addEventListener('mouseup', () => { dragMode = null; });
-  window.addEventListener('blur', () => { dragMode = null; });
+  window.addEventListener('mouseup', onCameraMouseUp);
+  window.addEventListener('blur', () => { dragMode = null; clickCandidate = false; });
   window.addEventListener('keydown', onKeyDown);
 
   $('addBtn').addEventListener('click', onAddPointClick);
