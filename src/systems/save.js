@@ -49,35 +49,39 @@ export function readSave(storage) {
   return null;
 }
 
+const finite = value => Number.isFinite(value);
+const validPoint = point => point && finite(point.x) && finite(point.y) && finite(point.z);
+
 export function applySaveData(data, { state, sim, upgrades, research }) {
   const restored = {};
   if (!data) return restored;
 
-  if (typeof data.money === 'number') state.money = data.money;
-  if (typeof data.rides === 'number') state.rides = data.rides;
-  if (typeof data.queue === 'number') sim.queue = data.queue;
+  if (finite(data.money)) state.money = data.money;
+  if (finite(data.rides)) state.rides = data.rides;
+  if (finite(data.queue)) sim.queue = data.queue;
 
   if (data.upgrades) {
     Object.entries(data.upgrades).forEach(([key, level]) => {
+      if (!finite(level)) return;
       if (key === 'capacity' && upgrades.seats) upgrades.seats.level = level;
       else if (upgrades[key]) upgrades[key].level = level;
     });
   }
 
   if (data.research) {
-    if (typeof data.research.budget === 'number') research.budget = data.research.budget;
-    if (typeof data.research.points === 'number') research.points = data.research.points;
+    if (finite(data.research.budget)) research.budget = data.research.budget;
+    if (finite(data.research.points)) research.points = data.research.points;
     if (data.research.done) research.done = { ...data.research.done };
   }
 
-  if (Array.isArray(data.ctrlPts) && data.ctrlPts.length >= 3) {
+  if (Array.isArray(data.ctrlPts) && data.ctrlPts.length >= 3 && data.ctrlPts.every(validPoint)) {
     restored.ctrlPts = data.ctrlPts.map(point => ({ seg: point.seg || 'plain', ...point }));
     if (restored.ctrlPts[0]) restored.ctrlPts[0].seg = 'station';
   }
 
-  if (typeof data.paidLength === 'number') restored.paidLength = data.paidLength;
-  if (typeof data.frustum === 'number') restored.frustum = data.frustum;
-  if (typeof data.azimuth === 'number') restored.azimuth = data.azimuth;
+  if (finite(data.paidLength) && data.paidLength >= 0) restored.paidLength = data.paidLength;
+  if (finite(data.frustum) && data.frustum > 0) restored.frustum = data.frustum;
+  if (finite(data.azimuth)) restored.azimuth = data.azimuth;
 
   return restored;
 }

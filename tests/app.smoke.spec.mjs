@@ -62,3 +62,24 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   expect(cdnRequests).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
+
+test('manual dispatch launches a ready train and pays the ride', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+  });
+  await page.goto('/index.html');
+
+  const dispatch = page.locator('#dispatchBtn');
+  await expect(dispatch).toBeVisible({ timeout: 12_000 });
+
+  const moneyBefore = await page.locator('#money').textContent();
+  await dispatch.click();
+
+  await expect(dispatch).toBeHidden();
+  await expect.poll(async () => page.locator('#money').textContent()).not.toBe(moneyBefore);
+  expect(pageErrors).toEqual([]);
+});

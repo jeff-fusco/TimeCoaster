@@ -127,4 +127,36 @@ function makeGameState() {
   assert.deepEqual(target.state, { money: 1, rides: 2 });
 }
 
+{
+  const target = {
+    state: { money: 1, rides: 2 },
+    sim: { queue: 3 },
+    upgrades: { speed: { level: 0 } },
+    research: { budget: 0, points: 0, done: {} },
+  };
+  const restored = applySaveData({
+    money: Number.NaN,
+    rides: Infinity,
+    queue: -Infinity,
+    upgrades: { speed: Number.NaN },
+    research: { budget: Infinity, points: Number.NaN, done: { loop: true } },
+    ctrlPts: [
+      { x: 1, y: 1, z: 1 },
+      { x: Number.NaN, y: 2, z: 2 },
+      { x: 3, y: 3, z: 3 },
+    ],
+    paidLength: -1,
+    frustum: Number.NaN,
+    azimuth: Infinity,
+  }, target);
+
+  assert.deepEqual(target.state, { money: 1, rides: 2 });
+  assert.equal(target.sim.queue, 3);
+  assert.equal(target.upgrades.speed.level, 0);
+  assert.equal(target.research.budget, 0);
+  assert.equal(target.research.points, 0);
+  assert.deepEqual(target.research.done, { loop: true });
+  assert.deepEqual(restored, {});
+}
+
 console.log('save tests passed');

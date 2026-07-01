@@ -336,6 +336,7 @@ function updateTrains(dt,d){
     dispatchHinted=true;
     showToast('Train ready — click it to dispatch! (or research Auto Dispatch)');
   }
+  updateDispatchButton(anyReady && !d.autoDispatch);
 }
 
 // Click a ready train or the station to launch it (manual dispatch).
@@ -353,6 +354,19 @@ function tryDispatch(clientX, clientY){
   dispatchTrain(ready, { economy:derived(), state, onDeposit:dispatchDeposit });
   refreshHUD();
   return true;
+}
+function dispatchReadyTrain(){
+  const ready=trains.find(t=>t.mode==='dwell'&&t.phase==='ready');
+  if(!ready) return false;
+  const launched=dispatchTrain(ready, { economy:derived(), state, onDeposit:dispatchDeposit });
+  if(launched) refreshHUD();
+  return launched;
+}
+function updateDispatchButton(show){
+  const btn=$('dispatchBtn');
+  if(!btn) return;
+  btn.classList.toggle('visible', show);
+  btn.disabled=!show;
 }
 
 const clock=new THREE.Clock();
@@ -375,6 +389,8 @@ function tick(){
     updateQueueVisuals();
     hudAccum+=dt;
     if(hudAccum>=0.2){ refreshHUD(); hudAccum=0; }
+  } else {
+    updateDispatchButton(false);
   }
   clouds.forEach((c,i)=>{c.position.x+=(0.15+i*0.02)*dt;if(c.position.x>30)c.position.x=-30;});
   coinThrottle-=dt; placeCamera(); renderer.render(scene,camera); requestAnimationFrame(tick);
@@ -427,6 +443,7 @@ function researchProject(key){
 }
 function buy(key){
   const u=UPGRADES[key];
+  if(u.requiresResearch && !hasResearch(u.requiresResearch)){ showToast('Research Auto Dispatch first'); return; }
   if(u.max!==undefined&&u.level>=u.max)return;
   const c=upgradeCost(u); if(state.money<c)return;
   state.money-=c; u.level+=1;
@@ -454,6 +471,7 @@ function spawnCoinScreen(x,y,amount,spend){
 }
 let toastTimer;
 function showToast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600);}
+$('dispatchBtn').addEventListener('click', dispatchReadyTrain);
 
 // =========================================================================
 //  SAVE / LOAD
@@ -479,7 +497,7 @@ function loadGame(){
   });
   if(restored.ctrlPts)ctrlPts=restored.ctrlPts;
   if(typeof restored.paidLength==='number')paidLength=restored.paidLength;
-  if(typeof restored.frustum==='number')frustum=restored.frustum;
+  if(typeof restored.frustum==='number')frustum=Math.max(MIN_FRUSTUM, Math.min(MAX_FRUSTUM, restored.frustum));
   if(typeof restored.azimuth==='number')azimuth=restored.azimuth;
   applyResearchEffects();   // e.g. raise train cap if Block Sections was researched
 }

@@ -61,7 +61,7 @@ export const UPGRADES = {
   queue: { name: 'Bigger Queue', desc: '+10 people can wait in line', icon: '🚧', base: 110, growth: 1.55, level: 0, max: 8, cat: 'queue' },
   snacks: { name: 'Snack Stands', desc: '+$3/min per waiting guest', icon: '🍿', base: 200, growth: 2.00, level: 0, max: 6, cat: 'queue' },
   loading: { name: 'Fast Boarding', desc: 'Quicker load & unload', icon: '🏃', base: 130, growth: 1.65, level: 0, max: 6, cat: 'loading' },
-  dispatch: { name: 'Dispatch Speed', desc: 'Faster auto-launch (needs Auto Dispatch)', icon: '🚦', base: 180, growth: 1.70, level: 0, max: 8, cat: 'loading' },
+  dispatch: { name: 'Dispatch Speed', desc: 'Faster auto-launch', icon: '🚦', base: 180, growth: 1.70, level: 0, max: 8, cat: 'loading', requiresResearch: 'autodispatch' },
   express: { name: 'Express Lane', desc: '+$5 bonus per rider', icon: '🌟', base: 350, growth: 1.80, level: 0, cat: 'loading' },
   ticket: { name: 'Ticket Price', desc: '+$1 per rider', icon: '🎟️', base: 50, growth: 1.45, level: 0, cat: 'marketing' },
   market: { name: 'Marketing', desc: 'More guests · excitement pays', icon: '📣', base: 160, growth: 1.75, level: 0, max: 6, cat: 'marketing' },

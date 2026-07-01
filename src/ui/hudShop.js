@@ -145,10 +145,17 @@ export function createHudShop({
       const level = $(`lv-${key}`);
       const costEl = $(`cost-${key}`);
       const maxed = upgrade.max !== undefined && upgrade.level >= upgrade.max;
+      const researchLocked = upgrade.requiresResearch && !hasResearch(upgrade.requiresResearch);
       if (maxed) {
         el.className = 'ticket maxed';
         costEl.textContent = 'MAX';
         level.textContent = `Lv ${upgrade.level}`;
+        return;
+      }
+      if (researchLocked) {
+        el.className = 'ticket locked research-locked';
+        costEl.textContent = 'R&D';
+        level.textContent = 'Needs Auto Dispatch';
         return;
       }
       const cost = upgradeCost(upgrade);
