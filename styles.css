@@ -145,6 +145,17 @@
   .staff-btn:active{transform:translateY(1px)}
   .staff-btn:disabled{background:#d9d2c2;color:var(--ink-soft);border-color:#b9b19f;cursor:not-allowed;transform:none}
 
+  /* land purchase popup (shares the staff overlay shell) */
+  .land-card{width:min(360px,92vw)}
+  .land-info{display:flex;flex-direction:column;gap:6px}
+  .land-name{font-family:'Fredoka';font-weight:700;font-size:17px;text-align:center;margin-bottom:2px}
+  .land-detail{display:flex;justify-content:space-between;align-items:baseline;background:#fff;border:2px solid var(--ink);border-radius:10px;padding:7px 12px;font-size:12.5px}
+  .land-detail span{color:var(--ink-soft);font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:.08em}
+  .land-detail b{font-family:'Fredoka';font-size:14px}
+  .land-detail .land-price{color:var(--amber-deep);font-size:16px}
+  .land-actions{display:flex;gap:8px;justify-content:center}
+  .land-actions .staff-btn{height:38px;font-size:14px;padding:0 18px}
+
   .title{position:fixed;left:14px;bottom:14px;font-family:'Fredoka';font-weight:700;color:rgba(255,255,255,.92);text-shadow:0 2px 0 rgba(28,37,51,.35);font-size:15px;letter-spacing:.02em;pointer-events:none}
   .toast{position:fixed;bottom:128px;left:50%;transform:translateX(-50%);background:rgba(28,37,51,.9);color:#fff;font-family:'Fredoka';font-size:15px;padding:8px 18px;border-radius:10px;pointer-events:none;z-index:200;opacity:0;transition:opacity .25s;max-width:90vw;text-align:center}
   .toast.show{opacity:1}

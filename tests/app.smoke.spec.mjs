@@ -18,7 +18,7 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   await page.goto('/index.html');
 
   await expect(page.locator('#scene canvas')).toBeVisible();
-  const cssResponse = await page.request.get('/styles.css?v=20260701-7');
+  const cssResponse = await page.request.get('/styles.css?v=20260701-8');
   await expect(cssResponse).toBeOK();
   expect(cssResponse.headers()['cache-control']).toContain('no-store');
   await expect(page.locator('.money #money')).toContainText(/\d/);
@@ -146,7 +146,7 @@ test('car purchase queues mechanic work before seats increase', async ({ page })
   expect(pageErrors).toEqual([]);
 });
 
-test('property tab buys adjacent land chunks', async ({ page }) => {
+test('clicking a for-sale sign opens purchase details and buys the plot', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', err => pageErrors.push(err.message));
 
@@ -157,12 +157,30 @@ test('property tab buys adjacent land chunks', async ({ page }) => {
   });
   await page.goto('/index.html');
 
-  await page.locator('#tab-property').click();
-  await expect(page.locator('#landOwned')).toHaveText('1 chunks');
-  await expect(page.locator('.land-ticket')).toHaveCount(4);
-  await page.locator('.land-ticket').first().click();
-  await expect(page.locator('#landOwned')).toHaveText('2 chunks');
-  await expect(page.locator('.land-ticket')).toHaveCount(6);
+  // the shop no longer has a Land tab — land is bought in the world
+  await expect(page.locator('#tab-property')).toHaveCount(0);
+  await expect.poll(async () => page.evaluate(() => window.__TC3D_DEBUG__?.ownedLand?.() ?? 0)).toBe(1);
+
+  // zoom out until a neighbouring for-sale sign is on screen, then click it
+  const sign = await page.evaluate(() => {
+    for (const frustum of [70, 100, 130]) {
+      window.__TC3D_DEBUG__.setFrustum(frustum);
+      const hit = window.__TC3D_DEBUG__.landSigns()
+        .find(s => s.x > 40 && s.x < window.innerWidth - 40 && s.y > 100 && s.y < window.innerHeight - 100);
+      if (hit) return hit;
+    }
+    return undefined;
+  });
+  expect(sign).toBeTruthy();
+  await page.mouse.click(sign.x, sign.y);
+
+  await expect(page.locator('#landPanel')).toBeVisible();
+  await expect(page.locator('#landInfo')).toContainText('Plot');
+  await expect(page.locator('#landInfo .land-price')).toContainText('$');
+
+  await page.locator('#landBuy').click();
+  await expect(page.locator('#landPanel')).toBeHidden();
+  await expect.poll(async () => page.evaluate(() => window.__TC3D_DEBUG__.ownedLand())).toBe(2);
   expect(pageErrors).toEqual([]);
 });
 

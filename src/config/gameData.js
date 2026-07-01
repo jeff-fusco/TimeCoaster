@@ -77,7 +77,6 @@ export const CATS = [
   { id: 'ride', icon: '🎢', name: 'Ride' },
   { id: 'queue', icon: '🚧', name: 'Queue' },
   { id: 'marketing', icon: '📣', name: 'Promo' },
-  { id: 'property', icon: '🗺️', name: 'Land' },
   { id: 'research', icon: '🔬', name: 'R&D' },
 ];
 

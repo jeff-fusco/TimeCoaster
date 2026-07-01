@@ -61,6 +61,7 @@ import { createScenery } from './render/scenery.js';
 import { initBuildControls } from './input/buildControls.js';
 import { createHudShop } from './ui/hudShop.js';
 import { createStaffPanel } from './ui/staffPanel.js';
+import { createLandPopup } from './ui/landPopup.js';
 import {
   BLOCK_GAP,
   CATS,
@@ -237,6 +238,7 @@ function buildPropertyGeometry(){
     property,
     candidates: expansionCandidates(property),
     colors: COL,
+    fmt: formatMoney,
     disposeGroup,
   });
 }
@@ -356,7 +358,7 @@ const buildControls=initBuildControls({
   spawnCoinScreen,
   fmt: formatMoney,
   isBuildPointAllowed: (x, z) => pointInOwnedLand(property, x, z, 0.2),
-  onPlayClick: (x, y) => tryDispatch(x, y),
+  onPlayClick: (x, y) => tryDispatch(x, y) || tryLandSign(x, y),
 });
 const bm=buildControls.state;
 function updateBuildCost(){ buildControls.updateBuildCost(); }
@@ -365,6 +367,24 @@ if(window.__TIME_COASTER_TEST__){
     trainState: () => trains.map(tr => ({ s: tr.s, prevS: tr.prevS, L: tr.L, mode: tr.mode, phase: tr.phase, timer: tr.timer })),
     pathLen: () => path?.len || 0,
     buildActive: () => bm.active,
+    ownedLand: () => property.owned.length,
+    setFrustum: v => { frustum = v; resize(); placeCamera(); renderer.render(scene, camera); },
+    // screen-space centres of the for-sale sign boards, for click tests
+    landSigns: () => {
+      const out = [];
+      const v = new THREE.Vector3();
+      propertyGrp.traverse(o => {
+        if (!o.userData?.board) return;
+        o.userData.board.getWorldPosition(v);
+        v.project(camera);
+        out.push({
+          key: o.userData.landKey,
+          x: (v.x * 0.5 + 0.5) * host.clientWidth,
+          y: (-v.y * 0.5 + 0.5) * host.clientHeight,
+        });
+      });
+      return out;
+    },
   };
 }
 
@@ -424,6 +444,21 @@ function dispatchReadyTrain(){
   const launched=dispatchTrain(ready, { economy:derived(), state, onDeposit:dispatchDeposit });
   if(launched) refreshHUD();
   return launched;
+}
+
+// Click a FOR SALE sign (or its lot) to open the land purchase popup.
+function tryLandSign(clientX, clientY){
+  const r=renderer.domElement.getBoundingClientRect();
+  dispatchNDC.x=((clientX-r.left)/r.width)*2-1;
+  dispatchNDC.y=-((clientY-r.top)/r.height)*2+1;
+  dispatchRay.setFromCamera(dispatchNDC, camera);
+  const hits=dispatchRay.intersectObjects(propertyGrp.children, true);
+  for(const hit of hits){
+    let o=hit.object;
+    while(o && !o.userData?.landKey) o=o.parent;
+    if(o?.userData?.landKey){ landUI.open(o.userData.landKey); return true; }
+  }
+  return false;
 }
 function updateDispatchButton(show){
   const btn=$('dispatchBtn');
@@ -515,8 +550,6 @@ const ui=createHudShop({
   derived,
   researchEfficiency,
   getMaintenance: () => maintenance,
-  getProperty: () => property,
-  getPropertyOptions: () => expansionCandidates(property),
   getPath: () => path,
   getState: () => state,
   getSim: () => sim,
@@ -526,13 +559,12 @@ const ui=createHudShop({
   fmt,
   mph: MPH,
   onBuy: buy,
-  onBuyLand: buyProperty,
   onResearchProject: researchProject,
   onSetResearchFunding: pct => { research.fundingPct = pct; refreshHUD(); saveGame(); },
 });
 function buildShop(){ ui.buildShop(); }
 function renderShop(){ ui.renderShop(); }
-function refreshHUD(){ ui.refreshHUD(); updateMaintenanceHUD(); if(staffUI.isOpen()) staffUI.render(); }
+function refreshHUD(){ ui.refreshHUD(); updateMaintenanceHUD(); if(staffUI.isOpen()) staffUI.render(); if(landUI.isOpen()) landUI.render(); }
 
 // ── staff management panel ──────────────────────────────────────────────────
 const staffUI=createStaffPanel({
@@ -553,6 +585,16 @@ const staffUI=createStaffPanel({
   fmt,
 });
 $('staffToggle').addEventListener('click', ()=>staffUI.toggle());
+
+// ── land purchase popup (opened by clicking a FOR SALE sign in the scene) ───
+const landUI=createLandPopup({
+  document,
+  getState: () => state,
+  getOption: key => expansionCandidates(property).find(c => c.key === key) || null,
+  chunkSize: () => property.chunkSize,
+  onBuy: buyProperty,
+  fmt,
+});
 
 function researchProject(key){
   const p=RESEARCH[key];
@@ -587,8 +629,8 @@ function buy(key){
 function buyProperty(key){
   const cost=buyLand(property,key,state);
   if(!cost){ showToast('Need more money or adjacent land'); return; }
+  landUI.close();
   buildPropertyGeometry();
-  renderShop();
   refreshHUD();
   saveGame();
   showToast(`Land purchased - $${fmt(cost)}`);

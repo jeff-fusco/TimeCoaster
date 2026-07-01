@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260701-7" />
+<link rel="stylesheet" href="styles.css?v=20260701-8" />
 </head>
 <body>
 <div id="scene"></div>
@@ -91,6 +91,19 @@
   </div>
 </div>
 
+<div class="staff-panel" id="landPanel" hidden>
+  <div class="staff-backdrop" id="landBackdrop"></div>
+  <div class="staff-card land-card">
+    <div class="staff-title">Land For Sale</div>
+    <div class="staff-sub">Expand the park boundary to build bigger coasters.</div>
+    <div class="land-info" id="landInfo"></div>
+    <div class="land-actions">
+      <button class="staff-btn" id="landBuy">Buy</button>
+      <button class="bp-btn" id="landCancel">Not now</button>
+    </div>
+  </div>
+</div>
+
 <div class="shop" id="shop"></div>
 <div class="toast" id="toast"></div>
 <div class="title">Time Coaster 3D</div>
@@ -102,6 +115,6 @@
   }
 }
 </script>
-<script type="module" src="src/main.js?v=20260701-7"></script>
+<script type="module" src="src/main.js?v=20260701-8"></script>
 </body>
 </html>

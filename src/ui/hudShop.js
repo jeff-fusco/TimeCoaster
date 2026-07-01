@@ -8,8 +8,6 @@ export function createHudShop({
   derived,
   researchEfficiency = () => 1,
   getMaintenance = () => null,
-  getProperty = () => null,
-  getPropertyOptions = () => [],
   getPath,
   getState,
   getSim,
@@ -19,7 +17,6 @@ export function createHudShop({
   fmt,
   mph,
   onBuy,
-  onBuyLand = () => {},
   onResearchProject,
   onSetResearchFunding,
 }) {
@@ -60,10 +57,6 @@ export function createHudShop({
       renderResearch(body);
       return;
     }
-    if (activeTab === 'property') {
-      renderProperty(body);
-      return;
-    }
 
     shopOrder.filter(key => upgrades[key].cat === activeTab).forEach(key => {
       const upgrade = upgrades[key];
@@ -75,34 +68,6 @@ export function createHudShop({
         `<div class="body"><div class="nm">${upgrade.name}</div><div class="ds">${upgrade.desc}</div><div class="lv" id="lv-${key}"></div></div>` +
         `<div class="cost" id="cost-${key}"></div>`;
       el.addEventListener('click', () => onBuy(key));
-      body.appendChild(el);
-    });
-    refreshHUD();
-  }
-
-  function renderProperty(body) {
-    const property = getProperty();
-    const options = getPropertyOptions();
-    const card = document.createElement('div');
-    card.className = 'rcard';
-    card.innerHTML =
-      `<div class="rh">Owned Land</div>` +
-      `<div class="rpts" id="landOwned">${property?.owned?.length || 0} chunks</div>` +
-      `<div class="rsub">Buy adjacent property to expand the buildable park boundary.</div>`;
-    body.appendChild(card);
-
-    options.forEach(option => {
-      const el = document.createElement('div');
-      el.className = 'ticket land-ticket';
-      el.dataset.landKey = option.key;
-      const label = option.x === 0
-        ? option.z > 0 ? 'North Plot' : 'South Plot'
-        : option.x > 0 ? 'East Plot' : 'West Plot';
-      el.innerHTML =
-        `<div class="ic">🧭</div>` +
-        `<div class="body"><div class="nm">${label}</div><div class="ds">Chunk ${option.key} · ${property.chunkSize}m square</div><div class="lv">Adjacent expansion</div></div>` +
-        `<div class="cost">$${fmt(option.cost)}</div>`;
-      el.addEventListener('click', () => onBuyLand(option.key));
       body.appendChild(el);
     });
     refreshHUD();
@@ -146,7 +111,6 @@ export function createHudShop({
     const sim = getSim();
     const d = derived();
     const maintenance = getMaintenance();
-    const property = getProperty();
     const path = getPath();
     const stats = path ? path.stats : null;
 
@@ -208,16 +172,6 @@ export function createHudShop({
       level.textContent = upgrade.level > 0 ? `Lv ${upgrade.level}` : 'New';
       el.className = `ticket ${state.money >= cost ? 'affordable' : 'locked'}`;
     });
-
-    document.querySelectorAll('.land-ticket').forEach(el => {
-      const option = getPropertyOptions().find(candidate => candidate.key === el.dataset.landKey);
-      if (!option) return;
-      el.classList.toggle('affordable', state.money >= option.cost);
-      el.classList.toggle('locked', state.money < option.cost);
-      const costEl = el.querySelector('.cost');
-      if (costEl) costEl.textContent = `$${fmt(option.cost)}`;
-    });
-    if ($('landOwned') && property) $('landOwned').textContent = `${property.owned.length} chunks`;
 
     const rp = $('rpts');
     if (rp) {
