@@ -29,6 +29,7 @@ export function deriveEconomy({
   pathStats,
   simQueue = 0,
   researchDone = {},
+  staffPowers = {},
   station,
   fallbackMaxSpeed = 4,
 }) {
@@ -45,13 +46,13 @@ export function deriveEconomy({
     maxSpeed: fallbackMaxSpeed,
     length: 0,
   };
-  // Staff multipliers
-  const operators = U.operators?.level || 0;      // auto-launch + faster boarding
-  const entertainers = U.entertainers?.level || 0; // happier queue -> more arrivals
-  const mechanics = U.mechanics?.level || 0;       // ride uptime -> more ride income
-  const janitors = U.janitors?.level || 0;         // cleaner park -> more snack sales
-  const upkeepMult = 1 + mechanics * 0.07;
-  const janitorMult = 1 + janitors * 0.10;
+  // Staff powers (hired * training bonus) drive their part of the pipeline
+  const operators = staffPowers.operators || 0;      // auto-launch + faster boarding
+  const entertainers = staffPowers.entertainers || 0; // happier queue -> more arrivals
+  const mechanics = staffPowers.mechanics || 0;       // ride uptime -> more ride income
+  const janitors = staffPowers.janitors || 0;         // cleaner park -> more snack sales
+  const upkeepMult = 1 + mechanics * 0.05;
+  const janitorMult = 1 + janitors * 0.07;
 
   const marketMult = 1 + U.market.level * 0.18;
   const ratingMult = 1 + (st.excitement / 55) * marketMult;

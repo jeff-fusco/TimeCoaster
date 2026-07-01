@@ -6,7 +6,7 @@
   "scripts": {
     "start": "python -m http.server 4321",
     "check": "node scripts/check.mjs",
-    "test": "node tests/economy.test.mjs && node tests/path.test.mjs && node tests/save.test.mjs && node tests/trainSim.test.mjs",
+    "test": "node tests/economy.test.mjs && node tests/path.test.mjs && node tests/save.test.mjs && node tests/trainSim.test.mjs && node tests/staff.test.mjs",
     "test:browser": "playwright test"
   },
   "dependencies": {

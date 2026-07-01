@@ -42,13 +42,16 @@
     <div class="mode-badge" id="modeBadge"><span>🔧</span><span>Build Mode</span></div>
   </div>
 
-  <div class="bottom">
-    <button class="dispatch-btn" id="dispatchBtn" type="button" disabled>Dispatch</button>
-    <button class="ctrl" id="rotL" title="Rotate left (A / Q · or drag)">⟲</button>
-    <button class="ctrl" id="zoomOut" title="Zoom out (− · or scroll)">－</button>
-    <button class="ctrl" id="zoomIn"  title="Zoom in (+ · or scroll)">＋</button>
-    <button class="ctrl" id="rotR" title="Rotate right (D / E · or drag)">⟳</button>
-    <button class="ctrl" id="buildToggle" title="Toggle build mode (B)">🔧 Build</button>
+  <div class="bottom-stack">
+    <button class="dispatch-btn" id="dispatchBtn" type="button" disabled>🚂 Dispatch</button>
+    <div class="bottom">
+      <button class="ctrl" id="rotL" title="Rotate left (A / Q · or drag)">⟲</button>
+      <button class="ctrl" id="zoomOut" title="Zoom out (− · or scroll)">－</button>
+      <button class="ctrl" id="zoomIn"  title="Zoom in (+ · or scroll)">＋</button>
+      <button class="ctrl" id="rotR" title="Rotate right (D / E · or drag)">⟳</button>
+      <button class="ctrl" id="staffToggle" title="Staff management">👥 Staff</button>
+      <button class="ctrl" id="buildToggle" title="Toggle build mode (B)">🔧 Build</button>
+    </div>
   </div>
 </div>
 
@@ -75,6 +78,16 @@
   </div>
   <div class="build-cost" id="buildCost">Track: <b>0m</b> · build cost <b>$8/m</b></div>
   <div class="point-info" id="pointInfo">Click a handle to select · drag to move · scroll to change height</div>
+</div>
+
+<div class="staff-panel" id="staffPanel" hidden>
+  <div class="staff-backdrop" id="staffBackdrop"></div>
+  <div class="staff-card">
+    <div class="staff-title">👥 Staff Management</div>
+    <div class="staff-sub">Hire staff and train them to run the park for you.</div>
+    <div class="staff-list" id="staffList"></div>
+    <button class="bp-btn primary" id="staffClose">Close</button>
+  </div>
 </div>
 
 <div class="shop" id="shop"></div>

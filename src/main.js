@@ -32,9 +32,20 @@ import {
   setTrainOccupancy,
 } from './render/train.js';
 import { dispatchTrain, stepTrains } from './systems/trainSim.js';
+import {
+  canHire,
+  canTrain,
+  createStaffState,
+  hire as hireStaff,
+  hireCost,
+  staffPowers as computeStaffPowers,
+  train as trainStaff,
+  trainCost,
+} from './systems/staff.js';
 import { createScenery } from './render/scenery.js';
 import { initBuildControls } from './input/buildControls.js';
 import { createHudShop } from './ui/hudShop.js';
+import { createStaffPanel } from './ui/staffPanel.js';
 import {
   BLOCK_GAP,
   BUDGETS,
@@ -51,6 +62,8 @@ import {
   RESEARCH,
   RESEARCH_ORDER,
   SHOP_ORDER,
+  STAFF,
+  STAFF_ORDER,
   STN,
   UPGRADES,
 } from './config/gameData.js';
@@ -75,6 +88,7 @@ function applyResearchEffects(){
 
 const state = { money:0, rides:0 };
 const sim   = { queue:0 };     // live count of guests waiting in line
+const staff = createStaffState();   // hired/trained staff (separate from upgrades)
 let stationRefs = { queueGuests:[], stopS:0.85, platLen:6 };
 let ctrlPts = DEFAULT_CTRL.map(p=>({...p}));
 let paidLength = 0;            // metres of track already paid for
@@ -87,6 +101,7 @@ function derived(){
     pathStats: path ? path.stats : null,
     simQueue: sim.queue,
     researchDone: research.done,
+    staffPowers: computeStaffPowers(staff),
     station: STN,
     fallbackMaxSpeed: PHYS.vMin,
   });
@@ -429,7 +444,27 @@ const ui=createHudShop({
 });
 function buildShop(){ ui.buildShop(); }
 function renderShop(){ ui.renderShop(); }
-function refreshHUD(){ ui.refreshHUD(); }
+function refreshHUD(){ ui.refreshHUD(); if(staffUI.isOpen()) staffUI.render(); }
+
+// ── staff management panel ──────────────────────────────────────────────────
+const staffUI=createStaffPanel({
+  document,
+  staffConfig: STAFF,
+  staffOrder: STAFF_ORDER,
+  getStaff: () => staff,
+  getState: () => state,
+  costs: { hire: hireCost, train: trainCost, canHire, canTrain },
+  onHire: role => {
+    const spent=hireStaff(role, staff, state.money);
+    if(spent>0){ state.money-=spent; refreshHUD(); saveGame(); showToast(`Hired a ${STAFF[role].name.replace(/s$/,'')}`); }
+  },
+  onTrain: role => {
+    const spent=trainStaff(role, staff, state.money);
+    if(spent>0){ state.money-=spent; refreshHUD(); saveGame(); showToast(`${STAFF[role].name} training improved`); }
+  },
+  fmt,
+});
+$('staffToggle').addEventListener('click', ()=>staffUI.toggle());
 
 function researchProject(key){
   const p=RESEARCH[key];
@@ -482,6 +517,7 @@ function saveGame(){
     sim,
     upgrades: UPGRADES,
     research,
+    staff,
     ctrlPts,
     paidLength,
     frustum,
@@ -494,6 +530,7 @@ function loadGame(){
     sim,
     upgrades: UPGRADES,
     research,
+    staff,
   });
   if(restored.ctrlPts)ctrlPts=restored.ctrlPts;
   if(typeof restored.paidLength==='number')paidLength=restored.paidLength;

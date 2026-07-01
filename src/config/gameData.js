@@ -60,25 +60,29 @@ export const UPGRADES = {
   train: { name: 'Add a Train', desc: 'Another train on track', icon: '🎢', base: 500, growth: 3.20, level: 0, max: 2, cat: 'ride' },
   queue: { name: 'Bigger Queue', desc: '+10 people can wait in line', icon: '🚧', base: 110, growth: 1.55, level: 0, max: 8, cat: 'queue' },
   snacks: { name: 'Snack Stands', desc: '+$3/min per waiting guest', icon: '🍿', base: 200, growth: 2.00, level: 0, max: 6, cat: 'queue' },
-  operators: { name: 'Ride Operators', desc: 'Auto-launch trains + faster boarding', icon: '🧑‍🔧', base: 140, growth: 1.60, level: 0, max: 8, cat: 'staff' },
-  entertainers: { name: 'Entertainers', desc: 'Happier queue, more guests arrive', icon: '🤹', base: 120, growth: 1.55, level: 0, max: 6, cat: 'staff' },
-  mechanics: { name: 'Mechanics', desc: 'Ride uptime: +7% ride income / lvl', icon: '🔧', base: 160, growth: 1.60, level: 0, max: 6, cat: 'staff' },
-  janitors: { name: 'Janitors', desc: 'Cleaner park: +10% snack sales / lvl', icon: '🧹', base: 130, growth: 1.55, level: 0, max: 6, cat: 'staff' },
   express: { name: 'Express Lane', desc: '+$5 bonus per rider', icon: '🌟', base: 350, growth: 1.80, level: 0, cat: 'marketing' },
   ticket: { name: 'Ticket Price', desc: '+$1 per rider', icon: '🎟️', base: 50, growth: 1.45, level: 0, cat: 'marketing' },
   market: { name: 'Marketing', desc: 'More guests · excitement pays', icon: '📣', base: 160, growth: 1.75, level: 0, max: 6, cat: 'marketing' },
   hype: { name: 'Theming & Hype', desc: '×1.12 to all earnings', icon: '🎪', base: 120, growth: 1.70, level: 0, cat: 'marketing' },
 };
 
-export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'operators', 'entertainers', 'mechanics', 'janitors', 'ticket', 'market', 'hype', 'express'];
+export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'ticket', 'market', 'hype', 'express'];
 
 export const CATS = [
   { id: 'ride', icon: '🎢', name: 'Ride' },
   { id: 'queue', icon: '🚧', name: 'Queue' },
-  { id: 'staff', icon: '🧑‍🔧', name: 'Staff' },
   { id: 'marketing', icon: '📣', name: 'Promo' },
   { id: 'research', icon: '🔬', name: 'R&D' },
 ];
+
+// ── staff (hired & trained in the Staff panel, not the upgrade shop) ─────────
+export const STAFF = {
+  operators:    { name: 'Ride Operators', icon: '🧑‍🔧', desc: 'Auto-launch trains & speed up boarding', hireBase: 140, trainBase: 260, hireMax: 6, trainMax: 5 },
+  entertainers: { name: 'Entertainers',   icon: '🤹',   desc: 'Happier queue → more guests arrive',    hireBase: 120, trainBase: 220, hireMax: 6, trainMax: 5 },
+  mechanics:    { name: 'Mechanics',      icon: '🔧',   desc: 'Ride uptime → more ride income',         hireBase: 160, trainBase: 280, hireMax: 6, trainMax: 5 },
+  janitors:     { name: 'Janitors',       icon: '🧹',   desc: 'Cleaner park → more snack sales',        hireBase: 130, trainBase: 230, hireMax: 6, trainMax: 5 },
+};
+export const STAFF_ORDER = ['operators', 'entertainers', 'mechanics', 'janitors'];
 
 export const RESEARCH = {
   brakes: { name: 'Block Brakes', desc: 'Unlock 🛑 brake track', icon: '🛑', rp: 60 },

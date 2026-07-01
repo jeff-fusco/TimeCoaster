@@ -6,6 +6,7 @@ export function createSaveData({
   sim,
   upgrades,
   research,
+  staff,
   ctrlPts,
   paidLength,
   frustum,
@@ -21,6 +22,7 @@ export function createSaveData({
       points: research.points,
       done: { ...research.done },
     },
+    staff: staff ? Object.fromEntries(Object.entries(staff).map(([role, v]) => [role, { hired: v.hired, trained: v.trained }])) : {},
     ctrlPts: ctrlPts.map(point => ({ ...point })),
     paidLength,
     frustum,
@@ -51,8 +53,9 @@ export function readSave(storage) {
 
 const finite = value => Number.isFinite(value);
 const validPoint = point => point && finite(point.x) && finite(point.y) && finite(point.z);
+const STAFF_ROLES = new Set(['operators', 'entertainers', 'mechanics', 'janitors']);
 
-export function applySaveData(data, { state, sim, upgrades, research }) {
+export function applySaveData(data, { state, sim, upgrades, research, staff }) {
   const restored = {};
   if (!data) return restored;
 
@@ -64,8 +67,17 @@ export function applySaveData(data, { state, sim, upgrades, research }) {
     Object.entries(data.upgrades).forEach(([key, level]) => {
       if (!finite(level)) return;
       if (key === 'capacity' && upgrades.seats) upgrades.seats.level = level;       // legacy: Queue Capacity -> Roomier Cars
-      else if (key === 'loading' && upgrades.operators) upgrades.operators.level = level; // legacy: Fast Boarding -> Ride Operators
+      else if (key === 'loading' && staff?.operators) staff.operators.hired = level; // legacy: Fast Boarding -> Ride Operators
+      else if (STAFF_ROLES.has(key) && staff?.[key]) staff[key].hired = level;       // legacy: staff-as-upgrade -> hired count
       else if (upgrades[key]) upgrades[key].level = level;
+    });
+  }
+
+  if (staff && data.staff) {
+    Object.entries(data.staff).forEach(([role, entry]) => {
+      if (!staff[role] || !entry) return;
+      if (finite(entry.hired)) staff[role].hired = entry.hired;
+      if (finite(entry.trained)) staff[role].trained = entry.trained;
     });
   }
 
