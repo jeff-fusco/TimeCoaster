@@ -7,6 +7,8 @@ export function createSaveData({
   upgrades,
   research,
   staff,
+  maintenance,
+  property,
   ctrlPts,
   paidLength,
   frustum,
@@ -18,11 +20,23 @@ export function createSaveData({
     queue: sim.queue,
     upgrades: Object.fromEntries(Object.entries(upgrades).map(([key, value]) => [key, value.level])),
     research: {
-      budget: research.budget,
+      fundingPct: research.fundingPct,
       points: research.points,
       done: { ...research.done },
     },
     staff: staff ? Object.fromEntries(Object.entries(staff).map(([role, v]) => [role, { hired: v.hired, trained: v.trained }])) : {},
+    maintenance: maintenance ? {
+      installed: { ...maintenance.installed },
+      queue: maintenance.queue.map(job => ({ ...job })),
+      current: maintenance.current ? { ...maintenance.current } : null,
+    } : undefined,
+    property: property ? {
+      chunkSize: property.chunkSize,
+      baseCost: property.baseCost,
+      growth: property.growth,
+      distanceScale: property.distanceScale,
+      owned: [...property.owned],
+    } : undefined,
     ctrlPts: ctrlPts.map(point => ({ ...point })),
     paidLength,
     frustum,
@@ -54,6 +68,7 @@ export function readSave(storage) {
 const finite = value => Number.isFinite(value);
 const validPoint = point => point && finite(point.x) && finite(point.y) && finite(point.z);
 const STAFF_ROLES = new Set(['operators', 'entertainers', 'mechanics', 'janitors']);
+const INSTALL_TYPES = new Set(['car', 'train']);
 
 export function applySaveData(data, { state, sim, upgrades, research, staff }) {
   const restored = {};
@@ -82,9 +97,37 @@ export function applySaveData(data, { state, sim, upgrades, research, staff }) {
   }
 
   if (data.research) {
-    if (finite(data.research.budget)) research.budget = data.research.budget;
+    if (finite(data.research.fundingPct)) research.fundingPct = Math.max(0, Math.min(100, data.research.fundingPct));
+    else if (finite(data.research.budget)) research.fundingPct = Math.max(0, Math.min(80, Math.round(data.research.budget / 10)));
     if (finite(data.research.points)) research.points = data.research.points;
     if (data.research.done) research.done = { ...data.research.done };
+  }
+
+  if (data.maintenance?.installed) {
+    const queue = Array.isArray(data.maintenance.queue)
+      ? data.maintenance.queue.filter(job => INSTALL_TYPES.has(job?.type) && finite(job.duration)).map(job => ({ type: job.type, duration: job.duration }))
+      : [];
+    const current = data.maintenance.current;
+    restored.maintenance = {
+      installed: {
+        car: finite(data.maintenance.installed.car) ? data.maintenance.installed.car : 0,
+        train: finite(data.maintenance.installed.train) ? data.maintenance.installed.train : 0,
+      },
+      queue,
+      current: INSTALL_TYPES.has(current?.type) && finite(current.duration) && finite(current.progress)
+        ? { type: current.type, duration: current.duration, progress: current.progress }
+        : null,
+    };
+  }
+
+  if (data.property && Array.isArray(data.property.owned)) {
+    restored.property = {
+      chunkSize: finite(data.property.chunkSize) ? data.property.chunkSize : undefined,
+      baseCost: finite(data.property.baseCost) ? data.property.baseCost : undefined,
+      growth: finite(data.property.growth) ? data.property.growth : undefined,
+      distanceScale: finite(data.property.distanceScale) ? data.property.distanceScale : undefined,
+      owned: data.property.owned.filter(key => typeof key === 'string'),
+    };
   }
 
   if (Array.isArray(data.ctrlPts) && data.ctrlPts.length >= 3 && data.ctrlPts.every(validPoint)) {

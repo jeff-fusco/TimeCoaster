@@ -13,8 +13,9 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'python -m http.server 4321',
+    command: 'node scripts/serve.mjs',
     url: 'http://127.0.0.1:4321/index.html',
+    // reuse a dev server you already have running (npm start); CI stays strict
     reuseExistingServer: !process.env.CI,
     timeout: 15_000,
   },

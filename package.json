@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "python -m http.server 4321",
+    "start": "node scripts/serve.mjs",
     "check": "node scripts/check.mjs",
-    "test": "node tests/economy.test.mjs && node tests/path.test.mjs && node tests/save.test.mjs && node tests/trainSim.test.mjs && node tests/staff.test.mjs",
+    "test": "node tests/economy.test.mjs && node tests/path.test.mjs && node tests/save.test.mjs && node tests/trainSim.test.mjs && node tests/staff.test.mjs && node tests/maintenance.test.mjs && node tests/property.test.mjs",
     "test:browser": "playwright test"
   },
   "dependencies": {

@@ -71,6 +71,8 @@
   .rcard .rh{font-family:'Fredoka';font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft)}
   .rcard .rpts{font-family:'Fredoka';font-weight:700;font-size:22px;color:var(--build);line-height:1.1}
   .rcard .rsub{font-size:10.5px;color:var(--ink-soft)}
+  .research-slider{margin-top:8px}
+  .research-slider input{width:100%;accent-color:var(--build);cursor:pointer}
   .budgets{display:flex;gap:5px;margin-top:7px}
   .budget{flex:1;padding:6px 2px;border:2px solid var(--ink);border-radius:9px;background:#fff;font-family:'Fredoka';font-weight:700;font-size:11px;cursor:pointer;text-align:center;transition:transform .08s}
   .budget:active{transform:translateY(1px)}
@@ -147,5 +149,5 @@
   .toast{position:fixed;bottom:128px;left:50%;transform:translateX(-50%);background:rgba(28,37,51,.9);color:#fff;font-family:'Fredoka';font-size:15px;padding:8px 18px;border-radius:10px;pointer-events:none;z-index:200;opacity:0;transition:opacity .25s;max-width:90vw;text-align:center}
   .toast.show{opacity:1}
 
-  @media(max-width:680px){.shop{width:210px;top:auto;bottom:62px;transform:none;max-height:42vh}.shop.hidden{transform:translateX(20px)}.bank .money{font-size:30px}.ticket{grid-template-columns:30px 1fr auto;padding:8px 9px}.ticket .ic{width:30px;height:30px;font-size:16px}.build-panel{min-width:300px;padding:9px 12px}.ratings{display:none}}
+  @media(max-width:680px){.shop{width:210px;top:auto;bottom:190px;transform:none;max-height:34vh}.shop.hidden{transform:translateX(20px)}.bank .money{font-size:30px}.ticket{grid-template-columns:30px 1fr auto;padding:8px 9px}.ticket .ic{width:30px;height:30px;font-size:16px}.build-panel{min-width:300px;padding:9px 12px}.ratings{display:none}}
   @media(prefers-reduced-motion:reduce){.pop{animation-duration:.4s}}

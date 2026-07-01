@@ -5,8 +5,11 @@ export function createHudShop({
   shopOrder,
   research,
   researchOrder,
-  budgets,
   derived,
+  researchEfficiency = () => 1,
+  getMaintenance = () => null,
+  getProperty = () => null,
+  getPropertyOptions = () => [],
   getPath,
   getState,
   getSim,
@@ -16,8 +19,9 @@ export function createHudShop({
   fmt,
   mph,
   onBuy,
+  onBuyLand = () => {},
   onResearchProject,
-  onSetResearchBudget,
+  onSetResearchFunding,
 }) {
   let activeTab = 'ride';
   const $ = id => document.getElementById(id);
@@ -56,6 +60,10 @@ export function createHudShop({
       renderResearch(body);
       return;
     }
+    if (activeTab === 'property') {
+      renderProperty(body);
+      return;
+    }
 
     shopOrder.filter(key => upgrades[key].cat === activeTab).forEach(key => {
       const upgrade = upgrades[key];
@@ -72,27 +80,51 @@ export function createHudShop({
     refreshHUD();
   }
 
+  function renderProperty(body) {
+    const property = getProperty();
+    const options = getPropertyOptions();
+    const card = document.createElement('div');
+    card.className = 'rcard';
+    card.innerHTML =
+      `<div class="rh">Owned Land</div>` +
+      `<div class="rpts" id="landOwned">${property?.owned?.length || 0} chunks</div>` +
+      `<div class="rsub">Buy adjacent property to expand the buildable park boundary.</div>`;
+    body.appendChild(card);
+
+    options.forEach(option => {
+      const el = document.createElement('div');
+      el.className = 'ticket land-ticket';
+      el.dataset.landKey = option.key;
+      const label = option.x === 0
+        ? option.z > 0 ? 'North Plot' : 'South Plot'
+        : option.x > 0 ? 'East Plot' : 'West Plot';
+      el.innerHTML =
+        `<div class="ic">🧭</div>` +
+        `<div class="body"><div class="nm">${label}</div><div class="ds">Chunk ${option.key} · ${property.chunkSize}m square</div><div class="lv">Adjacent expansion</div></div>` +
+        `<div class="cost">$${fmt(option.cost)}</div>`;
+      el.addEventListener('click', () => onBuyLand(option.key));
+      body.appendChild(el);
+    });
+    refreshHUD();
+  }
+
   function renderResearch(body) {
     const card = document.createElement('div');
     card.className = 'rcard';
-    const rpm = Math.round(research.budget / 10);
+    const pct = Math.max(0, Math.min(100, research.fundingPct || 0));
+    const d = derived();
+    const spendPerMin = Math.max(0, d.ratePerMin) * pct / 100;
+    const eff = researchEfficiency(pct);
+    const rpm = spendPerMin / 10 * eff;
     card.innerHTML =
       `<div class="rh">Research Points</div>` +
       `<div class="rpts" id="rpts">${Math.floor(research.points)} RP</div>` +
-      `<div class="rsub">Funding research drains <b>$${research.budget}/min</b> -> <b>${rpm} RP/min</b></div>` +
-      `<div class="budgets" id="budgets"></div>`;
+      `<div class="rsub">R&D uses <b id="rdPct">${pct}%</b> of income: <b id="rdSpend">$${fmt(spendPerMin)}/min</b> -> <b id="rdRp">${rpm.toFixed(1)} RP/min</b></div>` +
+      `<div class="research-slider"><input id="rdSlider" type="range" min="0" max="80" step="1" value="${pct}"></div>`;
     body.appendChild(card);
 
-    const bdiv = card.querySelector('#budgets');
-    budgets.forEach(budget => {
-      const el = document.createElement('div');
-      el.className = `budget${budget === research.budget ? ' active' : ''}`;
-      el.textContent = budget === 0 ? 'Off' : `$${budget}`;
-      el.addEventListener('click', () => {
-        onSetResearchBudget(budget);
-        renderShop();
-      });
-      bdiv.appendChild(el);
+    card.querySelector('#rdSlider').addEventListener('input', e => {
+      onSetResearchFunding(Number(e.target.value));
     });
 
     researchOrder.forEach(key => {
@@ -113,6 +145,8 @@ export function createHudShop({
     const state = getState();
     const sim = getSim();
     const d = derived();
+    const maintenance = getMaintenance();
+    const property = getProperty();
     const path = getPath();
     const stats = path ? path.stats : null;
 
@@ -146,6 +180,17 @@ export function createHudShop({
       const costEl = $(`cost-${key}`);
       const maxed = upgrade.max !== undefined && upgrade.level >= upgrade.max;
       const researchLocked = upgrade.requiresResearch && !hasResearch(upgrade.requiresResearch);
+      const installed = maintenance?.installed?.[key];
+      const pending =
+        (maintenance?.queue?.filter(job => job.type === key).length || 0) +
+        (maintenance?.current?.type === key ? 1 : 0);
+      if ((key === 'car' || key === 'train') && pending > 0) {
+        const cost = upgradeCost(upgrade);
+        costEl.textContent = maxed ? 'MAX' : `$${fmt(cost)}`;
+        level.textContent = `Lv ${installed} · ${pending} pending`;
+        el.className = `ticket pending ${!maxed && state.money >= cost ? 'affordable' : 'locked'}`;
+        return;
+      }
       if (maxed) {
         el.className = 'ticket maxed';
         costEl.textContent = 'MAX';
@@ -164,9 +209,27 @@ export function createHudShop({
       el.className = `ticket ${state.money >= cost ? 'affordable' : 'locked'}`;
     });
 
+    document.querySelectorAll('.land-ticket').forEach(el => {
+      const option = getPropertyOptions().find(candidate => candidate.key === el.dataset.landKey);
+      if (!option) return;
+      el.classList.toggle('affordable', state.money >= option.cost);
+      el.classList.toggle('locked', state.money < option.cost);
+      const costEl = el.querySelector('.cost');
+      if (costEl) costEl.textContent = `$${fmt(option.cost)}`;
+    });
+    if ($('landOwned') && property) $('landOwned').textContent = `${property.owned.length} chunks`;
+
     const rp = $('rpts');
     if (rp) {
       rp.textContent = `${Math.floor(research.points)} RP`;
+      const pct = Math.max(0, Math.min(100, research.fundingPct || 0));
+      const spendPerMin = Math.max(0, d.ratePerMin) * pct / 100;
+      const rpm = spendPerMin / 10 * researchEfficiency(pct);
+      if ($('rdPct')) $('rdPct').textContent = `${pct}%`;
+      if ($('rdSpend')) $('rdSpend').textContent = `$${fmt(spendPerMin)}/min`;
+      if ($('rdRp')) $('rdRp').textContent = `${rpm.toFixed(1)} RP/min`;
+      const slider = $('rdSlider');
+      if (slider && Number(slider.value) !== pct) slider.value = pct;
       document.querySelectorAll('#shopBody .proj').forEach((el, i) => {
         const key = researchOrder[i];
         if (!key || hasResearch(key)) return;

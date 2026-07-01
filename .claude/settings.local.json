@@ -11,10 +11,7 @@
       "Bash(node tests/economy.test.mjs)",
       "Bash(node tests/path.test.mjs)",
       "Bash(node tests/save.test.mjs)",
-      "Bash(node tests/trainSim.test.mjs)",
-      "Bash(git commit -m 'Finalize modular refactor and extract train-sim/scenery' -m 'Commits the previously-untracked config module, tooling \\(scripts/check.mjs, *)",
-      "Bash(git add *)",
-      "Bash(git commit -q -m 'Add block sections, manual dispatch, and auto-launch upgrades' -m 'Gameplay: *)"
+      "Bash(node tests/trainSim.test.mjs)"
     ]
   }
 }

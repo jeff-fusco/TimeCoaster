@@ -5,21 +5,22 @@ import {
   featureUnlocked,
   formatMoney,
   gradeFor,
+  researchEfficiency,
   upgradeCost,
 } from '../src/systems/economy.js';
 
 function makeUpgrades() {
   return {
-    car: { base: 60, growth: 1.55, level: 0 },
-    seats: { base: 95, growth: 1.6, level: 0, max: 8 },
-    speed: { base: 80, growth: 1.5, level: 0 },
-    train: { base: 500, growth: 3.2, level: 0, max: 2 },
-    queue: { base: 110, growth: 1.55, level: 0, max: 8 },
-    snacks: { base: 200, growth: 2, level: 0, max: 6 },
-    express: { base: 350, growth: 1.8, level: 0 },
-    ticket: { base: 50, growth: 1.45, level: 0 },
-    market: { base: 160, growth: 1.75, level: 0, max: 6 },
-    hype: { base: 120, growth: 1.7, level: 0 },
+    car: { base: 60, growth: 1.78, level: 0, max: 16 },
+    seats: { base: 95, growth: 1.82, level: 0, max: 24 },
+    speed: { base: 80, growth: 1.76, level: 0, max: 30 },
+    train: { base: 500, growth: 4.15, level: 0, max: 4 },
+    queue: { base: 110, growth: 1.82, level: 0, max: 24 },
+    snacks: { base: 200, growth: 2.28, level: 0, max: 18 },
+    express: { base: 350, growth: 2.05, level: 0, max: 18 },
+    ticket: { base: 50, growth: 1.68, level: 0, max: 30 },
+    market: { base: 160, growth: 2.05, level: 0, max: 18 },
+    hype: { base: 120, growth: 1.95, level: 0, max: 24 },
   };
 }
 
@@ -45,9 +46,9 @@ const station = {
 {
   const upgrades = makeUpgrades();
   applyResearchEffects(upgrades, {});
-  assert.equal(upgrades.train.max, 2);
+  assert.equal(upgrades.train.max, 4);
   applyResearchEffects(upgrades, { train3: true });
-  assert.equal(upgrades.train.max, 3);
+  assert.equal(upgrades.train.max, 8);
 }
 
 {
@@ -56,6 +57,12 @@ const station = {
   assert.equal(formatMoney(9999), '9,999');
   assert.equal(formatMoney(12500), '12.5k');
   assert.equal(formatMoney(1250000), '1.25M');
+}
+
+{
+  assert.equal(researchEfficiency(0), 1);
+  assert.ok(researchEfficiency(50) < researchEfficiency(10), 'higher funding % has lower RP per dollar');
+  assert.ok(1000 * 0.05 * researchEfficiency(5) > 100 * 0.5 * researchEfficiency(50), 'larger actual spend still wins');
 }
 
 {

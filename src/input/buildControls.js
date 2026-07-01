@@ -31,9 +31,10 @@ export function initBuildControls({
   showToast,
   spawnCoinScreen,
   fmt,
+  isBuildPointAllowed = () => true,
   onPlayClick = () => false,
 }) {
-  const { COST_PER_M, FEATURE_COST, FEATURE_REFUND, MIN_FRUSTUM, MAX_FRUSTUM, STATION_Y } = constants;
+  const { COST_PER_M, FEATURE_COST, FEATURE_REFUND, MIN_FRUSTUM, MAX_FRUSTUM, STATION_Y, MAX_TRACK_HEIGHT = 18 } = constants;
   const raycaster = new THREE.Raycaster();
   const mouseNDC = new THREE.Vector2();
   const controls = {
@@ -99,6 +100,7 @@ export function initBuildControls({
   }
 
   const snapVal = v => (controls.snapGrid ? Math.round(v * 2) / 2 : v);
+  const clampHeight = y => Math.max(0.2, Math.min(MAX_TRACK_HEIGHT, Math.round(y * 10) / 10));
 
   function updateFeatureButtons() {
     const ctrlPts = getCtrlPts();
@@ -207,6 +209,10 @@ export function initBuildControls({
     if (controls.placingMode) {
       const pos = raycastGround(1.5);
       if (!pos) return;
+      if (!isBuildPointAllowed(pos.x, pos.z)) {
+        showToast('Buy neighboring land before building there');
+        return;
+      }
       const insertIdx = controls.selectedIdx >= 0 ? controls.selectedIdx + 1 : ctrlPts.length;
       const lenBefore = getPath().len;
       ctrlPts.splice(insertIdx, 0, { x: snapVal(pos.x), y: 1.5, z: snapVal(pos.z), seg: 'plain' });
@@ -253,8 +259,14 @@ export function initBuildControls({
       const p = ctrlPts[controls.selectedIdx];
       const pos = raycastGround(p.y);
       if (!pos) return;
-      p.x = snapVal(pos.x);
-      p.z = snapVal(pos.z);
+      const nextX = snapVal(pos.x);
+      const nextZ = snapVal(pos.z);
+      if (!isBuildPointAllowed(nextX, nextZ)) {
+        $('pointInfo').textContent = 'Buy neighboring land before moving this point there';
+        return;
+      }
+      p.x = nextX;
+      p.z = nextZ;
       if (p.station) p.y = STATION_Y;
       refreshHandlePositions();
       controls.needsRebuild = true;
@@ -316,7 +328,7 @@ export function initBuildControls({
       const snap = ctrlPts.map(p => ({ ...p }));
       const step = e.shiftKey ? 0.1 : 0.5;
       const p = ctrlPts[controls.selectedIdx];
-      p.y = Math.max(0.2, Math.round((p.y - Math.sign(e.deltaY) * step) * 10) / 10);
+      p.y = clampHeight(p.y - Math.sign(e.deltaY) * step);
       refreshHandlePositions();
       buildPath();
       buildTrackGeometry();
@@ -378,7 +390,7 @@ export function initBuildControls({
     if (controls.selectedIdx < 0 || ctrlPts[controls.selectedIdx]?.station) return;
     const snap = ctrlPts.map(p => ({ ...p }));
     const p = ctrlPts[controls.selectedIdx];
-    p.y = Math.max(0.2, Math.round((p.y + delta) * 10) / 10);
+    p.y = clampHeight(p.y + delta);
     refreshHandlePositions();
     buildPath();
     buildTrackGeometry();
@@ -438,6 +450,12 @@ export function initBuildControls({
   }
 
   function exitBuildMode() {
+    const beforePath = getPath();
+    const trainSnapshots = getTrains().map(train => ({
+      train,
+      frac: beforePath?.len ? train.s / beforePath.len : 0,
+      prevFrac: beforePath?.len ? train.prevS / beforePath.len : 0,
+    }));
     controls.active = false;
     controls.selectedIdx = -1;
     controls.hoveredIdx = -1;
@@ -451,15 +469,21 @@ export function initBuildControls({
     $('shop').classList.remove('hidden');
     rebuildAll(true);
     const path = getPath();
-    const trains = getTrains();
-    trains.forEach((train, i) => {
-      train.s = (i / trains.length) * path.len;
-      train.prevS = train.s;
+    trainSnapshots.forEach(({ train, frac, prevFrac }) => {
+      train.s = ((frac % 1) + 1) % 1 * path.len;
+      train.prevS = ((prevFrac % 1) + 1) % 1 * path.len;
       train.L = path.len;
-      train.mode = 'run';
-      train.phase = '';
-      train.timer = 0;
     });
+    if (window.__TIME_COASTER_TEST__) {
+      window.__TC3D_LAST_BUILD_EXIT__ = trainSnapshots.map(({ train }) => ({
+        s: train.s,
+        prevS: train.prevS,
+        L: train.L,
+        mode: train.mode,
+        phase: train.phase,
+        timer: train.timer,
+      }));
+    }
     refreshHUD();
     saveGame();
     showToast(`Track saved! Excitement ${path.stats.excitement}`);

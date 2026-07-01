@@ -11,7 +11,7 @@ export function featureUnlocked(feat, done = {}) {
 
 export function applyResearchEffects(upgrades, done = {}) {
   if (upgrades.train) {
-    upgrades.train.max = hasResearchKey(done, 'train3') ? 3 : 2;
+    upgrades.train.max = hasResearchKey(done, 'train3') ? 8 : 4;
   }
   return upgrades;
 }
@@ -22,6 +22,11 @@ export function baseLap() {
 
 export function upgradeCost(upgrade) {
   return Math.floor(upgrade.base * Math.pow(upgrade.growth, upgrade.level));
+}
+
+export function researchEfficiency(fundingPct = 0) {
+  const pct = Math.max(0, Math.min(100, fundingPct));
+  return 1 / (1 + (pct / 100) * 0.45);
 }
 
 export function deriveEconomy({

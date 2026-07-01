@@ -13,6 +13,8 @@ const PHYS = {
   g: 18,
   vMin: 4.0,
   vCrest: 3.4,
+  launchSpeed: 12.5,
+  rollbackSpeed: 2.2,
   liftSpeed: 3.6,
   brakeSpeed: 3.0,
   stationSpeed: 2.6,
@@ -58,7 +60,7 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
   upgrades.car.level = 2;
   assert.equal(stationLength(upgrades), 10.100000000000001);
   upgrades.car.level = 20;
-  assert.equal(stationLength(upgrades), 21.1);
+  assert.equal(stationLength(upgrades), 38.7);
 }
 
 {
@@ -83,8 +85,9 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
   assert.equal(path.kind[0], 'station');
   assert.equal(path.stats.inversions, 0);
   assert.equal(path.stats.length, 59);
-  assert.ok(path.stats.lapTime > 10);
+  assert.ok(path.stats.lapTime > 5);
   assert.ok(path.stats.maxSpeed >= PHYS.vMin);
+  assert.equal(path.stats.rollback, false);
 
   const start = samplePathAt(path, 0, Vec3);
   assert.ok(Math.abs(start.pos.x - ctrlPts[0].x) < 1e-9);
@@ -113,7 +116,8 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
   const path = makePath(ctrlPts, upgrades);
   const brakeIndex = path.kind.findIndex(kind => kind === 'brake');
   assert.notEqual(brakeIndex, -1);
-  assert.ok(Math.abs(path.speed[brakeIndex] - PHYS.brakeSpeed * Math.pow(1.08, 2)) < 1e-9);
+  assert.ok(path.speed[brakeIndex] <= PHYS.brakeSpeed * Math.pow(1.08, 2) + 1e-9);
+  assert.ok(path.speed[brakeIndex] > 0);
 }
 
 {
@@ -121,6 +125,24 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
   const launch = makePath(makeCtrlPts(), makeUpgrades(), { launch: true });
   assert.ok(launch.stats.maxSpeed > normal.stats.maxSpeed);
   assert.ok(speedAtPath(launch, launch.len / 2) > speedAtPath(normal, normal.len / 2));
+}
+
+{
+  const ctrlPts = makeCtrlPts();
+  ctrlPts[3].y = 12;
+  const path = makePath(ctrlPts);
+  assert.equal(path.stats.rollback, true, 'a hill beyond available energy can roll the train backward');
+  assert.ok(path.speed.some(speed => speed < 0));
+}
+
+{
+  const ctrlPts = makeCtrlPts();
+  ctrlPts[2].seg = 'lift';
+  ctrlPts[3].y = 12;
+  const path = makePath(ctrlPts);
+  const liftSpeeds = path.speed.filter((speed, i) => path.kind[i] === 'lift');
+  assert.ok(liftSpeeds.length > 0);
+  assert.ok(liftSpeeds.every(speed => speed >= PHYS.liftSpeed), 'chain lift keeps the incline moving forward');
 }
 
 console.log('path tests passed');

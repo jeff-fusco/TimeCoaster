@@ -31,9 +31,21 @@ function makeGameState() {
       train: { level: 0, max: 2 },
     },
     research: {
-      budget: 90,
+      fundingPct: 25,
       points: 17.5,
       done: { loop: true },
+    },
+    maintenance: {
+      installed: { car: 1, train: 0 },
+      queue: [{ type: 'car', duration: 8 }],
+      current: { type: 'train', duration: 12, progress: 5 },
+    },
+    property: {
+      chunkSize: 24,
+      baseCost: 900,
+      growth: 1.72,
+      distanceScale: 0.32,
+      owned: ['0,0', '1,0'],
     },
     ctrlPts: [
       { x: 1, y: 2, z: 3, station: true, seg: 'station' },
@@ -52,12 +64,28 @@ function makeGameState() {
   assert.equal(data.money, 1234.5);
   assert.equal(data.queue, 7.25);
   assert.deepEqual(data.upgrades, { car: 1, seats: 2, train: 0 });
+  assert.equal(data.research.fundingPct, 25);
   assert.deepEqual(data.research.done, { loop: true });
+  assert.deepEqual(data.maintenance.installed, { car: 1, train: 0 });
+  assert.deepEqual(data.maintenance.queue, [{ type: 'car', duration: 8 }]);
+  assert.deepEqual(data.maintenance.current, { type: 'train', duration: 12, progress: 5 });
+  assert.deepEqual(data.property.owned, ['0,0', '1,0']);
 
   game.ctrlPts[2].seg = 'plain';
   game.research.done.loop = false;
   assert.equal(data.ctrlPts[2].seg, 'lift');
   assert.equal(data.research.done.loop, true);
+}
+
+{
+  const target = {
+    state: { money: 0, rides: 0 },
+    sim: { queue: 0 },
+    upgrades: {},
+    research: { fundingPct: 0, points: 0, done: {} },
+  };
+  applySaveData({ research: { budget: 90, points: 5, done: {} } }, target);
+  assert.equal(target.research.fundingPct, 9, 'legacy fixed $90/min budget migrates to a percent');
 }
 
 {
@@ -82,14 +110,26 @@ function makeGameState() {
       seats: { level: 0 },
       speed: { level: 0 },
     },
-    research: { budget: 0, points: 0, done: {} },
+    research: { fundingPct: 0, points: 0, done: {} },
   };
   const restored = applySaveData({
     money: 777,
     rides: 4,
     queue: 12,
     upgrades: { capacity: 5, speed: 2, unknown: 99 },
-    research: { budget: 30, points: 44, done: { train3: true } },
+    research: { fundingPct: 30, points: 44, done: { train3: true } },
+    maintenance: {
+      installed: { car: 2, train: 1 },
+      queue: [{ type: 'car', duration: 8 }, { type: 'bad', duration: 2 }],
+      current: { type: 'train', duration: 12, progress: 3 },
+    },
+    property: {
+      chunkSize: 24,
+      baseCost: 900,
+      growth: 1.72,
+      distanceScale: 0.32,
+      owned: ['0,0', '0,1'],
+    },
     ctrlPts: [
       { x: 1, y: 1, z: 1, seg: 'plain' },
       { x: 2, y: 2, z: 2 },
@@ -105,13 +145,19 @@ function makeGameState() {
   assert.equal(target.sim.queue, 12);
   assert.equal(target.upgrades.seats.level, 5);
   assert.equal(target.upgrades.speed.level, 2);
-  assert.equal(target.research.budget, 30);
+  assert.equal(target.research.fundingPct, 30);
   assert.deepEqual(target.research.done, { train3: true });
   assert.equal(restored.ctrlPts[0].seg, 'station');
   assert.equal(restored.ctrlPts[1].seg, 'plain');
   assert.equal(restored.paidLength, 12.5);
   assert.equal(restored.frustum, 80);
   assert.equal(restored.azimuth, 0.5);
+  assert.deepEqual(restored.maintenance, {
+    installed: { car: 2, train: 1 },
+    queue: [{ type: 'car', duration: 8 }],
+    current: { type: 'train', duration: 12, progress: 3 },
+  });
+  assert.deepEqual(restored.property.owned, ['0,0', '0,1']);
 }
 
 {
@@ -121,7 +167,7 @@ function makeGameState() {
     state: { money: 1, rides: 2 },
     sim: { queue: 3 },
     upgrades: {},
-    research: { budget: 0, points: 0, done: {} },
+    research: { fundingPct: 0, points: 0, done: {} },
   };
   assert.deepEqual(applySaveData(null, target), {});
   assert.deepEqual(target.state, { money: 1, rides: 2 });
@@ -132,14 +178,14 @@ function makeGameState() {
     state: { money: 1, rides: 2 },
     sim: { queue: 3 },
     upgrades: { speed: { level: 0 } },
-    research: { budget: 0, points: 0, done: {} },
+    research: { fundingPct: 0, points: 0, done: {} },
   };
   const restored = applySaveData({
     money: Number.NaN,
     rides: Infinity,
     queue: -Infinity,
     upgrades: { speed: Number.NaN },
-    research: { budget: Infinity, points: Number.NaN, done: { loop: true } },
+    research: { fundingPct: Infinity, points: Number.NaN, done: { loop: true } },
     ctrlPts: [
       { x: 1, y: 1, z: 1 },
       { x: Number.NaN, y: 2, z: 2 },
@@ -153,7 +199,7 @@ function makeGameState() {
   assert.deepEqual(target.state, { money: 1, rides: 2 });
   assert.equal(target.sim.queue, 3);
   assert.equal(target.upgrades.speed.level, 0);
-  assert.equal(target.research.budget, 0);
+  assert.equal(target.research.fundingPct, 0);
   assert.equal(target.research.points, 0);
   assert.deepEqual(target.research.done, { loop: true });
   assert.deepEqual(restored, {});

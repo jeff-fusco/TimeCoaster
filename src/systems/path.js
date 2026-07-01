@@ -6,7 +6,7 @@ export const PATH_SAMPLES = {
 };
 
 export function stationLength(upgrades) {
-  return 3.5 + Math.min(1 + upgrades.car.level, 8) * 2.2;
+  return 3.5 + Math.min(1 + upgrades.car.level, 16) * 2.2;
 }
 
 export function syncStationPoints(ctrlPts, upgrades, station = DEFAULT_STATION) {
@@ -163,20 +163,28 @@ export function buildPath({
   }
 
   const height = pos.map(p => p.y);
-  const hMax = Math.max(...height);
   const speedMult = Math.pow(1.08, upgrades.speed.level + (researchDone.launch ? 1 : 0));
-  const E = physics.g * hMax + 0.5 * physics.vCrest * physics.vCrest;
+  const launchSpeed = (physics.launchSpeed || physics.vMin * 3) * speedMult;
+  const startHeight = height[0] || station.y;
+  const E = physics.g * startHeight + 0.5 * launchSpeed * launchSpeed;
+  const rollbackSpeed = physics.rollbackSpeed || Math.max(1, physics.vMin * 0.55);
   const speed = new Array(N);
+
+  function gravitySpeedAt(i) {
+    const frictionLoss = 1 - Math.min(0.6, Math.max(0, physics.friction));
+    const v2 = 2 * (E - physics.g * height[i]) * frictionLoss;
+    if (v2 > 0.01) return Math.sqrt(v2);
+    const uphillAhead = height[(i + 1) % N] > height[i] + 0.02;
+    return uphillAhead ? -rollbackSpeed : rollbackSpeed;
+  }
 
   for (let i = 0; i < N; i++) {
     const k = kind[i];
-    if (k === 'lift') speed[i] = physics.liftSpeed;
-    else if (k === 'brake') speed[i] = physics.brakeSpeed * speedMult;
+    const gravitySpeed = gravitySpeedAt(i);
+    if (k === 'lift') speed[i] = Math.max(gravitySpeed, physics.liftSpeed * speedMult);
+    else if (k === 'brake') speed[i] = gravitySpeed < 0 ? gravitySpeed : Math.min(gravitySpeed, physics.brakeSpeed * speedMult);
     else if (k === 'station') speed[i] = physics.stationSpeed;
-    else {
-      const v2 = 2 * (E - physics.g * height[i]) * (1 - physics.friction);
-      speed[i] = Math.max(physics.vMin, Math.sqrt(Math.max(v2, 0))) * speedMult;
-    }
+    else speed[i] = gravitySpeed;
   }
 
   const localDs = i => {
@@ -229,11 +237,14 @@ export function buildPath({
   let prevLatSign = 0;
   let maxDrop = 0;
   let runDrop = 0;
+  let rollback = false;
 
   for (let i = 0; i < N; i++) {
     const ds = cum[i + 1] - cum[i] || 0.001;
-    lapTime += ds / Math.max(speed[i], 0.5);
-    maxSpeed = Math.max(maxSpeed, speed[i]);
+    const absSpeed = Math.abs(speed[i]);
+    lapTime += ds / Math.max(absSpeed, 0.5);
+    maxSpeed = Math.max(maxSpeed, absSpeed);
+    rollback ||= speed[i] < 0;
 
     const dh = height[(i + 1) % N] - height[i];
     if (dh < 0) {
@@ -243,7 +254,7 @@ export function buildPath({
       runDrop = 0;
     }
 
-    const ac = curvature(i).multiplyScalar(speed[i] * speed[i]);
+    const ac = curvature(i).multiplyScalar(absSpeed * absSpeed);
     const felt = ac.add(new Vector3(0, physics.g, 0));
     let gV = felt.dot(up[i]) / physics.g;
     let gL = felt.dot(right[i]) / physics.g;
@@ -283,6 +294,7 @@ export function buildPath({
     airCount,
     dirChanges,
     maxDrop,
+    rollback,
     excitement: +excitement.toFixed(1),
     intensity: +intensity.toFixed(1),
     nausea: +nausea.toFixed(1),

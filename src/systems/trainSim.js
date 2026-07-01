@@ -70,15 +70,19 @@ export function stepTrains({
   for (const tr of trains) {
     if (tr.mode === 'run') {
       tr.prevS = tr.s;
-      // block sections: never advance past the safe gap behind the train ahead
-      const adv = Math.min(speedAt(tr.s) * dt, allowedAdvance(tr, trains, pathLen, carLen, blockGap));
+      const rawAdv = speedAt(tr.s) * dt;
+      // Block sections only govern forward motion; rollback is physics-driven.
+      const adv = rawAdv > 0 ? Math.min(rawAdv, allowedAdvance(tr, trains, pathLen, carLen, blockGap)) : rawAdv;
       tr.s += adv;
       if (tr.s >= pathLen) {
         tr.s -= pathLen;
         tr.prevS -= pathLen;
+      } else if (tr.s < 0) {
+        tr.s += pathLen;
+        tr.prevS += pathLen;
       }
       // arrive at the platform and begin unloading (unless another train is boarding)
-      if (tr.prevS < stopS && tr.s >= stopS && !stationBusy()) {
+      if (adv > 0 && tr.prevS < stopS && tr.s >= stopS && !stationBusy()) {
         tr.s = stopS;
         tr.mode = 'dwell';
         tr.phase = 'unload';

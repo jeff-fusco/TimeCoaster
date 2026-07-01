@@ -6,6 +6,7 @@ import {
   formatMoney,
   gradeFor,
   hasResearchKey,
+  researchEfficiency,
   upgradeCost,
 } from './systems/economy.js';
 import {
@@ -19,7 +20,21 @@ import {
   readSave,
   writeSave,
 } from './systems/save.js';
+import {
+  createMaintenanceState,
+  enqueueInstall,
+  pendingCount,
+  stepMaintenance,
+} from './systems/maintenance.js';
+import {
+  buyLand,
+  createPropertyState,
+  expansionCandidates,
+  normalizePropertyState,
+  pointInOwnedLand,
+} from './systems/property.js';
 import { buildTrackGeometry as renderTrackGeometry } from './render/track.js';
+import { buildPropertyGeometry as renderPropertyGeometry } from './render/property.js';
 import {
   buildStationAndQueue as renderStationAndQueue,
   updateQueueVisuals as renderQueueVisuals,
@@ -48,7 +63,6 @@ import { createHudShop } from './ui/hudShop.js';
 import { createStaffPanel } from './ui/staffPanel.js';
 import {
   BLOCK_GAP,
-  BUDGETS,
   CATS,
   COL,
   COST_PER_M,
@@ -57,6 +71,7 @@ import {
   FEATURE_REFUND,
   GUEST_COLS,
   HEADS,
+  MAX_TRACK_HEIGHT,
   MPH,
   PHYS,
   RESEARCH,
@@ -77,7 +92,7 @@ import {
 const WORLD_UP = new THREE.Vector3(0,1,0);
 
 // ── live game state ─────────────────────────────────────────────────────────
-const research = { budget:0, points:0, done:{} };
+const research = { fundingPct:0, points:0, done:{} };
 const hasResearch = k => hasResearchKey(research.done, k);
 function featureUnlocked(feat){
   return featureUnlockedModel(feat, research.done);
@@ -89,19 +104,33 @@ function applyResearchEffects(){
 const state = { money:0, rides:0 };
 const sim   = { queue:0 };     // live count of guests waiting in line
 const staff = createStaffState();   // hired/trained staff (separate from upgrades)
+const maintenance = createMaintenanceState(); // purchased car/train installs waiting on mechanics
+const property = createPropertyState();
 let stationRefs = { queueGuests:[], stopS:0.85, platLen:6 };
 let ctrlPts = DEFAULT_CTRL.map(p=>({...p}));
 let paidLength = 0;            // metres of track already paid for
 let path = null;              // the live track path (built by buildPath)
 
 // ── derived economy ─────────────────────────────────────────────────────────
+function rideUpgrades(){
+  return {
+    ...UPGRADES,
+    car: { ...UPGRADES.car, level: maintenance.installed.car },
+    train: { ...UPGRADES.train, level: maintenance.installed.train },
+  };
+}
+
+function staffPowerMap(){
+  return computeStaffPowers(staff);
+}
+
 function derived(){
   return deriveEconomy({
-    upgrades: UPGRADES,
+    upgrades: rideUpgrades(),
     pathStats: path ? path.stats : null,
     simQueue: sim.queue,
     researchDone: research.done,
-    staffPowers: computeStaffPowers(staff),
+    staffPowers: staffPowerMap(),
     station: STN,
     fallbackMaxSpeed: PHYS.vMin,
   });
@@ -148,11 +177,9 @@ sun.position.set(-22,38,16); sun.castShadow=true; sun.shadow.mapSize.set(2048,20
 const sS=34; sun.shadow.camera.left=-sS;sun.shadow.camera.right=sS;sun.shadow.camera.top=sS;sun.shadow.camera.bottom=-sS;sun.shadow.camera.near=1;sun.shadow.camera.far=130;
 scene.add(sun);
 
-(()=>{ // ground
+(()=>{ // world grass beyond the purchasable park
   const g=new THREE.Mesh(new THREE.CylinderGeometry(46,46,1,64),new THREE.MeshLambertMaterial({color:COL.grass}));
   g.position.y=-0.5; g.receiveShadow=true; scene.add(g);
-  const pad=new THREE.Mesh(new THREE.CylinderGeometry(26,26,1.02,64),new THREE.MeshLambertMaterial({color:COL.grassHi}));
-  pad.position.y=-0.49; pad.receiveShadow=true; scene.add(pad);
 })();
 
 // Recursively free GPU resources (geometry + materials) for every descendant.
@@ -178,7 +205,7 @@ const STATION = DEFAULT_STATION;
 function buildPath(){
   path = buildTrackPath({
     ctrlPts,
-    upgrades: UPGRADES,
+    upgrades: rideUpgrades(),
     researchDone: research.done,
     physics: PHYS,
     Vector3: THREE.Vector3,
@@ -199,8 +226,20 @@ function speedAt(s){
 // =========================================================================
 //  TRACK / STATION RENDERING
 // =========================================================================
+const propertyGrp=new THREE.Group(); scene.add(propertyGrp);
 const trackGrp=new THREE.Group(); scene.add(trackGrp);
 const stationGrp=new THREE.Group(); scene.add(stationGrp);
+
+function buildPropertyGeometry(){
+  renderPropertyGeometry({
+    THREE,
+    group: propertyGrp,
+    property,
+    candidates: expansionCandidates(property),
+    colors: COL,
+    disposeGroup,
+  });
+}
 
 function buildTrackGeometry(){
   renderTrackGeometry({
@@ -219,7 +258,7 @@ function buildStationAndQueue(){
     path,
     ctrlPts,
     colors: COL,
-    upgrades: UPGRADES,
+    upgrades: rideUpgrades(),
     derived,
     sampleAt,
     stationRefs,
@@ -286,6 +325,7 @@ const buildControls=initBuildControls({
     COST_PER_M,
     FEATURE_COST,
     FEATURE_REFUND,
+    MAX_TRACK_HEIGHT,
     MIN_FRUSTUM,
     MAX_FRUSTUM,
     STATION_Y: STATION.y,
@@ -315,10 +355,18 @@ const buildControls=initBuildControls({
   showToast,
   spawnCoinScreen,
   fmt: formatMoney,
+  isBuildPointAllowed: (x, z) => pointInOwnedLand(property, x, z, 0.2),
   onPlayClick: (x, y) => tryDispatch(x, y),
 });
 const bm=buildControls.state;
 function updateBuildCost(){ buildControls.updateBuildCost(); }
+if(window.__TIME_COASTER_TEST__){
+  window.__TC3D_DEBUG__ = {
+    trainState: () => trains.map(tr => ({ s: tr.s, prevS: tr.prevS, L: tr.L, mode: tr.mode, phase: tr.phase, timer: tr.timer })),
+    pathLen: () => path?.len || 0,
+    buildActive: () => bm.active,
+  };
+}
 
 // =========================================================================
 //  GAME LOOP
@@ -384,21 +432,57 @@ function updateDispatchButton(show){
   btn.disabled=!show;
 }
 
+function maintenanceLabel(){
+  const total = maintenance.queue.length + (maintenance.current ? 1 : 0);
+  if(!total) return 'Idle';
+  const job = maintenance.current || maintenance.queue[0];
+  const name = job.type === 'car' ? 'Car' : 'Train';
+  const pct = maintenance.current ? Math.floor((maintenance.current.progress / maintenance.current.duration) * 100) : 0;
+  const extra = total > 1 ? ` +${total - 1}` : '';
+  return `${name} ${pct}%${extra}`;
+}
+
+function updateMaintenanceHUD(){
+  const el=$('work');
+  if(el) el.textContent=maintenanceLabel();
+}
+
+function applyInstalledUpgrade(type){
+  if(type==='car'){
+    rebuildAll(true);
+    paidLength=path.len;
+    rebuildTrains();
+    showToast('Mechanics installed a new car');
+  } else if(type==='train'){
+    rebuildTrains();
+    showToast('Mechanics added a train');
+  }
+  refreshHUD();
+  saveGame();
+}
+
+function updateMaintenance(dt){
+  stepMaintenance(maintenance, dt, staffPowerMap().mechanics || 0, applyInstalledUpgrade);
+}
+
 const clock=new THREE.Clock();
 function tick(){
   const dt=Math.min(clock.getDelta(),0.05);
   // coalesced track rebuild from build-mode dragging (≤ once per frame)
   if(bm.needsRebuild){ buildPath(); buildTrackGeometry(); updateBuildCost(); bm.needsRebuild=false; }
   if(!bm.active&&path){
+    updateMaintenance(dt);
     const d=derived();
     // guests arrive at the queue (capped by capacity)
     sim.queue=Math.min(d.queueCap, sim.queue + d.arrivalRate*dt);
     // snack income scales with guests waiting (capped per stand), boosted by Janitors
     if(UPGRADES.snacks.level>0) state.money += Math.min(sim.queue,STN.snackCap)*UPGRADES.snacks.level*STN.snackPerGuest*d.janitorMult/60*dt;
-    // research: funded budget drains money and earns research points (1 RP per $10)
-    if(research.budget>0 && state.money>0){
-      const spend=Math.min(state.money, research.budget/60*dt);
-      state.money-=spend; research.points+=spend/10;
+    // research: drains a chosen % of projected income; high percentages are less efficient per dollar.
+    if(research.fundingPct>0 && state.money>0){
+      const fundingPct=Math.max(0,Math.min(100,research.fundingPct));
+      const spendPerMin=Math.max(0,d.ratePerMin)*fundingPct/100;
+      const spend=Math.min(state.money, spendPerMin/60*dt);
+      state.money-=spend; research.points+=spend/10*researchEfficiency(fundingPct);
     }
     updateTrains(dt,d);
     updateQueueVisuals();
@@ -423,13 +507,16 @@ const ui=createHudShop({
   shopOrder: SHOP_ORDER,
   research: {
     projects: RESEARCH,
-    get budget(){ return research.budget; },
-    set budget(next){ research.budget = next; },
+    get fundingPct(){ return research.fundingPct; },
+    set fundingPct(next){ research.fundingPct = next; },
     get points(){ return research.points; },
   },
   researchOrder: RESEARCH_ORDER,
-  budgets: BUDGETS,
   derived,
+  researchEfficiency,
+  getMaintenance: () => maintenance,
+  getProperty: () => property,
+  getPropertyOptions: () => expansionCandidates(property),
   getPath: () => path,
   getState: () => state,
   getSim: () => sim,
@@ -439,12 +526,13 @@ const ui=createHudShop({
   fmt,
   mph: MPH,
   onBuy: buy,
+  onBuyLand: buyProperty,
   onResearchProject: researchProject,
-  onSetResearchBudget: budget => { research.budget = budget; saveGame(); },
+  onSetResearchFunding: pct => { research.fundingPct = pct; refreshHUD(); saveGame(); },
 });
 function buildShop(){ ui.buildShop(); }
 function renderShop(){ ui.renderShop(); }
-function refreshHUD(){ ui.refreshHUD(); if(staffUI.isOpen()) staffUI.render(); }
+function refreshHUD(){ ui.refreshHUD(); updateMaintenanceHUD(); if(staffUI.isOpen()) staffUI.render(); }
 
 // ── staff management panel ──────────────────────────────────────────────────
 const staffUI=createStaffPanel({
@@ -483,16 +571,27 @@ function buy(key){
   const c=upgradeCost(u); if(state.money<c)return;
   state.money-=c; u.level+=1;
   if(key==='car'){
-    // a longer station spreads the fixed endpoints and reflows the track for free.
-    rebuildAll(true); paidLength=path.len; rebuildTrains();
-    trains.forEach((tr,i)=>{tr.s=(i/trains.length)*path.len;tr.prevS=tr.s;tr.L=path.len;tr.mode='run';tr.phase='';tr.timer=0;});
+    enqueueInstall(maintenance, 'car');
+    showToast('Car purchased - mechanics are installing it');
   }
   else if(key==='seats'){rebuildTrains();}
   else if(key==='queue'){buildStationAndQueue();}
   else if(key==='snacks'){buildStationAndQueue();}
-  else if(key==='train'){rebuildTrains();}
+  else if(key==='train'){
+    enqueueInstall(maintenance, 'train');
+    showToast('Train purchased - mechanics are preparing it');
+  }
   else if(key==='speed'){buildPath();} // re-derive speed profile/stats
   refreshHUD(); saveGame();
+}
+function buyProperty(key){
+  const cost=buyLand(property,key,state);
+  if(!cost){ showToast('Need more money or adjacent land'); return; }
+  buildPropertyGeometry();
+  renderShop();
+  refreshHUD();
+  saveGame();
+  showToast(`Land purchased - $${fmt(cost)}`);
 }
 const _v=new THREE.Vector3();
 function spawnCoin(worldPos,amount){
@@ -518,6 +617,8 @@ function saveGame(){
     upgrades: UPGRADES,
     research,
     staff,
+    maintenance,
+    property,
     ctrlPts,
     paidLength,
     frustum,
@@ -532,7 +633,32 @@ function loadGame(){
     research,
     staff,
   });
-  if(restored.ctrlPts)ctrlPts=restored.ctrlPts;
+  if(restored.maintenance){
+    maintenance.installed.car=restored.maintenance.installed.car;
+    maintenance.installed.train=restored.maintenance.installed.train;
+    maintenance.queue=restored.maintenance.queue;
+    maintenance.current=restored.maintenance.current;
+  } else {
+    maintenance.installed.car=UPGRADES.car.level;
+    maintenance.installed.train=UPGRADES.train.level;
+  }
+  if(restored.property){
+    const restoredProperty=normalizePropertyState(restored.property);
+    property.chunkSize=restoredProperty.chunkSize;
+    property.baseCost=restoredProperty.baseCost;
+    property.growth=restoredProperty.growth;
+    property.distanceScale=restoredProperty.distanceScale;
+    property.owned=restoredProperty.owned;
+  }
+  for(const type of ['car','train']){
+    maintenance.installed[type]=Math.min(maintenance.installed[type], UPGRADES[type].level);
+    let missing=UPGRADES[type].level-maintenance.installed[type]-pendingCount(maintenance,type);
+    while(missing-->0) enqueueInstall(maintenance,type);
+  }
+  if(restored.ctrlPts)ctrlPts=restored.ctrlPts.map(point => ({
+    ...point,
+    y: point.station ? point.y : Math.max(0.2, Math.min(MAX_TRACK_HEIGHT, point.y)),
+  }));
   if(typeof restored.paidLength==='number')paidLength=restored.paidLength;
   if(typeof restored.frustum==='number')frustum=Math.max(MIN_FRUSTUM, Math.min(MAX_FRUSTUM, restored.frustum));
   if(typeof restored.azimuth==='number')azimuth=restored.azimuth;
@@ -545,6 +671,7 @@ setInterval(saveGame,15000);
 // =========================================================================
 loadGame();
 buildShop();
+buildPropertyGeometry();
 rebuildAll(true);
 if(!paidLength)paidLength=path.len;   // first run: starter track is free
 rebuildTrains();

@@ -70,7 +70,10 @@ export function rebuildTrains({
 }) {
   const { cars: carCount, trains: trainCount } = derived();
   const L = path ? path.len : 1;
-  const oldS = trains.map(train => train.s / (train.L || L));
+  const oldTrains = trains.map(train => ({
+    ...train,
+    frac: train.s / (train.L || L),
+  }));
   while (trainLayer.children.length) {
     const child = trainLayer.children[0];
     child.traverse(o => {
@@ -82,7 +85,7 @@ export function rebuildTrains({
   }
 
   const nextTrains = [];
-  const visCars = Math.min(carCount, 8);
+  const visCars = Math.min(carCount, 16);
   for (let n = 0; n < trainCount; n++) {
     const group = new THREE.Group();
     const cars = [];
@@ -92,21 +95,22 @@ export function rebuildTrains({
       cars.push(mesh);
     }
     trainLayer.add(group);
-    const frac = oldS[n] !== undefined ? oldS[n] : n / trainCount;
+    const old = oldTrains[n];
+    const frac = old ? old.frac : n / trainCount;
     const train = {
       group,
       s: frac * L,
       prevS: frac * L,
       L,
       cars,
-      mode: 'run',
-      phase: '',
-      timer: 0,
-      boarded: 0,
-      startBoard: 0,
-      cycleBoard: 0,
+      mode: old?.mode || 'run',
+      phase: old?.phase || '',
+      timer: old?.timer || 0,
+      boarded: old?.boarded || 0,
+      startBoard: old?.startBoard || 0,
+      cycleBoard: old?.cycleBoard || 0,
     };
-    setTrainOccupancy(train, 0);
+    setTrainOccupancy(train, Math.round(train.boarded));
     nextTrains.push(train);
   }
   return nextTrains;

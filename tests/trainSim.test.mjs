@@ -106,4 +106,16 @@ function run(args) {
   assert.equal(approaching.mode, 'run', 'second train keeps running past a busy platform');
 }
 
+// Negative path speed rolls a train backward and wraps around the loop cleanly.
+{
+  const trains = [makeTrain({ s: 0.2, prevS: 0.2 })];
+  const sim = { queue: 0 };
+  const state = { money: 0, rides: 0 };
+
+  run({ trains, sim, state, speedAt: () => -10 });
+  assert.equal(trains[0].s, 99.2);
+  assert.equal(trains[0].prevS, 100.2);
+  assert.equal(trains[0].mode, 'run');
+}
+
 console.log('trainSim tests passed');
