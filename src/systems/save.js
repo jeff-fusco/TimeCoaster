@@ -63,7 +63,8 @@ export function applySaveData(data, { state, sim, upgrades, research }) {
   if (data.upgrades) {
     Object.entries(data.upgrades).forEach(([key, level]) => {
       if (!finite(level)) return;
-      if (key === 'capacity' && upgrades.seats) upgrades.seats.level = level;
+      if (key === 'capacity' && upgrades.seats) upgrades.seats.level = level;       // legacy: Queue Capacity -> Roomier Cars
+      else if (key === 'loading' && upgrades.operators) upgrades.operators.level = level; // legacy: Fast Boarding -> Ride Operators
       else if (upgrades[key]) upgrades[key].level = level;
     });
   }

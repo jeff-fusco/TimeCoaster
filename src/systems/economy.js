@@ -45,23 +45,30 @@ export function deriveEconomy({
     maxSpeed: fallbackMaxSpeed,
     length: 0,
   };
+  // Staff multipliers
+  const operators = U.operators?.level || 0;      // auto-launch + faster boarding
+  const entertainers = U.entertainers?.level || 0; // happier queue -> more arrivals
+  const mechanics = U.mechanics?.level || 0;       // ride uptime -> more ride income
+  const janitors = U.janitors?.level || 0;         // cleaner park -> more snack sales
+  const upkeepMult = 1 + mechanics * 0.07;
+  const janitorMult = 1 + janitors * 0.10;
+
   const marketMult = 1 + U.market.level * 0.18;
   const ratingMult = 1 + (st.excitement / 55) * marketMult;
   const researchMult = hasResearchKey(researchDone, 'photo') ? 1.15 : 1;
-  const perRider = (ticket + express) * hype * ratingMult * researchMult;
+  const perRider = (ticket + express) * hype * ratingMult * researchMult * upkeepMult;
   const perRideFull = Math.round(seatsCap * perRider);
   const trains = 1 + U.train.level;
 
-  const loadDiv = 1 + U.loading.level * 0.6;
+  // Ride Operators speed up boarding and, once hired (lvl >= 1), auto-launch trains.
+  const loadDiv = 1 + operators * 0.5;
   const unloadTime = station.baseUnload / loadDiv;
   const loadTime = station.baseLoad / loadDiv;
   const dwellTime = unloadTime + loadTime;
   const lapTravel = Math.max(2, st.lapTime);
 
-  // dispatch: manual until Auto Dispatch is researched, then auto-launch after a
-  // delay shortened by the Dispatch Speed upgrade.
-  const autoDispatch = hasResearchKey(researchDone, 'autodispatch');
-  const dispatchDelay = Math.max(0.25, (station.baseDispatch ?? 3) / (1 + (U.dispatch?.level || 0) * 0.6));
+  const autoDispatch = operators >= 1;
+  const dispatchDelay = Math.max(0.3, (station.baseDispatch ?? 3) / (1 + Math.max(0, operators - 1) * 0.6));
   // manual dispatch estimate assumes the player launches promptly (best case)
   const cycle = lapTravel + dwellTime + (autoDispatch ? dispatchDelay : 0);
 
@@ -70,14 +77,18 @@ export function deriveEconomy({
     U.queue.level * station.queueStep +
     (hasResearchKey(researchDone, 'queue2') ? 30 : 0);
   const arrivalRate =
-    station.arrivalBase * (1 + st.excitement / 30) * (1 + U.market.level * 0.25);
+    station.arrivalBase *
+    (1 + st.excitement / 30) *
+    (1 + U.market.level * 0.25) *
+    (1 + entertainers * 0.12);
 
   const estBoard =
     Math.min(seatsCap, queueCap, arrivalRate * cycle * trains) / Math.max(1, trains);
   const snackPerMin =
     Math.min(Math.round(simQueue), station.snackCap) *
     U.snacks.level *
-    station.snackPerGuest;
+    station.snackPerGuest *
+    janitorMult;
   const ridePerMin = Math.round(estBoard * perRider * (60 / cycle) * trains);
   const ratePerMin = ridePerMin + snackPerMin;
 
@@ -100,6 +111,7 @@ export function deriveEconomy({
     queueCap,
     arrivalRate,
     snackPerMin,
+    janitorMult,
     ridePerMin,
     ratingMult,
     ratePerMin,

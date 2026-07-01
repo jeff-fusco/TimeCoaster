@@ -16,7 +16,10 @@ function makeUpgrades() {
     train: { base: 500, growth: 3.2, level: 0, max: 2 },
     queue: { base: 110, growth: 1.55, level: 0, max: 8 },
     snacks: { base: 200, growth: 2, level: 0, max: 6 },
-    loading: { base: 130, growth: 1.65, level: 0, max: 6 },
+    operators: { base: 140, growth: 1.6, level: 0, max: 8 },
+    entertainers: { base: 120, growth: 1.55, level: 0, max: 6 },
+    mechanics: { base: 160, growth: 1.6, level: 0, max: 6 },
+    janitors: { base: 130, growth: 1.55, level: 0, max: 6 },
     express: { base: 350, growth: 1.8, level: 0 },
     ticket: { base: 50, growth: 1.45, level: 0 },
     market: { base: 160, growth: 1.75, level: 0, max: 6 },
@@ -83,7 +86,7 @@ const station = {
   upgrades.seats.level = 2;
   upgrades.queue.level = 1;
   upgrades.snacks.level = 1;
-  upgrades.loading.level = 1;
+  upgrades.operators.level = 1;
   upgrades.ticket.level = 2;
   const economy = deriveEconomy({
     upgrades,
@@ -100,6 +103,30 @@ const station = {
   assert.equal(economy.queueCap, 50);
   assert.equal(economy.snackPerMin, 36);
   assert.ok(economy.perRideFull > 140);
+}
+
+// Staff each drive a different lever of the pipeline.
+{
+  const pathStats = { excitement: 40, lapTime: 15, maxSpeed: 8, length: 80 };
+  const withSnacks = () => { const u = makeUpgrades(); u.snacks.level = 1; return u; };
+  const derive = u => deriveEconomy({ upgrades: u, pathStats, simQueue: 20, researchDone: {}, station, fallbackMaxSpeed: 4 });
+
+  const baseline = derive(withSnacks());
+  assert.equal(baseline.autoDispatch, false, 'no operators -> manual dispatch');
+
+  const u = withSnacks();
+  u.operators.level = 2;
+  u.entertainers.level = 3;
+  u.mechanics.level = 4;
+  u.janitors.level = 5;
+  const staffed = derive(u);
+
+  assert.equal(staffed.autoDispatch, true, 'Ride Operators enable auto-launch');
+  assert.ok(staffed.dwellTime < baseline.dwellTime, 'operators speed up boarding');
+  assert.ok(staffed.arrivalRate > baseline.arrivalRate, 'entertainers raise arrivals');
+  assert.ok(staffed.perRider > baseline.perRider, 'mechanics raise ride income');
+  assert.ok(staffed.snackPerMin > baseline.snackPerMin, 'janitors raise snack income');
+  assert.ok(Math.abs(staffed.janitorMult - 1.5) < 1e-9, 'janitors: +10%/lvl');
 }
 
 {

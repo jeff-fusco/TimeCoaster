@@ -334,7 +334,7 @@ function updateTrains(dt,d){
   }
   if(anyReady && !d.autoDispatch && !dispatchHinted){
     dispatchHinted=true;
-    showToast('Train ready — click it to dispatch! (or research Auto Dispatch)');
+    showToast('Train ready — click it to dispatch! (or hire Ride Operators in Staff)');
   }
   updateDispatchButton(anyReady && !d.autoDispatch);
 }
@@ -378,8 +378,8 @@ function tick(){
     const d=derived();
     // guests arrive at the queue (capped by capacity)
     sim.queue=Math.min(d.queueCap, sim.queue + d.arrivalRate*dt);
-    // snack income scales with guests waiting, but a stand can only serve so many
-    if(UPGRADES.snacks.level>0) state.money += Math.min(sim.queue,STN.snackCap)*UPGRADES.snacks.level*STN.snackPerGuest/60*dt;
+    // snack income scales with guests waiting (capped per stand), boosted by Janitors
+    if(UPGRADES.snacks.level>0) state.money += Math.min(sim.queue,STN.snackCap)*UPGRADES.snacks.level*STN.snackPerGuest*d.janitorMult/60*dt;
     // research: funded budget drains money and earns research points (1 RP per $10)
     if(research.budget>0 && state.money>0){
       const spend=Math.min(state.money, research.budget/60*dt);
