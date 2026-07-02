@@ -53,7 +53,7 @@ import {
   createStaffState,
   hire as hireStaff,
   hireCost,
-  staffPowers as computeStaffPowers,
+  staffStatus,
   train as trainStaff,
   trainCost,
 } from './systems/staff.js';
@@ -132,9 +132,6 @@ function rideUpgrades(){
   };
 }
 
-function staffPowerMap(){
-  return computeStaffPowers(staff);
-}
 
 function derived(){
   return deriveEconomy({
@@ -142,7 +139,7 @@ function derived(){
     pathStats: path ? path.stats : null,
     simQueue: sim.queue,
     researchDone: research.done,
-    staffPowers: staffPowerMap(),
+    staff,
     station: STN,
     fallbackMaxSpeed: PHYS.vMin,
   });
@@ -612,7 +609,7 @@ function applyInstalledUpgrade(type){
 }
 
 function updateMaintenance(dt){
-  stepMaintenance(maintenance, dt, staffPowerMap().mechanics || 0, applyInstalledUpgrade);
+  stepMaintenance(maintenance, dt, staff.mechanics.hired, applyInstalledUpgrade);
 }
 
 const clock=new THREE.Clock();
@@ -693,6 +690,7 @@ const staffUI=createStaffPanel({
   getStaff: () => staff,
   getState: () => state,
   costs: { hire: hireCost, train: trainCost, canHire, canTrain },
+  describe: staffStatus,
   onHire: role => {
     const spent=hireStaff(role, staff, state.money);
     if(spent>0){ state.money-=spent; spawnBankDelta(spent,true); refreshHUD(); saveGame(); showToast(`Hired a ${STAFF[role].name.replace(/s$/,'')}`); }

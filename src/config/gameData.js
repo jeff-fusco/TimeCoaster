@@ -86,13 +86,51 @@ export const CATS = [
 ];
 
 // ── staff (hired & trained in the Staff panel, not the upgrade shop) ─────────
+// Hiring and training are different levers: hiring adds bodies (coverage),
+// training makes every member of the role better at their specialty.
 export const STAFF = {
-  operators:    { name: 'Ride Operators', icon: '🧑‍🔧', desc: 'Auto-launch trains & speed up boarding', hireBase: 140, trainBase: 260, hireMax: 6, trainMax: 5 },
-  entertainers: { name: 'Entertainers',   icon: '🤹',   desc: 'Happier queue → more guests arrive',    hireBase: 120, trainBase: 220, hireMax: 6, trainMax: 5 },
-  mechanics:    { name: 'Mechanics',      icon: '🔧',   desc: 'Faster installs & more ride income',      hireBase: 160, trainBase: 280, hireMax: 6, trainMax: 5 },
-  janitors:     { name: 'Janitors',       icon: '🧹',   desc: 'Cleaner park → more snack sales',        hireBase: 130, trainBase: 230, hireMax: 6, trainMax: 5 },
+  operators: {
+    name: 'Ride Operators', icon: '🧑‍🔧',
+    desc: 'Crew the platform and launch the trains.',
+    hireDesc: 'each hire boards guests faster · first hire enables auto-launch',
+    trainDesc: 'drilled crews launch sooner after boarding',
+    hireBase: 220, hireGrowth: 1.95, hireMax: 8,
+    trainBase: 500, trainGrowth: 2.3, trainMax: 6,
+  },
+  entertainers: {
+    name: 'Entertainers', icon: '🤹',
+    desc: 'Work the crowd outside the gates.',
+    hireDesc: 'each hire draws more guests to the park',
+    trainDesc: 'better shows keep a longer line happy (+queue capacity)',
+    hireBase: 180, hireGrowth: 1.9, hireMax: 8,
+    trainBase: 420, trainGrowth: 2.25, trainMax: 6,
+  },
+  mechanics: {
+    name: 'Mechanics', icon: '🔧',
+    desc: 'Install new cars and keep the ride humming.',
+    hireDesc: 'each hire speeds up car & train installs',
+    trainDesc: 'certified upkeep earns more per rider',
+    hireBase: 260, hireGrowth: 1.95, hireMax: 8,
+    trainBase: 560, trainGrowth: 2.3, trainMax: 6,
+  },
+  janitors: {
+    name: 'Janitors', icon: '🧹',
+    desc: 'Keep the plaza spotless.',
+    hireDesc: 'each hire lifts snack sales in the queue',
+    trainDesc: 'a gleaming park impresses guests (+ride rating income)',
+    hireBase: 160, hireGrowth: 1.9, hireMax: 8,
+    trainBase: 380, trainGrowth: 2.25, trainMax: 6,
+  },
+  photographers: {
+    name: 'Photographers', icon: '📸',
+    desc: 'Sell on-ride photos at the exit ramp.',
+    hireDesc: 'each hire sells photos on every dispatched train',
+    trainDesc: 'better shots sell for more (scales with excitement)',
+    hireBase: 340, hireGrowth: 2.0, hireMax: 6,
+    trainBase: 700, trainGrowth: 2.35, trainMax: 5,
+  },
 };
-export const STAFF_ORDER = ['operators', 'entertainers', 'mechanics', 'janitors'];
+export const STAFF_ORDER = ['operators', 'entertainers', 'mechanics', 'janitors', 'photographers'];
 
 export const RESEARCH = {
   brakes: { name: 'Block Brakes', desc: 'Unlock 🛑 brake track', icon: '🛑', rp: 60 },

@@ -1,3 +1,5 @@
+import { STAFF_FX } from './economy.js';
+
 export const INSTALL_TIMES = {
   car: 8,
   train: 12,
@@ -20,8 +22,9 @@ export function enqueueInstall(state, type) {
   return true;
 }
 
-export function installSpeed(mechanics = 0) {
-  return 1 + mechanics * 0.55;
+// hired mechanics work the install queue; speed comes from headcount
+export function installSpeed(mechanicsHired = 0) {
+  return 1 + mechanicsHired * STAFF_FX.mechanicInstall;
 }
 
 export function pendingCount(state, type) {

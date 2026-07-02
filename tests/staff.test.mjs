@@ -5,32 +5,24 @@ import {
   createStaffState,
   hire,
   hireCost,
-  staffPower,
-  staffPowers,
+  staffStatus,
   train,
   trainCost,
 } from '../src/systems/staff.js';
-import { STAFF } from '../src/config/gameData.js';
+import { STAFF, STAFF_ORDER } from '../src/config/gameData.js';
 
-// fresh state has every role at zero
+// fresh state has every role at zero — including the photographers
 {
   const s = createStaffState();
   assert.deepEqual(Object.keys(s).sort(), Object.keys(STAFF).sort());
+  assert.ok(STAFF_ORDER.includes('photographers'));
+  assert.equal(STAFF_ORDER.length, 5);
   for (const role of Object.keys(s)) {
     assert.deepEqual(s[role], { hired: 0, trained: 0 });
-    assert.equal(staffPower(s[role]), 0);
   }
 }
 
-// power = hired * (1 + 0.4 * trained)
-{
-  assert.equal(staffPower({ hired: 3, trained: 0 }), 3);
-  assert.equal(staffPower({ hired: 2, trained: 5 }), 2 * 3); // 1 + 0.4*5 = 3
-  const powers = staffPowers({ a: { hired: 1, trained: 0 }, b: { hired: 0, trained: 0 } });
-  assert.deepEqual(powers, { a: 1, b: 0 });
-}
-
-// hiring costs grow and require enough money; training needs a hired member first
+// hiring costs grow per-role and require enough money; training needs a hire first
 {
   const s = createStaffState();
   assert.equal(canTrain('operators', s), false, 'cannot train with nobody hired');
@@ -43,22 +35,49 @@ import { STAFF } from '../src/config/gameData.js';
   const spent = hire('operators', s, c0);
   assert.equal(spent, c0);
   assert.equal(s.operators.hired, 1);
-  assert.ok(hireCost('operators', s) > c0, 'next hire costs more');
+  assert.equal(hireCost('operators', s), Math.floor(c0 * STAFF.operators.hireGrowth), 'per-role growth');
   assert.equal(canTrain('operators', s), true, 'can train once hired');
 
   const t0 = trainCost('operators', s);
+  assert.equal(t0, STAFF.operators.trainBase);
   assert.equal(train('operators', s, t0), t0);
   assert.equal(s.operators.trained, 1);
-  assert.ok(Math.abs(staffPower(s.operators) - 1.4) < 1e-9); // 1 * (1 + 0.4)
+  assert.equal(trainCost('operators', s), Math.floor(t0 * STAFF.operators.trainGrowth));
 }
 
-// hiring is capped at hireMax
+// staff should be a long-arc sink: maxing any role's hires costs well into
+// five figures, so it cannot be bought out in one early-game session
+{
+  for (const role of STAFF_ORDER) {
+    const s = createStaffState();
+    let total = 0;
+    while (canHire(role, s)) total += hire(role, s, 1e12);
+    assert.equal(s[role].hired, STAFF[role].hireMax);
+    assert.ok(total > 15000, `${role} full hire arc costs $${total} (> $15k)`);
+    assert.ok(hire(role, s, 1e12) === 0, 'no hire past the cap');
+  }
+}
+
+// status lines: hire and train drive different, visible numbers
 {
   const s = createStaffState();
-  for (let i = 0; i < STAFF.operators.hireMax; i++) hire('operators', s, 1e9);
-  assert.equal(s.operators.hired, STAFF.operators.hireMax);
-  assert.equal(canHire('operators', s), false);
-  assert.equal(hire('operators', s, 1e9), 0, 'no hire past the cap');
+  assert.match(staffStatus('operators', s.operators), /dispatch trains yourself/i);
+
+  s.operators.hired = 2;
+  const hiredOnly = staffStatus('operators', s.operators);
+  assert.match(hiredOnly, /Boarding \+70%/, 'hires drive boarding speed');
+  assert.match(hiredOnly, /3\.0s/, 'untrained crews launch at the base delay');
+
+  s.operators.trained = 2;
+  assert.match(staffStatus('operators', s.operators), /1\.5s/, 'training shortens the launch delay');
+
+  s.entertainers = { hired: 3, trained: 2 };
+  const ent = staffStatus('entertainers', s.entertainers);
+  assert.match(ent, /\+30%/, 'hires drive arrivals');
+  assert.match(ent, /\+10\b/, 'training adds queue capacity');
+
+  s.photographers = { hired: 2, trained: 1 };
+  assert.match(staffStatus('photographers', s.photographers), /\$10 photo sales/, '2 * 3 * 1.6 = 9.6 -> $10');
 }
 
 console.log('staff tests passed');

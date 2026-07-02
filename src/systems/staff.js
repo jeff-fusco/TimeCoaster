@@ -1,11 +1,9 @@
-// Staff system: hire members of a role and train the whole role to make each
-// member more effective. Kept separate from the upgrade shop.
-//
-//   power(role) = hired * (1 + 0.4 * trained)
-//
-// The park's economy (economy.js) reads these powers, not the raw counts, so the
-// hire/train balance is expressed in one place.
-import { STAFF } from '../config/gameData.js';
+// Staff system: hiring adds bodies (coverage), training raises the whole
+// role's skill (a different effect per role — see STAFF_FX in economy.js).
+// Kept separate from the upgrade shop: costs climb steeply per role so staff
+// is a long-arc investment, not a one-session buyout.
+import { STAFF, STN } from '../config/gameData.js';
+import { STAFF_FX } from './economy.js';
 
 export function createStaffState() {
   const state = {};
@@ -13,24 +11,14 @@ export function createStaffState() {
   return state;
 }
 
-export function staffPower(entry) {
-  if (!entry) return 0;
-  return entry.hired * (1 + 0.4 * entry.trained);
-}
-
-// map of role -> effective power, for deriveEconomy()
-export function staffPowers(state) {
-  const powers = {};
-  for (const role of Object.keys(state)) powers[role] = staffPower(state[role]);
-  return powers;
-}
-
 export function hireCost(role, state) {
-  return Math.floor(STAFF[role].hireBase * Math.pow(1.6, state[role].hired));
+  const cfg = STAFF[role];
+  return Math.floor(cfg.hireBase * Math.pow(cfg.hireGrowth, state[role].hired));
 }
 
 export function trainCost(role, state) {
-  return Math.floor(STAFF[role].trainBase * Math.pow(1.8, state[role].trained));
+  const cfg = STAFF[role];
+  return Math.floor(cfg.trainBase * Math.pow(cfg.trainGrowth, state[role].trained));
 }
 
 export function canHire(role, state) {
@@ -57,4 +45,39 @@ export function train(role, state, money) {
   if (money < cost) return 0;
   state[role].trained += 1;
   return cost;
+}
+
+const pct = v => `${Math.round(v * 100)}%`;
+
+// One live status line per role showing what the current crew actually does —
+// pure math over STAFF_FX so the panel, balance and tests stay in sync.
+export function staffStatus(role, entry) {
+  const FX = STAFF_FX;
+  const { hired, trained } = entry;
+  switch (role) {
+    case 'operators': {
+      if (!hired) return 'No crew — dispatch trains yourself';
+      const delay = Math.max(0.3, (STN.baseDispatch ?? 3) / (1 + FX.operatorLaunch * trained));
+      return `Boarding +${pct(FX.operatorBoard * hired)} faster · auto-launch after ${delay.toFixed(1)}s`;
+    }
+    case 'entertainers': {
+      if (!hired) return 'No shows scheduled';
+      return `Guest arrivals +${pct(FX.entertainArrive * hired)} · queue capacity +${FX.entertainQueue * trained}`;
+    }
+    case 'mechanics': {
+      if (!hired) return 'Installs crawl along unassisted';
+      return `Installs +${pct(FX.mechanicInstall * hired)} faster · ride income +${pct(FX.mechanicIncome * trained)}`;
+    }
+    case 'janitors': {
+      if (!hired) return 'Litter is piling up out there';
+      return `Snack sales +${pct(FX.janitorSnack * hired)} · park appeal +${pct(FX.janitorAppeal * trained)}`;
+    }
+    case 'photographers': {
+      if (!hired) return 'No photo booth crew yet';
+      const base = hired * FX.photoBase * (1 + FX.photoSkill * trained);
+      return `~$${Math.round(base)} photo sales per launch · scales with excitement`;
+    }
+    default:
+      return '';
+  }
 }

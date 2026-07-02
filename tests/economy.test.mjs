@@ -32,6 +32,7 @@ const station = {
   snackCap: 30,
   queueBase: 10,
   queueStep: 10,
+  baseDispatch: 3.0,
 };
 
 {
@@ -111,21 +112,45 @@ const station = {
 {
   const pathStats = { excitement: 40, lapTime: 15, maxSpeed: 8, length: 80 };
   const withSnacks = () => { const u = makeUpgrades(); u.snacks.level = 1; return u; };
-  const derive = (staffPowers = {}) =>
-    deriveEconomy({ upgrades: withSnacks(), pathStats, simQueue: 20, researchDone: {}, staffPowers, station, fallbackMaxSpeed: 4 });
+  const derive = (staff = {}) =>
+    deriveEconomy({ upgrades: withSnacks(), pathStats, simQueue: 20, researchDone: {}, staff, station, fallbackMaxSpeed: 4 });
 
   const baseline = derive();
   assert.equal(baseline.autoDispatch, false, 'no operators -> manual dispatch');
+  assert.equal(baseline.photoPerRide, 0, 'no photographers -> no photo sales');
 
-  const staffed = derive({ operators: 2, entertainers: 3, mechanics: 4, janitors: 5 });
-  assert.equal(staffed.autoDispatch, true, 'Ride Operators enable auto-launch');
-  assert.ok(staffed.dwellTime < baseline.dwellTime, 'operators speed up boarding');
-  assert.ok(staffed.arrivalRate > baseline.arrivalRate, 'entertainers raise arrivals');
-  assert.ok(staffed.perRider > baseline.perRider, 'mechanics raise ride income');
-  assert.ok(staffed.snackPerMin > baseline.snackPerMin, 'janitors raise snack income');
+  // hiring and training drive DIFFERENT levers per role
+  const hiredOps = derive({ operators: { hired: 2, trained: 0 } });
+  assert.equal(hiredOps.autoDispatch, true, 'first operator hire enables auto-launch');
+  assert.ok(hiredOps.dwellTime < baseline.dwellTime, 'operator hires speed up boarding');
+  assert.equal(hiredOps.dispatchDelay, station.baseDispatch, 'untrained crews launch at base delay');
 
-  // one operator (power 1) is enough to enable auto-dispatch
-  assert.equal(derive({ operators: 1 }).autoDispatch, true);
+  const trainedOps = derive({ operators: { hired: 2, trained: 4 } });
+  assert.equal(trainedOps.dwellTime, hiredOps.dwellTime, 'training does not change boarding');
+  assert.ok(trainedOps.dispatchDelay < hiredOps.dispatchDelay, 'training shortens the launch delay');
+
+  const hiredEnt = derive({ entertainers: { hired: 3, trained: 0 } });
+  assert.ok(hiredEnt.arrivalRate > baseline.arrivalRate, 'entertainer hires raise arrivals');
+  assert.equal(hiredEnt.queueCap, baseline.queueCap, 'hires alone do not extend the queue');
+  const trainedEnt = derive({ entertainers: { hired: 3, trained: 2 } });
+  assert.equal(trainedEnt.queueCap, baseline.queueCap + 10, 'training adds queue capacity');
+
+  const mech = derive({ mechanics: { hired: 3, trained: 0 } });
+  assert.equal(mech.perRider, baseline.perRider, 'mechanic hires do not change income (they speed installs)');
+  const trainedMech = derive({ mechanics: { hired: 3, trained: 3 } });
+  assert.ok(trainedMech.perRider > baseline.perRider, 'mechanic training raises ride income');
+
+  const jan = derive({ janitors: { hired: 4, trained: 0 } });
+  assert.ok(jan.snackPerMin > baseline.snackPerMin, 'janitor hires raise snack sales');
+  assert.equal(jan.perRider, baseline.perRider, 'untrained janitors do not change ride income');
+  const trainedJan = derive({ janitors: { hired: 4, trained: 3 } });
+  assert.ok(trainedJan.perRider > baseline.perRider, 'janitor training raises park appeal income');
+
+  const photo = derive({ photographers: { hired: 2, trained: 0 } });
+  assert.ok(photo.photoPerRide > 0, 'photographers sell photos per launch');
+  const trainedPhoto = derive({ photographers: { hired: 2, trained: 3 } });
+  assert.ok(trainedPhoto.photoPerRide > photo.photoPerRide, 'photo training raises photo value');
+  assert.ok(photo.ratePerMin > baseline.ratePerMin, 'photo sales show up in the income estimate');
 }
 
 {

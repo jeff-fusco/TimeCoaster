@@ -78,7 +78,8 @@ test('staff panel opens and closes from the bottom controls', async ({ page }) =
 
   await page.locator('#staffToggle').click();
   await expect(page.locator('#staffPanel')).toBeVisible();
-  await expect(page.locator('#staffList .staff-row')).toHaveCount(4);
+  await expect(page.locator('#staffList .staff-row')).toHaveCount(5);
+  await expect(page.locator('#staffList .staff-row .s-status').first()).toContainText(/dispatch trains yourself/i);
   await page.locator('#staffClose').click();
   await expect(page.locator('#staffPanel')).toBeHidden();
   expect(pageErrors).toEqual([]);

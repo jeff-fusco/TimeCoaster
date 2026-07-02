@@ -106,6 +106,19 @@ function run(args) {
   assert.equal(approaching.mode, 'run', 'second train keeps running past a busy platform');
 }
 
+// Photographers add flat photo sales when a non-empty train launches.
+{
+  const state = { money: 0, rides: 0 };
+  const economy = { ...ECONOMY, photoPerRide: 12 };
+  const full = makeTrain({ mode: 'dwell', phase: 'ready', cycleBoard: 4, boarded: 4 });
+  dispatchTrain(full, { economy, state });
+  assert.equal(state.money, 4 * ECONOMY.perRider + 12, 'ride income + photo sales');
+
+  const empty = makeTrain({ mode: 'dwell', phase: 'ready', cycleBoard: 0, boarded: 0 });
+  dispatchTrain(empty, { economy, state });
+  assert.equal(state.money, 4 * ECONOMY.perRider + 12, 'no photos sold on an empty train');
+}
+
 // Negative path speed rolls a train backward and wraps around the loop cleanly.
 {
   const trains = [makeTrain({ s: 0.2, prevS: 0.2 })];

@@ -34,9 +34,11 @@ function allowedAdvance(tr, trains, L, carLen, blockGap) {
 }
 
 // Credit a ready train's ride and send it back out. Returns true if it launched.
+// Photographers add a flat photo-sales bonus per dispatched (non-empty) train.
 export function dispatchTrain(tr, { economy, state, onDeposit = () => {} }) {
   if (tr.mode !== 'dwell' || tr.phase !== 'ready') return false;
-  const income = Math.round(tr.cycleBoard * economy.perRider);
+  const photos = tr.cycleBoard > 0 ? Math.round(economy.photoPerRide || 0) : 0;
+  const income = Math.round(tr.cycleBoard * economy.perRider) + photos;
   if (income > 0) {
     state.money += income;
     state.rides += 1;

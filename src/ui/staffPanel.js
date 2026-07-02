@@ -7,6 +7,7 @@ export function createStaffPanel({
   getStaff,
   getState,
   costs,        // { hire(role, staff), train(role, staff), canHire(role, staff), canTrain(role, staff) }
+  describe = () => '',   // (role, entry) -> live status line
   onHire,
   onTrain,
   fmt,
@@ -35,9 +36,12 @@ export function createStaffPanel({
       row.innerHTML =
         `<div class="s-ic">${cfg.icon}</div>` +
         `<div class="s-info">` +
-        `<div class="s-nm">${cfg.name} <span class="s-count">×${s.hired}</span></div>` +
+        `<div class="s-nm">${cfg.name} <span class="s-count">×${s.hired}</span>` +
+        `<span class="s-tr"> · Training Lv ${s.trained}${atTrainMax ? ' (max)' : ''}</span></div>` +
         `<div class="s-ds">${cfg.desc}</div>` +
-        `<div class="s-tr">Training Lv ${s.trained}${atTrainMax ? ' (max)' : ''}</div>` +
+        `<div class="s-fx"><b>Hire</b> ${cfg.hireDesc}</div>` +
+        `<div class="s-fx"><b>Train</b> ${cfg.trainDesc}</div>` +
+        `<div class="s-status">${describe(role, s)}</div>` +
         `</div>` +
         `<div class="s-acts">` +
         `<button class="staff-btn" data-act="hire" data-role="${role}" ${!hireable || money < hCost ? 'disabled' : ''}>` +

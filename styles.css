@@ -148,7 +148,10 @@
   .staff-row .s-nm{font-family:'Fredoka';font-weight:600;font-size:15px}
   .staff-row .s-count{color:var(--build);font-weight:700}
   .staff-row .s-ds{font-size:11.5px;color:var(--ink-soft);line-height:1.2;margin-top:1px}
-  .staff-row .s-tr{font-size:10px;color:var(--amber-deep);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+  .staff-row .s-tr{font-size:10px;color:var(--amber-deep);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+  .staff-row .s-fx{font-size:10.5px;color:var(--ink-soft);line-height:1.25;margin-top:2px}
+  .staff-row .s-fx b{color:var(--ink);font-family:'Fredoka';font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.06em;background:var(--cream);border:1px solid var(--cream-edge);border-radius:5px;padding:0 4px;margin-right:3px}
+  .staff-row .s-status{font-size:11px;color:var(--build);font-weight:600;margin-top:4px;line-height:1.25}
   .staff-row .s-acts{display:flex;flex-direction:column;gap:5px}
   .staff-btn{height:30px;padding:0 12px;border-radius:9px;border:2px solid var(--ink);background:var(--good);color:#fff;font-family:'Fredoka';font-weight:700;font-size:12px;cursor:pointer;white-space:nowrap;transition:transform .08s}
   .staff-btn.train{background:var(--amber)}
