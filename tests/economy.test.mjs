@@ -8,19 +8,20 @@ import {
   researchEfficiency,
   upgradeCost,
 } from '../src/systems/economy.js';
+import { RESEARCH } from '../src/config/gameData.js';
 
 function makeUpgrades() {
   return {
-    car: { base: 60, growth: 1.78, level: 0, max: 16 },
-    seats: { base: 95, growth: 1.82, level: 0, max: 24 },
-    speed: { base: 80, growth: 1.76, level: 0, max: 30 },
-    train: { base: 500, growth: 4.15, level: 0, max: 4 },
-    queue: { base: 110, growth: 1.82, level: 0, max: 24 },
-    snacks: { base: 200, growth: 2.28, level: 0, max: 18 },
-    express: { base: 350, growth: 2.05, level: 0, max: 18 },
-    ticket: { base: 50, growth: 1.68, level: 0, max: 30 },
-    market: { base: 160, growth: 2.05, level: 0, max: 18 },
-    hype: { base: 120, growth: 1.95, level: 0, max: 24 },
+    car: { base: 90, growth: 2.05, level: 0, max: 16 },
+    seats: { base: 130, growth: 2.05, level: 0, max: 24 },
+    speed: { base: 120, growth: 2.08, level: 0, max: 30 },
+    train: { base: 2500, growth: 5.8, level: 0, max: 4 },
+    queue: { base: 170, growth: 2.08, level: 0, max: 24 },
+    snacks: { base: 320, growth: 2.55, level: 0, max: 18 },
+    express: { base: 650, growth: 2.35, level: 0, max: 18 },
+    ticket: { base: 85, growth: 1.92, level: 0, max: 30 },
+    market: { base: 260, growth: 2.3, level: 0, max: 18 },
+    hype: { base: 260, growth: 2.35, level: 0, max: 24 },
   };
 }
 
@@ -55,9 +56,18 @@ const station = {
 {
   assert.equal(upgradeCost({ base: 80, growth: 1.5, level: 0 }), 80);
   assert.equal(upgradeCost({ base: 80, growth: 1.5, level: 2 }), 180);
+  assert.equal(upgradeCost(makeUpgrades().train), 2500, 'first extra train is a mid-game purchase');
+  const trainCurve = makeUpgrades().train;
+  trainCurve.level = 2;
+  assert.equal(upgradeCost(trainCurve), 84100, 'extra trains ramp hard after the first');
   assert.equal(formatMoney(9999), '9,999');
   assert.equal(formatMoney(12500), '12.5k');
   assert.equal(formatMoney(1250000), '1.25M');
+}
+
+{
+  assert.equal(RESEARCH.brakes.rp, 300, 'first research unlock is no longer nearly free');
+  assert.ok(RESEARCH.train3.rp >= 2000, 'late train research is a long-arc target');
 }
 
 {
@@ -133,7 +143,7 @@ const station = {
   assert.ok(hiredEnt.arrivalRate > baseline.arrivalRate, 'entertainer hires raise arrivals');
   assert.equal(hiredEnt.queueCap, baseline.queueCap, 'hires alone do not extend the queue');
   const trainedEnt = derive({ entertainers: { hired: 3, trained: 2 } });
-  assert.equal(trainedEnt.queueCap, baseline.queueCap + 10, 'training adds queue capacity');
+  assert.equal(trainedEnt.queueCap, baseline.queueCap + 16, 'training adds queue capacity');
 
   const mech = derive({ mechanics: { hired: 3, trained: 0 } });
   assert.equal(mech.perRider, baseline.perRider, 'mechanic hires do not change income (they speed installs)');

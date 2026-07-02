@@ -33,16 +33,16 @@ export function researchEfficiency(fundingPct = 0) {
 // Read by deriveEconomy, maintenance (install speed) and the staff panel's
 // live status lines, so the whole balance lives here.
 export const STAFF_FX = {
-  operatorBoard: 0.35,   // boarding speed per operator hired
-  operatorLaunch: 0.5,   // auto-launch delay reduction per training level
-  entertainArrive: 0.10, // guest arrival bonus per entertainer hired
-  entertainQueue: 5,     // queue capacity per entertainer training level
-  mechanicInstall: 0.45, // install speed per mechanic hired
-  mechanicIncome: 0.04,  // ride income per mechanic training level
-  janitorSnack: 0.06,    // snack sales per janitor hired
-  janitorAppeal: 0.02,   // ride rating income per janitor training level
-  photoBase: 3,          // $ per dispatched train per photographer hired
-  photoSkill: 0.6,       // photo value bonus per training level
+  operatorBoard: 0.18,   // boarding speed per operator hired
+  operatorLaunch: 0.8,   // auto-launch delay reduction per training level
+  entertainArrive: 0.05, // guest arrival bonus per entertainer hired
+  entertainQueue: 8,     // queue capacity per entertainer training level
+  mechanicInstall: 0.22, // install speed per mechanic hired
+  mechanicIncome: 0.075, // ride income per mechanic training level
+  janitorSnack: 0.025,   // snack sales per janitor hired
+  janitorAppeal: 0.04,   // ride rating income per janitor training level
+  photoBase: 1.5,        // $ per dispatched train per photographer hired
+  photoSkill: 1.0,       // photo value bonus per training level
 };
 
 const NO_STAFF = { hired: 0, trained: 0 };

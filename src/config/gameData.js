@@ -46,8 +46,8 @@ export const PHYS = {
 
 export const MPH = 2.7;
 export const MAX_TRACK_HEIGHT = 18;
-export const COST_PER_M = 8;
-export const FEATURE_COST = { plain: 0, lift: 120, brake: 60, loop: 900, corkscrew: 1400 };
+export const COST_PER_M = 12;
+export const FEATURE_COST = { plain: 0, lift: 180, brake: 100, loop: 1800, corkscrew: 2800 };
 export const FEATURE_REFUND = 0.6;
 
 export const DEFAULT_CTRL = [
@@ -63,16 +63,16 @@ export const DEFAULT_CTRL = [
 ];
 
 export const UPGRADES = {
-  car: { name: 'Add a Car', desc: '+4 seats · longer platform', icon: '🚃', base: 60, growth: 1.78, level: 0, max: 16, cat: 'ride' },
-  seats: { name: 'Roomier Cars', desc: '+2 seats per car', icon: '💺', base: 95, growth: 1.82, level: 0, max: 24, cat: 'ride' },
-  speed: { name: 'Faster Track', desc: 'More launch energy', icon: '⚡', base: 80, growth: 1.76, level: 0, max: 30, cat: 'ride' },
-  train: { name: 'Add a Train', desc: 'Another train on track', icon: '🎢', base: 500, growth: 4.15, level: 0, max: 4, cat: 'ride' },
-  queue: { name: 'Bigger Queue', desc: '+10 people can wait in line', icon: '🚧', base: 110, growth: 1.82, level: 0, max: 24, cat: 'queue' },
-  snacks: { name: 'Snack Stands', desc: '+$3/min per waiting guest', icon: '🍿', base: 200, growth: 2.28, level: 0, max: 18, cat: 'queue' },
-  express: { name: 'Express Lane', desc: '+$5 bonus per rider', icon: '🌟', base: 350, growth: 2.05, level: 0, max: 18, cat: 'marketing' },
-  ticket: { name: 'Ticket Price', desc: '+$1 per rider', icon: '🎟️', base: 50, growth: 1.68, level: 0, max: 30, cat: 'marketing' },
-  market: { name: 'Marketing', desc: 'More guests · excitement pays', icon: '📣', base: 160, growth: 2.05, level: 0, max: 18, cat: 'marketing' },
-  hype: { name: 'Theming & Hype', desc: '×1.12 to all earnings', icon: '🎪', base: 120, growth: 1.95, level: 0, max: 24, cat: 'marketing' },
+  car: { name: 'Add a Car', desc: '+4 seats · longer platform', icon: '🚃', base: 90, growth: 2.05, level: 0, max: 16, cat: 'ride' },
+  seats: { name: 'Roomier Cars', desc: '+2 seats per car', icon: '💺', base: 130, growth: 2.05, level: 0, max: 24, cat: 'ride' },
+  speed: { name: 'Faster Track', desc: 'More launch energy', icon: '⚡', base: 120, growth: 2.08, level: 0, max: 30, cat: 'ride' },
+  train: { name: 'Add a Train', desc: 'Another train on track', icon: '🎢', base: 2500, growth: 5.8, level: 0, max: 4, cat: 'ride' },
+  queue: { name: 'Bigger Queue', desc: '+10 people can wait in line', icon: '🚧', base: 170, growth: 2.08, level: 0, max: 24, cat: 'queue' },
+  snacks: { name: 'Snack Stands', desc: '+$3/min per waiting guest', icon: '🍿', base: 320, growth: 2.55, level: 0, max: 18, cat: 'queue' },
+  express: { name: 'Express Lane', desc: '+$5 bonus per rider', icon: '🌟', base: 650, growth: 2.35, level: 0, max: 18, cat: 'marketing' },
+  ticket: { name: 'Ticket Price', desc: '+$1 per rider', icon: '🎟️', base: 85, growth: 1.92, level: 0, max: 30, cat: 'marketing' },
+  market: { name: 'Marketing', desc: 'More guests · excitement pays', icon: '📣', base: 260, growth: 2.3, level: 0, max: 18, cat: 'marketing' },
+  hype: { name: 'Theming & Hype', desc: '×1.12 to all earnings', icon: '🎪', base: 260, growth: 2.35, level: 0, max: 24, cat: 'marketing' },
 };
 
 export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'ticket', 'market', 'hype', 'express'];
@@ -94,52 +94,52 @@ export const STAFF = {
     desc: 'Crew the platform and launch the trains.',
     hireDesc: 'each hire boards guests faster · first hire enables auto-launch',
     trainDesc: 'drilled crews launch sooner after boarding',
-    hireBase: 220, hireGrowth: 1.95, hireMax: 8,
-    trainBase: 500, trainGrowth: 2.3, trainMax: 6,
+    hireBase: 260, hireGrowth: 2.1, hireMax: 8,
+    trainBase: 480, trainGrowth: 2.45, trainMax: 6,
   },
   entertainers: {
     name: 'Entertainers', icon: '🤹',
     desc: 'Work the crowd outside the gates.',
     hireDesc: 'each hire draws more guests to the park',
     trainDesc: 'better shows keep a longer line happy (+queue capacity)',
-    hireBase: 180, hireGrowth: 1.9, hireMax: 8,
-    trainBase: 420, trainGrowth: 2.25, trainMax: 6,
+    hireBase: 220, hireGrowth: 2.05, hireMax: 8,
+    trainBase: 460, trainGrowth: 2.4, trainMax: 6,
   },
   mechanics: {
     name: 'Mechanics', icon: '🔧',
     desc: 'Install new cars and keep the ride humming.',
     hireDesc: 'each hire speeds up car & train installs',
     trainDesc: 'certified upkeep earns more per rider',
-    hireBase: 260, hireGrowth: 1.95, hireMax: 8,
-    trainBase: 560, trainGrowth: 2.3, trainMax: 6,
+    hireBase: 320, hireGrowth: 2.12, hireMax: 8,
+    trainBase: 620, trainGrowth: 2.45, trainMax: 6,
   },
   janitors: {
     name: 'Janitors', icon: '🧹',
     desc: 'Keep the plaza spotless.',
     hireDesc: 'each hire lifts snack sales in the queue',
     trainDesc: 'a gleaming park impresses guests (+ride rating income)',
-    hireBase: 160, hireGrowth: 1.9, hireMax: 8,
-    trainBase: 380, trainGrowth: 2.25, trainMax: 6,
+    hireBase: 200, hireGrowth: 2.05, hireMax: 8,
+    trainBase: 430, trainGrowth: 2.4, trainMax: 6,
   },
   photographers: {
     name: 'Photographers', icon: '📸',
     desc: 'Sell on-ride photos at the exit ramp.',
     hireDesc: 'each hire sells photos on every dispatched train',
     trainDesc: 'better shots sell for more (scales with excitement)',
-    hireBase: 340, hireGrowth: 2.0, hireMax: 6,
-    trainBase: 700, trainGrowth: 2.35, trainMax: 5,
+    hireBase: 420, hireGrowth: 2.15, hireMax: 6,
+    trainBase: 820, trainGrowth: 2.55, trainMax: 5,
   },
 };
 export const STAFF_ORDER = ['operators', 'entertainers', 'mechanics', 'janitors', 'photographers'];
 
 export const RESEARCH = {
-  brakes: { name: 'Block Brakes', desc: 'Unlock 🛑 brake track', icon: '🛑', rp: 60 },
-  loop: { name: 'Vertical Loop', desc: 'Unlock 🔁 loop track', icon: '🔁', rp: 150 },
-  cork: { name: 'Corkscrew', desc: 'Unlock 🌀 corkscrew track', icon: '🌀', rp: 260 },
-  photo: { name: 'On-Ride Photo', desc: '+15% ride income', icon: '📸', rp: 180 },
-  launch: { name: 'Launch System', desc: '+1 free Faster Track level', icon: '🚀', rp: 220 },
-  queue2: { name: 'Switchback Pro', desc: '+30 max queue capacity', icon: '🧱', rp: 160 },
-  train3: { name: 'Block Sections', desc: 'Raise train cap to 9 trains', icon: '🚆', rp: 340 },
+  brakes: { name: 'Block Brakes', desc: 'Unlock 🛑 brake track', icon: '🛑', rp: 300 },
+  loop: { name: 'Vertical Loop', desc: 'Unlock 🔁 loop track', icon: '🔁', rp: 850 },
+  cork: { name: 'Corkscrew', desc: 'Unlock 🌀 corkscrew track', icon: '🌀', rp: 1500 },
+  photo: { name: 'On-Ride Photo', desc: '+15% ride income', icon: '📸', rp: 1000 },
+  launch: { name: 'Launch System', desc: '+1 free Faster Track level', icon: '🚀', rp: 1300 },
+  queue2: { name: 'Switchback Pro', desc: '+30 max queue capacity', icon: '🧱', rp: 900 },
+  train3: { name: 'Block Sections', desc: 'Raise train cap to 9 trains', icon: '🚆', rp: 2200 },
 };
 
 export const RESEARCH_ORDER = ['brakes', 'loop', 'cork', 'photo', 'launch', 'queue2', 'train3'];

@@ -16,11 +16,18 @@ export function createStaffPanel({
   const panel = $('staffPanel');
   const list = $('staffList');
   let open = false;
+  let lastRenderKey = '';
 
   function render() {
     if (!list) return;
     const staff = getStaff();
     const money = getState().money;
+    const renderKey = JSON.stringify({
+      money: Math.floor(money),
+      staff: staffOrder.map(role => [role, staff[role]?.hired, staff[role]?.trained]),
+    });
+    if (renderKey === lastRenderKey) return;
+    lastRenderKey = renderKey;
     list.innerHTML = '';
     staffOrder.forEach(role => {
       const cfg = staffConfig[role];
@@ -68,7 +75,10 @@ export function createStaffPanel({
     open = next;
     if (panel) panel.hidden = !open;
     $('staffToggle')?.classList.toggle('active', open);
-    if (open) render();
+    if (open) {
+      lastRenderKey = '';
+      render();
+    }
   }
 
   $('staffClose')?.addEventListener('click', () => setOpen(false));

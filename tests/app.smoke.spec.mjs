@@ -18,7 +18,7 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   await page.goto('/index.html');
 
   await expect(page.locator('#scene canvas')).toBeVisible();
-  const cssResponse = await page.request.get('/styles.css?v=20260701-17');
+  const cssResponse = await page.request.get('/styles.css?v=20260701-19');
   await expect(cssResponse).toBeOK();
   expect(cssResponse.headers()['cache-control']).toContain('no-store');
   await expect(page.locator('.money #money')).toContainText(/\d/);
@@ -82,6 +82,29 @@ test('staff panel opens and closes from the bottom controls', async ({ page }) =
   await expect(page.locator('#staffList .staff-row .s-status').first()).toContainText(/dispatch trains yourself/i);
   await page.locator('#staffClose').click();
   await expect(page.locator('#staffPanel')).toBeHidden();
+  expect(pageErrors).toEqual([]);
+});
+
+test('staff training rebuilds queue visuals when capacity changes', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 5000, rides: 0, queue: 8 }));
+  });
+  await page.goto('/index.html');
+
+  const before = await page.evaluate(() => window.__TC3D_DEBUG__.queueVisual());
+  await page.locator('#staffToggle').click();
+  const entertainers = page.locator('#staffList .staff-row').filter({ hasText: 'Entertainers' });
+  await entertainers.locator('[data-act="hire"]').click();
+  await entertainers.locator('[data-act="train"]').click();
+
+  await expect.poll(async () => page.evaluate(() => window.__TC3D_DEBUG__.queueVisual().capacity)).toBeGreaterThan(before.capacity);
+  const after = await page.evaluate(() => window.__TC3D_DEBUG__.queueVisual());
+  expect(after.visualCapacity).toBeGreaterThanOrEqual(after.capacity);
   expect(pageErrors).toEqual([]);
 });
 
@@ -186,6 +209,23 @@ test('clicking a for-sale sign opens purchase details and buys the plot', async 
   expect(pageErrors).toEqual([]);
 });
 
+test('decor placement refuses station and queue footprints', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 1000, rides: 0, queue: 8 }));
+  });
+  await page.goto('/index.html');
+
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.canPlaceDecor('flowers', 0, 0))).toBe(true);
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.canPlaceDecor('flowers', 0, 9))).toBe(false);
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.canPlaceDecor('flowers', 0, 11))).toBe(false);
+  expect(pageErrors).toEqual([]);
+});
+
 test('decor tab places a flower bed on owned land', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', err => pageErrors.push(err.message));
@@ -202,11 +242,26 @@ test('decor tab places a flower bed on owned land', async ({ page }) => {
   await page.locator('#decor-flowers').click();
   await expect(page.locator('#decor-flowers')).toHaveClass(/selected/);
 
-  // aim left of centre: still open owned grass, and clear of the shop overlay
-  // that covers the middle-right of narrow (mobile) viewports
-  const canvas = page.locator('#scene canvas');
-  const box = await canvas.boundingBox();
-  await page.mouse.click(box.x + box.width * 0.32, box.y + box.height / 2);
+  const spot = await page.evaluate(() => {
+    const candidates = [
+      [-4, -2],
+      [-3, -4],
+      [3, -3],
+      [5, 2],
+      [-5, 3],
+      [0, 0],
+    ];
+    for (const [x, z] of candidates) {
+      if (!window.__TC3D_DEBUG__.canPlaceDecor('flowers', x, z)) continue;
+      const screen = window.__TC3D_DEBUG__.screenPoint(x, z);
+      if (screen.x > 32 && screen.x < window.innerWidth - 260 && screen.y > 80 && screen.y < window.innerHeight - 120) {
+        return screen;
+      }
+    }
+    return undefined;
+  });
+  expect(spot).toBeTruthy();
+  await page.mouse.click(spot.x, spot.y);
 
   await expect.poll(async () => page.evaluate(() => window.__TC3D_DEBUG__.decorCount())).toBe(1);
   await expect(page.locator('#money')).toHaveText('960');

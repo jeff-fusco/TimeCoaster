@@ -119,6 +119,8 @@ const maintenance = createMaintenanceState(); // purchased car/train installs wa
 const property = createPropertyState();
 const decorations = createDecorationsState(); // placed decor pieces [{type,x,z}]
 let stationRefs = { queueGuests:[], stopS:0.85, platLen:6 };
+let decorBlockers = [];
+let queueVisualSignature = '';
 let ctrlPts = DEFAULT_CTRL.map(p=>({...p}));
 let paidLength = 0;            // metres of track already paid for
 let path = null;              // the live track path (built by buildPath)
@@ -278,7 +280,24 @@ function buildTrackGeometry(){
   });
 }
 
+function queueSignature(d = derived()){
+  const station = `${ctrlPts[0]?.x},${ctrlPts[0]?.z},${ctrlPts[1]?.x},${ctrlPts[1]?.z}`;
+  return `${d.queueCap}|${UPGRADES.snacks.level}|${station}`;
+}
+
+function refreshDecorBlockers(){
+  const blockers = [...(stationRefs.decorBlockers || [])];
+  if(path?.pos){
+    for(let i=0;i<path.pos.length;i+=4){
+      const p=path.pos[i];
+      if(p.y <= 2.2) blockers.push({ type:'circle', label:'track', cx:p.x, cz:p.z, radius:0.75, margin:0.25 });
+    }
+  }
+  decorBlockers = blockers;
+}
+
 function buildStationAndQueue(){
+  const d = derived();
   renderStationAndQueue({
     THREE,
     stationGrp,
@@ -286,7 +305,7 @@ function buildStationAndQueue(){
     ctrlPts,
     colors: COL,
     upgrades: rideUpgrades(),
-    derived,
+    derived: () => d,
     sampleAt,
     stationRefs,
     carLength: CAR_LEN,
@@ -295,10 +314,19 @@ function buildStationAndQueue(){
     worldUp: WORLD_UP,
     disposeGroup,
   });
+  queueVisualSignature = queueSignature(d);
+  refreshDecorBlockers();
 }
 
 function updateQueueVisuals(){
   renderQueueVisuals({ queue: sim.queue, stationRefs });
+}
+
+function ensureQueueVisualFresh(d = derived()){
+  if(queueSignature(d) === queueVisualSignature) return false;
+  buildStationAndQueue();
+  updateQueueVisuals();
+  return true;
 }
 
 // =========================================================================
@@ -394,6 +422,20 @@ if(window.__TIME_COASTER_TEST__){
     buildActive: () => bm.active,
     ownedLand: () => property.owned.length,
     decorCount: () => decorations.length,
+    queueVisual: () => ({
+      capacity: stationRefs.queueCapacity,
+      visualCapacity: stationRefs.queueVisualCapacity,
+      lanes: stationRefs.queueLanes,
+      guests: stationRefs.queueGuests.length,
+    }),
+    canPlaceDecor: (type, x, z) => canPlaceDecoration({ property, decorations, type, x, z, blockers:decorBlockers }),
+    screenPoint: (x, z, y = 0) => {
+      const v = new THREE.Vector3(x, y, z).project(camera);
+      return {
+        x: (v.x * 0.5 + 0.5) * host.clientWidth,
+        y: (-v.y * 0.5 + 0.5) * host.clientHeight,
+      };
+    },
     setFrustum: v => { frustum = v; resize(); placeCamera(); renderer.render(scene, camera); },
     // screen-space centres of the for-sale sign boards, for click tests
     landSigns: () => {
@@ -547,7 +589,7 @@ renderer.domElement.addEventListener('mousemove', e=>{
   if(!p){ if(decorPlace.ghost) decorPlace.ghost.visible=false; return; }
   decorPlace.ghost.visible=true;
   decorPlace.ghost.position.set(p.x, 0.04, p.z);
-  const ok=canPlaceDecoration({ property, decorations, type:decorPlace.type, x:p.x, z:p.z })
+  const ok=canPlaceDecoration({ property, decorations, type:decorPlace.type, x:p.x, z:p.z, blockers:decorBlockers })
     && state.money>=decorationCost(decorPlace.type);
   if(ok!==decorPlace.valid) setGhostValidity(ok);
 });
@@ -566,7 +608,7 @@ function tryPlaceDecor(clientX, clientY){
   const p=decorGroundPoint(clientX, clientY);
   if(!p) return true;
   const type=decorPlace.type;
-  const cost=placeDecoration({ decorations, property, state, type, x:p.x, z:p.z });
+  const cost=placeDecoration({ decorations, property, state, type, x:p.x, z:p.z, blockers:decorBlockers });
   if(cost>0){
     buildDecorGeometry();
     spawnCoinScreen(clientX, clientY, cost, true);
@@ -632,6 +674,7 @@ function tick(){
       state.money-=spend; research.points+=spend/10*researchEfficiency(fundingPct);
     }
     updateTrains(dt,d);
+    ensureQueueVisualFresh(d);
     updateQueueVisuals();
     hudAccum+=dt;
     if(hudAccum>=0.2){ refreshHUD(); hudAccum=0; }
@@ -697,7 +740,12 @@ const staffUI=createStaffPanel({
   },
   onTrain: role => {
     const spent=trainStaff(role, staff, state.money);
-    if(spent>0){ state.money-=spent; spawnBankDelta(spent,true); refreshHUD(); saveGame(); showToast(`${STAFF[role].name} training improved`); }
+    if(spent>0){
+      state.money-=spent;
+      spawnBankDelta(spent,true);
+      if(role==='entertainers') ensureQueueVisualFresh();
+      refreshHUD(); saveGame(); showToast(`${STAFF[role].name} training improved`);
+    }
   },
   fmt,
 });
@@ -720,6 +768,7 @@ function researchProject(key){
   research.points-=p.rp; research.done[key]=true;
   applyResearchEffects();
   if(key==='launch') buildPath();              // free speed level changes the physics
+  if(key==='queue2') ensureQueueVisualFresh();
   renderShop(); refreshHUD(); saveGame();
   showToast(`Researched: ${p.name}!`);
 }

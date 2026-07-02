@@ -33,6 +33,29 @@ function guest(THREE, grp, x, gndY, z, colorIndex, headColors, guestColors) {
   return group;
 }
 
+function crowdCluster(THREE, grp, x, gndY, z, colorIndex, headColors, guestColors) {
+  const group = new THREE.Group();
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2 + colorIndex * 0.7;
+    const r = i === 0 ? 0 : 0.22;
+    const body = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.13, 0.16, 0.34, 6),
+      new THREE.MeshLambertMaterial({ color: guestColors[(colorIndex + i) % guestColors.length] }),
+    );
+    body.position.set(Math.cos(a) * r, 0.17, Math.sin(a) * r);
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.11, 8, 6),
+      new THREE.MeshLambertMaterial({ color: headColors[(colorIndex + i) % headColors.length] }),
+    );
+    head.position.set(body.position.x, 0.42, body.position.z);
+    group.add(body, head);
+  }
+  group.position.set(x, gndY, z);
+  group.castShadow = true;
+  grp.add(group);
+  return group;
+}
+
 // cream text on a coloured board (entrance sign)
 function makeBoardTexture(THREE, text, bg, fg) {
   const canvas = document.createElement('canvas');
@@ -75,7 +98,7 @@ function buildQueue({
   const spacing = 0.75;
   const gapW = 1.3;
   const slotsPerLane = Math.max(3, Math.floor(laneLen / spacing));
-  const nLanes = Math.min(16, Math.max(2, Math.ceil(queueCap / slotsPerLane)));
+  const nLanes = Math.max(2, Math.ceil(queueCap / slotsPerLane));
   const depth = nLanes * laneGap;
   const xL = -laneLen / 2;
   const xR = laneLen / 2;
@@ -224,6 +247,9 @@ function buildQueue({
   }
 
   // ── guest pool: slot 0 at the boarding gate, snaking back to the entrance ──
+  stationRefs.queueSlots = [];
+  const individualSlots = Math.min(poolSize, 120);
+  const clusterSize = 4;
   for (let i = 0; i < poolSize; i++) {
     const lane = Math.floor(i / slotsPerLane);
     if (lane >= nLanes) break;
@@ -233,10 +259,27 @@ function buildQueue({
     const to = lane % 2 === 0 ? xL + 0.55 : xR - 0.55;
     const x = THREE.MathUtils.lerp(from, to, frac);
     const z = startZ + (lane + 0.5) * laneGap;
-    const g = guest(THREE, grp, x, plazaTop, z, i, headColors, guestColors);
+    const g = i < individualSlots
+      ? guest(THREE, grp, x, plazaTop, z, i, headColors, guestColors)
+      : crowdCluster(THREE, grp, x, plazaTop, z, i, headColors, guestColors);
     g.visible = false;
     stationRefs.queueGuests.push(g);
+    stationRefs.queueSlots.push({ guestStart: i < individualSlots ? i : individualSlots + (i - individualSlots) * clusterSize });
   }
+  return {
+    depth,
+    laneLen,
+    nLanes,
+    slotsPerLane,
+    poolSize,
+    visualCapacity: poolSize <= individualSlots ? poolSize : individualSlots + (poolSize - individualSlots) * clusterSize,
+    bounds: {
+      cx: 0,
+      cz: (plazaZ0 + plazaZ1) / 2,
+      halfX: plazaW / 2,
+      halfZ: (plazaZ1 - plazaZ0) / 2,
+    },
+  };
 }
 
 export function buildStationAndQueue({
@@ -262,6 +305,8 @@ export function buildStationAndQueue({
   });
   disposeGroup(stationGrp);
   stationRefs.queueGuests = [];
+  stationRefs.queueSlots = [];
+  stationRefs.decorBlockers = [];
   if (!path) return;
 
   const frame = sampleAt(0);
@@ -308,12 +353,13 @@ export function buildStationAndQueue({
   box(THREE, grp, 0xf5a623, 2.0, 0.6, 0.16, -PLAT_LEN / 2 + 1.0, PLAT_H + postH - 0.15, PLAT_SIDE - PLAT_W / 2 - 0.1, false);
 
   const qStart = PLAT_SIDE + PLAT_W / 2 + 0.55;
-  const poolSize = Math.min(90, d.queueCap);
-  buildQueue({
+  const queueCap = Math.max(0, d.queueCap);
+  const poolSize = queueCap <= 120 ? queueCap : 120 + Math.ceil((queueCap - 120) / 4);
+  const queueInfo = buildQueue({
     THREE,
     grp,
     startZ: qStart,
-    queueCap: d.queueCap,
+    queueCap,
     poolSize,
     platLen: PLAT_LEN,
     platTop: PLAT_H,
@@ -322,6 +368,33 @@ export function buildStationAndQueue({
     headColors,
     guestColors,
   });
+  stationRefs.queueCapacity = queueCap;
+  stationRefs.queueVisualCapacity = queueInfo.visualCapacity;
+  stationRefs.queueLanes = queueInfo.nLanes;
+  stationRefs.queueDepth = queueInfo.depth;
+  stationRefs.decorBlockers = [
+    {
+      type: 'oriented-box',
+      label: 'station',
+      cx: 0,
+      cz: PLAT_SIDE,
+      halfX: PLAT_LEN / 2 + 0.6,
+      halfZ: PLAT_W / 2 + 0.8,
+      margin: 0.45,
+      basisX: { x: tang.x, z: tang.z },
+      basisZ: { x: righ.x, z: righ.z },
+      origin: { x: center.x, z: center.z },
+    },
+    {
+      type: 'oriented-box',
+      label: 'queue',
+      ...queueInfo.bounds,
+      margin: 0.35,
+      basisX: { x: tang.x, z: tang.z },
+      basisZ: { x: righ.x, z: righ.z },
+      origin: { x: center.x, z: center.z },
+    },
+  ];
 
   // snack kiosk serves the line from the edge of the queue plaza
   if (upgrades.snacks.level > 0) {
@@ -335,5 +408,6 @@ export function buildStationAndQueue({
 export function updateQueueVisuals({ queue, stationRefs }) {
   const n = Math.round(queue);
   const pool = stationRefs.queueGuests;
-  for (let i = 0; i < pool.length; i++) pool[i].visible = i < n;
+  const slots = stationRefs.queueSlots || [];
+  for (let i = 0; i < pool.length; i++) pool[i].visible = (slots[i]?.guestStart ?? i) < n;
 }

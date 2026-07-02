@@ -53,7 +53,7 @@ import { STAFF, STAFF_ORDER } from '../src/config/gameData.js';
     let total = 0;
     while (canHire(role, s)) total += hire(role, s, 1e12);
     assert.equal(s[role].hired, STAFF[role].hireMax);
-    assert.ok(total > 15000, `${role} full hire arc costs $${total} (> $15k)`);
+    assert.ok(total > 25000, `${role} full hire arc costs $${total} (> $25k)`);
     assert.ok(hire(role, s, 1e12) === 0, 'no hire past the cap');
   }
 }
@@ -65,19 +65,19 @@ import { STAFF, STAFF_ORDER } from '../src/config/gameData.js';
 
   s.operators.hired = 2;
   const hiredOnly = staffStatus('operators', s.operators);
-  assert.match(hiredOnly, /Boarding \+70%/, 'hires drive boarding speed');
+  assert.match(hiredOnly, /Boarding \+36%/, 'hires drive modest boarding speed');
   assert.match(hiredOnly, /3\.0s/, 'untrained crews launch at the base delay');
 
   s.operators.trained = 2;
-  assert.match(staffStatus('operators', s.operators), /1\.5s/, 'training shortens the launch delay');
+  assert.match(staffStatus('operators', s.operators), /1\.2s/, 'training shortens the launch delay');
 
   s.entertainers = { hired: 3, trained: 2 };
   const ent = staffStatus('entertainers', s.entertainers);
-  assert.match(ent, /\+30%/, 'hires drive arrivals');
-  assert.match(ent, /\+10\b/, 'training adds queue capacity');
+  assert.match(ent, /\+15%/, 'hires lightly drive arrivals');
+  assert.match(ent, /\+16\b/, 'training adds stronger queue capacity');
 
   s.photographers = { hired: 2, trained: 1 };
-  assert.match(staffStatus('photographers', s.photographers), /\$10 photo sales/, '2 * 3 * 1.6 = 9.6 -> $10');
+  assert.match(staffStatus('photographers', s.photographers), /\$6 photo sales/, '2 * 1.5 * 2.0 = $6');
 }
 
 console.log('staff tests passed');

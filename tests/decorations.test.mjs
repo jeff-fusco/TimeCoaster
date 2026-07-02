@@ -24,6 +24,38 @@ const property = createPropertyState(); // owns chunk 0,0 (24m, spans ±12)
   assert.equal(canPlaceDecoration({ property, decorations, type: 'flowers', x: 30, z: 0 }), false, 'unowned chunk');
   assert.equal(canPlaceDecoration({ property, decorations, type: 'flowers', x: 11.8, z: 0 }), false, 'too close to slab edge');
   assert.equal(canPlaceDecoration({ property, decorations, type: 'bogus', x: 0, z: 0 }), false, 'unknown type');
+  assert.equal(
+    canPlaceDecoration({
+      property,
+      decorations,
+      type: 'flowers',
+      x: 0,
+      z: 0,
+      blockers: [{ type: 'circle', cx: 0, cz: 0, radius: 1 }],
+    }),
+    false,
+    'blocked footprint',
+  );
+  assert.equal(
+    canPlaceDecoration({
+      property,
+      decorations,
+      type: 'flowers',
+      x: 1.2,
+      z: 2,
+      blockers: [{
+        type: 'oriented-box',
+        cx: 0,
+        cz: 2,
+        halfX: 2,
+        halfZ: 1,
+        basisX: { x: 1, z: 0 },
+        basisZ: { x: 0, z: 1 },
+      }],
+    }),
+    false,
+    'oriented blocked footprint',
+  );
 
   decorations.push({ type: 'lamp', x: 2, z: 2 });
   assert.equal(canPlaceDecoration({ property, decorations, type: 'flowers', x: 2.4, z: 2 }), false, 'spacing');
