@@ -21,6 +21,9 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   const cssResponse = await page.request.get('/styles.css?v=20260701-19');
   await expect(cssResponse).toBeOK();
   expect(cssResponse.headers()['cache-control']).toContain('no-store');
+  const threeResponse = await page.request.get('/vendor/three.module.js');
+  await expect(threeResponse).toBeOK();
+  expect(threeResponse.headers()['cache-control']).toContain('no-store');
   await expect(page.locator('.money #money')).toContainText(/\d/);
   await expect(page.locator('#shop')).toBeVisible();
   await expect(page.locator('#shopBody')).toBeVisible();
