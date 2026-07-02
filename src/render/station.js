@@ -33,84 +33,207 @@ function guest(THREE, grp, x, gndY, z, colorIndex, headColors, guestColors) {
   return group;
 }
 
+// cream text on a coloured board (entrance sign)
+function makeBoardTexture(THREE, text, bg, fg) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 72;
+  const g = canvas.getContext('2d');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 256, 72);
+  g.strokeStyle = '#1c2533';
+  g.lineWidth = 8;
+  g.strokeRect(4, 4, 248, 64);
+  g.fillStyle = fg;
+  g.textAlign = 'center';
+  g.font = '900 34px Fredoka, Arial, sans-serif';
+  g.fillText(text, 128, 48);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 4;
+  return tex;
+}
+
+// Southward switchback queue on its own plaza pier: guests enter under the
+// arch at the far end and snake lane by lane toward the boarding gate beside
+// the platform. Guest slot 0 is at the gate, so the visible line grows
+// backward from the station as sim.queue rises.
 function buildQueue({
   THREE,
   grp,
-  gndY,
   startZ,
+  queueCap,
   poolSize,
   platLen,
+  platTop,
   stationRefs,
   colors,
   headColors,
   guestColors,
 }) {
-  const laneLen = Math.max(platLen, 6);
-  const laneGap = 0.95;
-  const spacing = 0.72;
-  const gapW = 1.15;
-  const slotsPerLane = Math.max(2, Math.floor(laneLen / spacing));
-  const nLanes = Math.max(1, Math.ceil(poolSize / slotsPerLane));
+  const laneLen = Math.max(platLen, 8);
+  const laneGap = 1.15;
+  const spacing = 0.75;
+  const gapW = 1.3;
+  const slotsPerLane = Math.max(3, Math.floor(laneLen / spacing));
+  const nLanes = Math.min(16, Math.max(2, Math.ceil(queueCap / slotsPerLane)));
+  const depth = nLanes * laneGap;
   const xL = -laneLen / 2;
   const xR = laneLen / 2;
+  const plazaTop = 0.06;
+
+  // ── plaza pier: a packed-earth slab jutting south off the starter island ──
+  const plazaW = laneLen + 2.6;
+  const plazaZ0 = startZ - 1.5;                 // tucks under the starter slab edge
+  const plazaZ1 = startZ + depth + 2.1;         // room for the entrance arch
+  const plazaDepth = 1.45;
+  const plaza = new THREE.Mesh(
+    new THREE.BoxGeometry(plazaW, plazaDepth, plazaZ1 - plazaZ0),
+    [
+      new THREE.MeshLambertMaterial({ color: colors.dirt }),
+      new THREE.MeshLambertMaterial({ color: colors.dirt }),
+      new THREE.MeshLambertMaterial({ color: colors.sand || colors.platform }),
+      new THREE.MeshLambertMaterial({ color: colors.dirtDark || 0x6b4a2a }),
+      new THREE.MeshLambertMaterial({ color: colors.dirt }),
+      new THREE.MeshLambertMaterial({ color: colors.dirt }),
+    ],
+  );
+  plaza.position.set(0, plazaTop - plazaDepth / 2, (plazaZ0 + plazaZ1) / 2);
+  plaza.receiveShadow = true;
+  plaza.castShadow = true;
+  grp.add(plaza);
+
+  // alternating lane strips so the switchback path reads at a glance
+  const stripMats = [
+    new THREE.MeshLambertMaterial({ color: 0xe8dcb0 }),
+    new THREE.MeshLambertMaterial({ color: 0xcbb98a }),
+  ];
+  const stripGeo = new THREE.BoxGeometry(laneLen + 0.7, 0.05, laneGap - 0.12);
+  for (let k = 0; k < nLanes; k++) {
+    const strip = new THREE.Mesh(stripGeo, stripMats[k % 2]);
+    strip.position.set(0, plazaTop + 0.028, startZ + (k + 0.5) * laneGap);
+    strip.receiveShadow = true;
+    grp.add(strip);
+  }
+
+  // ── cream-and-wood fencing: posts with caps + double rails ──
   const postH = 1.0;
-  const railY = gndY + postH * 0.78;
-  const postMat = new THREE.MeshLambertMaterial({ color: 0x7a5a28 });
-  const railMat = new THREE.MeshLambertMaterial({ color: 0xb88030 });
+  const postMat = new THREE.MeshLambertMaterial({ color: colors.trunk });
+  const capMat = new THREE.MeshLambertMaterial({ color: 0xfbf3e2 });
+  const railMat = new THREE.MeshLambertMaterial({ color: 0xfbf3e2 });
+  const postGeo = new THREE.CylinderGeometry(0.07, 0.085, postH, 6);
+  const capGeo = new THREE.SphereGeometry(0.1, 8, 6);
+  const post = (x, z) => {
+    const p = new THREE.Mesh(postGeo, postMat);
+    p.position.set(x, plazaTop + postH / 2, z);
+    p.castShadow = true;
+    grp.add(p);
+    const cap = new THREE.Mesh(capGeo, capMat);
+    cap.position.set(x, plazaTop + postH + 0.04, z);
+    grp.add(cap);
+  };
+  const railHeights = [0.72, 0.4];
   const railX = (xm, z, len) => {
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, len, 5), railMat);
-    mesh.position.set(xm, railY, z);
-    mesh.rotation.z = Math.PI / 2;
-    grp.add(mesh);
+    for (const h of railHeights) {
+      const r = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, len, 5), railMat);
+      r.position.set(xm, plazaTop + h, z);
+      r.rotation.z = Math.PI / 2;
+      grp.add(r);
+    }
   };
   const railZ = (x, zm, len) => {
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, len, 5), railMat);
-    mesh.position.set(x, railY, zm);
-    mesh.rotation.x = Math.PI / 2;
-    grp.add(mesh);
-  };
-  const post = (x, z) => {
-    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, postH, 6), postMat);
-    mesh.position.set(x, gndY + postH / 2, z);
-    mesh.castShadow = true;
-    grp.add(mesh);
+    for (const h of railHeights) {
+      const r = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, len, 5), railMat);
+      r.position.set(x, plazaTop + h, zm);
+      r.rotation.x = Math.PI / 2;
+      grp.add(r);
+    }
   };
 
+  // lane boundaries run along x; each has a walk-through gap at alternating
+  // ends so the path serpentines. Guests walk lane k toward its "exit" end.
+  const entranceAtRight = (nLanes - 1) % 2 === 0;
   for (let k = 0; k <= nLanes; k++) {
-    const z = startZ - laneGap / 2 + k * laneGap;
-    if (k === 0) {
-      railX(xR - (laneLen - gapW) / 2, z, laneLen - gapW);
-    } else if (k === nLanes) {
-      railX(0, z, laneLen);
-    } else {
-      const turnAtRight = (k - 1) % 2 === 0;
-      const solid = laneLen - gapW;
-      railX(turnAtRight ? xL + solid / 2 : xR - solid / 2, z, solid);
-    }
+    const z = startZ + k * laneGap;
+    let gapSide = 0; // -1 gap at xL, +1 gap at xR, 0 solid
+    if (k === 0) gapSide = +1;                               // boarding gate
+    else if (k === nLanes) gapSide = entranceAtRight ? 1 : -1; // entrance
+    else gapSide = k % 2 === 1 ? -1 : 1;                     // U-turns
+    const solid = laneLen - gapW;
+    railX(gapSide > 0 ? xL + solid / 2 : xR - solid / 2, z, solid);
     post(xL, z);
     post(xR, z);
+    post(gapSide > 0 ? xR - gapW : xL + gapW, z);
+  }
+  // side closures — guests never slip out the ends of a lane
+  railZ(xL, startZ + depth / 2, depth);
+  railZ(xR, startZ + depth / 2, depth);
+
+  // ── boarding gate steps up to the platform deck ──
+  const gateX = xR - gapW / 2;
+  box(THREE, grp, 0xcdb884, gapW - 0.2, 0.24, 0.7, gateX, plazaTop + 0.12, startZ - 0.42, true);
+  box(THREE, grp, 0xd8c79a, gapW - 0.2, 0.24, 0.5, gateX, plazaTop + 0.34, startZ - 0.68, true);
+
+  // ── entrance arch + pennant banners at the far end ──
+  const archX = entranceAtRight ? xR - gapW / 2 : xL + gapW / 2;
+  const archZ = startZ + depth + 0.55;
+  const archH = 2.3;
+  for (const dx of [-0.95, 0.95]) {
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, archH, 6), postMat);
+    p.position.set(archX + dx, plazaTop + archH / 2, archZ);
+    p.castShadow = true;
+    grp.add(p);
+  }
+  const boardTex = makeBoardTexture(THREE, 'ENTRANCE', '#e8533f', '#fbf3e2');
+  const board = new THREE.Mesh(
+    new THREE.BoxGeometry(2.3, 0.62, 0.12),
+    [
+      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
+      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
+      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
+      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
+      new THREE.MeshLambertMaterial({ map: boardTex }),
+      new THREE.MeshLambertMaterial({ map: boardTex }),
+    ],
+  );
+  board.position.set(archX, plazaTop + archH - 0.1, archZ);
+  board.castShadow = true;
+  grp.add(board);
+
+  // pennant string across the back of the plaza
+  const flagCols = [...guestColors, colors.roof];
+  const flagY = plazaTop + 2.0;
+  const flagSpan = laneLen * 0.9;
+  const nFlags = 7;
+  const flagGeo = new THREE.BufferGeometry();
+  flagGeo.setAttribute('position', new THREE.Float32BufferAttribute([
+    -0.16, 0, 0, 0.16, 0, 0, 0, -0.34, 0,
+  ], 3));
+  flagGeo.computeVertexNormals();
+  const lineGeo = new THREE.BufferGeometry().setFromPoints([
+    new THREE.Vector3(-flagSpan / 2, flagY + 0.02, archZ),
+    new THREE.Vector3(flagSpan / 2, flagY + 0.02, archZ),
+  ]);
+  grp.add(new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0xfbf3e2 })));
+  for (let f = 0; f < nFlags; f++) {
+    const flag = new THREE.Mesh(
+      flagGeo,
+      new THREE.MeshLambertMaterial({ color: flagCols[f % flagCols.length], side: THREE.DoubleSide }),
+    );
+    flag.position.set(-flagSpan / 2 + (f + 0.5) * (flagSpan / nFlags), flagY, archZ);
+    grp.add(flag);
   }
 
-  for (let j = 0; j < nLanes; j++) {
-    const zc = startZ + j * laneGap;
-    if (j % 2 === 0) railZ(xL, zc, laneGap);
-    else railZ(xR, zc, laneGap);
-  }
-
-  const backZ = startZ - laneGap / 2 + nLanes * laneGap;
-  post(xR, backZ + 0.5);
-  box(THREE, grp, colors.roof, 2.0, 0.42, 0.16, xR - 1.0, gndY + postH + 0.25, backZ + 0.02, false);
-
+  // ── guest pool: slot 0 at the boarding gate, snaking back to the entrance ──
   for (let i = 0; i < poolSize; i++) {
     const lane = Math.floor(i / slotsPerLane);
+    if (lane >= nLanes) break;
     const idx = i % slotsPerLane;
-    const z = startZ + lane * laneGap;
     const frac = slotsPerLane > 1 ? idx / (slotsPerLane - 1) : 0.5;
-    const x =
-      lane % 2 === 0
-        ? THREE.MathUtils.lerp(xL + 0.45, xR - 0.45, frac)
-        : THREE.MathUtils.lerp(xR - 0.45, xL + 0.45, frac);
-    const g = guest(THREE, grp, x, gndY, z, i, headColors, guestColors);
+    const from = lane % 2 === 0 ? xR - 0.55 : xL + 0.55;
+    const to = lane % 2 === 0 ? xL + 0.55 : xR - 0.55;
+    const x = THREE.MathUtils.lerp(from, to, frac);
+    const z = startZ + (lane + 0.5) * laneGap;
+    const g = guest(THREE, grp, x, plazaTop, z, i, headColors, guestColors);
     g.visible = false;
     stationRefs.queueGuests.push(g);
   }
@@ -132,6 +255,11 @@ export function buildStationAndQueue({
   worldUp,
   disposeGroup,
 }) {
+  // canvas board textures are not freed by material.dispose(); do it explicitly
+  stationGrp.traverse(o => {
+    const mats = Array.isArray(o.material) ? o.material : o.material ? [o.material] : [];
+    for (const m of mats) if (m.map?.isTexture) m.map.dispose();
+  });
   disposeGroup(stationGrp);
   stationRefs.queueGuests = [];
   if (!path) return;
@@ -179,26 +307,29 @@ export function buildStationAndQueue({
   box(THREE, grp, colors.roof, PLAT_LEN + 0.6, 0.28, PLAT_W + 0.7, 0, PLAT_H + postH + 0.04, PLAT_SIDE, true);
   box(THREE, grp, 0xf5a623, 2.0, 0.6, 0.16, -PLAT_LEN / 2 + 1.0, PLAT_H + postH - 0.15, PLAT_SIDE - PLAT_W / 2 - 0.1, false);
 
-  if (upgrades.snacks.level > 0) {
-    const kx = PLAT_LEN / 2 + 0.6;
-    box(THREE, grp, 0xe85d75, 1.2, 1.0, 1.2, kx, 0.5, PLAT_SIDE + PLAT_W / 2 + 1.6, true);
-    box(THREE, grp, colors.cloud, 1.5, 0.18, 1.5, kx, 1.15, PLAT_SIDE + PLAT_W / 2 + 1.6, true);
-  }
-
   const qStart = PLAT_SIDE + PLAT_W / 2 + 0.55;
-  const poolSize = Math.min(60, d.queueCap);
+  const poolSize = Math.min(90, d.queueCap);
   buildQueue({
     THREE,
     grp,
-    gndY: PLAT_H,
     startZ: qStart,
+    queueCap: d.queueCap,
     poolSize,
     platLen: PLAT_LEN,
+    platTop: PLAT_H,
     stationRefs,
     colors,
     headColors,
     guestColors,
   });
+
+  // snack kiosk serves the line from the edge of the queue plaza
+  if (upgrades.snacks.level > 0) {
+    const kx = Math.max(PLAT_LEN, 8) / 2 + 0.55;
+    const kz = qStart + 1.7;
+    box(THREE, grp, 0xe85d75, 1.2, 1.0, 1.2, kx, 0.56, kz, true);
+    box(THREE, grp, colors.cloud, 1.5, 0.18, 1.5, kx, 1.2, kz, true);
+  }
 }
 
 export function updateQueueVisuals({ queue, stationRefs }) {
