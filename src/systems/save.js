@@ -9,6 +9,7 @@ export function createSaveData({
   staff,
   maintenance,
   property,
+  decorations,
   ctrlPts,
   paidLength,
   frustum,
@@ -37,6 +38,7 @@ export function createSaveData({
       distanceScale: property.distanceScale,
       owned: [...property.owned],
     } : undefined,
+    decorations: Array.isArray(decorations) ? decorations.map(d => ({ ...d })) : [],
     ctrlPts: ctrlPts.map(point => ({ ...point })),
     paidLength,
     frustum,
@@ -128,6 +130,12 @@ export function applySaveData(data, { state, sim, upgrades, research, staff }) {
       distanceScale: finite(data.property.distanceScale) ? data.property.distanceScale : undefined,
       owned: data.property.owned.filter(key => typeof key === 'string'),
     };
+  }
+
+  if (Array.isArray(data.decorations)) {
+    restored.decorations = data.decorations.filter(
+      d => d && typeof d.type === 'string' && finite(d.x) && finite(d.z),
+    ).map(d => ({ type: d.type, x: d.x, z: d.z }));
   }
 
   if (Array.isArray(data.ctrlPts) && data.ctrlPts.length >= 3 && data.ctrlPts.every(validPoint)) {

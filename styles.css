@@ -48,6 +48,7 @@
   .ticket:active{transform:translateY(1px)}
   .ticket.locked{filter:grayscale(.5) brightness(.97);opacity:.7;cursor:not-allowed}
   .ticket.maxed{cursor:default}
+  .ticket.selected{background:#efe9ff;border-color:var(--build);box-shadow:0 6px 0 rgba(76,40,221,.18),0 14px 30px rgba(28,37,51,.18)}
   .ticket .ic{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:19px;background:#fff;border:2px solid var(--ink)}
   .ticket .body .nm{font-family:'Fredoka';font-weight:600;font-size:14px;line-height:1.05}
   .ticket .body .ds{font-size:11px;color:var(--ink-soft);line-height:1.15;margin-top:2px}

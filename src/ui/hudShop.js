@@ -8,6 +8,10 @@ export function createHudShop({
   derived,
   researchEfficiency = () => 1,
   getMaintenance = () => null,
+  decor = {},
+  decorOrder = [],
+  getSelectedDecor = () => null,
+  onSelectDecor = () => {},
   getPath,
   getState,
   getSim,
@@ -57,6 +61,10 @@ export function createHudShop({
       renderResearch(body);
       return;
     }
+    if (activeTab === 'decor') {
+      renderDecor(body);
+      return;
+    }
 
     shopOrder.filter(key => upgrades[key].cat === activeTab).forEach(key => {
       const upgrade = upgrades[key];
@@ -68,6 +76,29 @@ export function createHudShop({
         `<div class="body"><div class="nm">${upgrade.name}</div><div class="ds">${upgrade.desc}</div><div class="lv" id="lv-${key}"></div></div>` +
         `<div class="cost" id="cost-${key}"></div>`;
       el.addEventListener('click', () => onBuy(key));
+      body.appendChild(el);
+    });
+    refreshHUD();
+  }
+
+  function renderDecor(body) {
+    const card = document.createElement('div');
+    card.className = 'rcard';
+    card.innerHTML =
+      `<div class="rh">Decorations</div>` +
+      `<div class="rsub">Pick a piece, then click anywhere on owned land to place it. Esc to stop placing.</div>`;
+    body.appendChild(card);
+
+    decorOrder.forEach(key => {
+      const item = decor[key];
+      const el = document.createElement('div');
+      el.className = 'ticket decor-ticket';
+      el.id = `decor-${key}`;
+      el.innerHTML =
+        `<div class="ic">${item.icon}</div>` +
+        `<div class="body"><div class="nm">${item.name}</div><div class="ds">${item.desc}</div><div class="lv" id="decor-lv-${key}"></div></div>` +
+        `<div class="cost">$${fmt(item.cost)}</div>`;
+      el.addEventListener('click', () => onSelectDecor(key));
       body.appendChild(el);
     });
     refreshHUD();
@@ -171,6 +202,19 @@ export function createHudShop({
       costEl.textContent = `$${fmt(cost)}`;
       level.textContent = upgrade.level > 0 ? `Lv ${upgrade.level}` : 'New';
       el.className = `ticket ${state.money >= cost ? 'affordable' : 'locked'}`;
+    });
+
+    const selected = getSelectedDecor();
+    decorOrder.forEach(key => {
+      const el = $(`decor-${key}`);
+      if (!el) return;
+      const item = decor[key];
+      const affordable = state.money >= item.cost;
+      el.classList.toggle('affordable', affordable);
+      el.classList.toggle('locked', !affordable);
+      el.classList.toggle('selected', selected === key);
+      const lv = $(`decor-lv-${key}`);
+      if (lv) lv.textContent = selected === key ? 'Placing — click the ground' : '';
     });
 
     const rp = $('rpts');

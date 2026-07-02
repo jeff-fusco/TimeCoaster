@@ -80,6 +80,7 @@ export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 
 export const CATS = [
   { id: 'ride', icon: '🎢', name: 'Ride' },
   { id: 'queue', icon: '🚧', name: 'Queue' },
+  { id: 'decor', icon: '🌸', name: 'Decor' },
   { id: 'marketing', icon: '📣', name: 'Promo' },
   { id: 'research', icon: '🔬', name: 'R&D' },
 ];
@@ -118,3 +119,13 @@ export const STN = {
 
 // minimum arc-length gap a following train keeps from the rear of the train ahead
 export const BLOCK_GAP = 2.4;
+
+// ── decorations (bought from the Decor tab, placed on owned land) ────────────
+export const DECOR = {
+  flowers:  { name: 'Flower Bed', icon: '🌸', desc: 'A cheerful patch of colour', cost: 40 },
+  lamp:     { name: 'Lamp Post',  icon: '💡', desc: 'Warm light along the paths', cost: 60 },
+  topiary:  { name: 'Topiary',    icon: '🌳', desc: 'A neatly sculpted garden tree', cost: 90 },
+  statue:   { name: 'Statue',     icon: '🗿', desc: 'A grand park centrepiece', cost: 220 },
+  fountain: { name: 'Fountain',   icon: '⛲', desc: 'A splashy showpiece guests love', cost: 400 },
+};
+export const DECOR_ORDER = ['flowers', 'lamp', 'topiary', 'statue', 'fountain'];

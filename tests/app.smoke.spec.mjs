@@ -18,7 +18,7 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   await page.goto('/index.html');
 
   await expect(page.locator('#scene canvas')).toBeVisible();
-  const cssResponse = await page.request.get('/styles.css?v=20260701-16');
+  const cssResponse = await page.request.get('/styles.css?v=20260701-17');
   await expect(cssResponse).toBeOK();
   expect(cssResponse.headers()['cache-control']).toContain('no-store');
   await expect(page.locator('.money #money')).toContainText(/\d/);
@@ -182,6 +182,37 @@ test('clicking a for-sale sign opens purchase details and buys the plot', async 
   await page.locator('#landBuy').click();
   await expect(page.locator('#landPanel')).toBeHidden();
   await expect.poll(async () => page.evaluate(() => window.__TC3D_DEBUG__.ownedLand())).toBe(2);
+  expect(pageErrors).toEqual([]);
+});
+
+test('decor tab places a flower bed on owned land', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 1000, rides: 0, queue: 8 }));
+  });
+  await page.goto('/index.html');
+
+  await page.locator('#tab-decor').click();
+  await expect(page.locator('#decor-flowers')).toBeVisible();
+  await page.locator('#decor-flowers').click();
+  await expect(page.locator('#decor-flowers')).toHaveClass(/selected/);
+
+  // aim left of centre: still open owned grass, and clear of the shop overlay
+  // that covers the middle-right of narrow (mobile) viewports
+  const canvas = page.locator('#scene canvas');
+  const box = await canvas.boundingBox();
+  await page.mouse.click(box.x + box.width * 0.32, box.y + box.height / 2);
+
+  await expect.poll(async () => page.evaluate(() => window.__TC3D_DEBUG__.decorCount())).toBe(1);
+  await expect(page.locator('#money')).toHaveText('960');
+
+  // Esc stops placement and clears the selection highlight
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#decor-flowers')).not.toHaveClass(/selected/);
   expect(pageErrors).toEqual([]);
 });
 

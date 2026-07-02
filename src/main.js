@@ -58,6 +58,14 @@ import {
   trainCost,
 } from './systems/staff.js';
 import { buildChunkScenery, createClouds } from './render/scenery.js';
+import {
+  canPlaceDecoration,
+  createDecorationsState,
+  decorationCost,
+  normalizeDecorations,
+  placeDecoration,
+} from './systems/decorations.js';
+import { buildDecorationModel, buildDecorations as renderDecorations } from './render/decorations.js';
 import { initBuildControls } from './input/buildControls.js';
 import { createHudShop } from './ui/hudShop.js';
 import { createStaffPanel } from './ui/staffPanel.js';
@@ -67,6 +75,8 @@ import {
   CATS,
   COL,
   COST_PER_M,
+  DECOR,
+  DECOR_ORDER,
   DEFAULT_CTRL,
   FEATURE_COST,
   FEATURE_REFUND,
@@ -107,6 +117,7 @@ const sim   = { queue:0 };     // live count of guests waiting in line
 const staff = createStaffState();   // hired/trained staff (separate from upgrades)
 const maintenance = createMaintenanceState(); // purchased car/train installs waiting on mechanics
 const property = createPropertyState();
+const decorations = createDecorationsState(); // placed decor pieces [{type,x,z}]
 let stationRefs = { queueGuests:[], stopS:0.85, platLen:6 };
 let ctrlPts = DEFAULT_CTRL.map(p=>({...p}));
 let paidLength = 0;            // metres of track already paid for
@@ -249,6 +260,17 @@ function buildScenery(){
   });
 }
 
+const decorGrp=new THREE.Group(); scene.add(decorGrp);
+function buildDecorGeometry(){
+  renderDecorations({
+    THREE,
+    group: decorGrp,
+    decorations,
+    colors: COL,
+    disposeGroup,
+  });
+}
+
 function buildTrackGeometry(){
   renderTrackGeometry({
     THREE,
@@ -364,7 +386,7 @@ const buildControls=initBuildControls({
   spawnCoinScreen,
   fmt: formatMoney,
   isBuildPointAllowed: (x, z) => pointInOwnedLand(property, x, z, 0.2),
-  onPlayClick: (x, y) => tryDispatch(x, y) || tryLandSign(x, y),
+  onPlayClick: (x, y) => tryPlaceDecor(x, y) || tryDispatch(x, y) || tryLandSign(x, y),
 });
 const bm=buildControls.state;
 function updateBuildCost(){ buildControls.updateBuildCost(); }
@@ -374,6 +396,7 @@ if(window.__TIME_COASTER_TEST__){
     pathLen: () => path?.len || 0,
     buildActive: () => bm.active,
     ownedLand: () => property.owned.length,
+    decorCount: () => decorations.length,
     setFrustum: v => { frustum = v; resize(); placeCamera(); renderer.render(scene, camera); },
     // screen-space centres of the for-sale sign boards, for click tests
     landSigns: () => {
@@ -473,6 +496,92 @@ function updateDispatchButton(show){
   btn.disabled=!show;
 }
 
+// ── decoration placement (pick in the Decor tab, click owned land to drop) ──
+const decorPlace = { type:null, ghost:null, valid:true };
+
+function decorGroundPoint(clientX, clientY){
+  const r=renderer.domElement.getBoundingClientRect();
+  dispatchNDC.x=((clientX-r.left)/r.width)*2-1;
+  dispatchNDC.y=-((clientY-r.top)/r.height)*2+1;
+  dispatchRay.setFromCamera(dispatchNDC, camera);
+  const tgt=new THREE.Vector3();
+  return dispatchRay.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0), -0.04), tgt) ? tgt : null;
+}
+
+function setGhostValidity(valid){
+  decorPlace.valid=valid;
+  decorPlace.ghost?.traverse(o=>{
+    if(o.material?.emissive){ o.material.emissive.setHex(valid?0x2e8a45:0xb23b2c); o.material.emissiveIntensity=0.5; }
+  });
+}
+
+function cancelDecorPlacement(){
+  if(decorPlace.ghost){
+    scene.remove(decorPlace.ghost);
+    decorPlace.ghost.traverse(o=>{
+      if(o.geometry) o.geometry.dispose();
+      if(o.material) o.material.dispose();
+    });
+  }
+  decorPlace.type=null;
+  decorPlace.ghost=null;
+}
+
+function selectDecor(type){
+  const toggleOff = decorPlace.type===type;
+  cancelDecorPlacement();
+  if(!toggleOff && DECOR[type]){
+    decorPlace.type=type;
+    const ghost=buildDecorationModel({ THREE, type, colors: COL });
+    ghost.traverse(o=>{
+      if(o.material){ o.material=o.material.clone(); o.material.transparent=true; o.material.opacity=0.62; }
+    });
+    ghost.visible=false;
+    decorPlace.ghost=ghost;
+    scene.add(ghost);
+    showToast(`Placing ${DECOR[type].name} — click owned land · Esc to stop`);
+  }
+  refreshHUD();
+}
+
+renderer.domElement.addEventListener('mousemove', e=>{
+  if(!decorPlace.type || bm.active) return;
+  const p=decorGroundPoint(e.clientX, e.clientY);
+  if(!p){ if(decorPlace.ghost) decorPlace.ghost.visible=false; return; }
+  decorPlace.ghost.visible=true;
+  decorPlace.ghost.position.set(p.x, 0.04, p.z);
+  const ok=canPlaceDecoration({ property, decorations, type:decorPlace.type, x:p.x, z:p.z })
+    && state.money>=decorationCost(decorPlace.type);
+  if(ok!==decorPlace.valid) setGhostValidity(ok);
+});
+
+window.addEventListener('keydown', e=>{
+  if((e.key==='Escape'||e.key==='b'||e.key==='B') && decorPlace.type){ cancelDecorPlacement(); refreshHUD(); }
+});
+// entering build mode drops any in-progress placement
+document.getElementById('buildToggle').addEventListener('click', ()=>{
+  if(decorPlace.type){ cancelDecorPlacement(); refreshHUD(); }
+});
+
+// Placement consumes play-mode taps so a mis-click can't dispatch or buy land.
+function tryPlaceDecor(clientX, clientY){
+  if(!decorPlace.type || bm.active) return false;
+  const p=decorGroundPoint(clientX, clientY);
+  if(!p) return true;
+  const type=decorPlace.type;
+  const cost=placeDecoration({ decorations, property, state, type, x:p.x, z:p.z });
+  if(cost>0){
+    buildDecorGeometry();
+    spawnCoinScreen(clientX, clientY, cost, true);
+    refreshHUD(); saveGame();
+    // keep placing until funds run out (RCT-style stamping)
+    if(state.money<decorationCost(type)){ cancelDecorPlacement(); refreshHUD(); }
+  } else {
+    showToast(state.money<decorationCost(type) ? 'Not enough funds' : "Can't place there — needs open, owned land");
+  }
+  return true;
+}
+
 function maintenanceLabel(){
   const total = maintenance.queue.length + (maintenance.current ? 1 : 0);
   if(!total) return 'Idle';
@@ -556,6 +665,10 @@ const ui=createHudShop({
   derived,
   researchEfficiency,
   getMaintenance: () => maintenance,
+  decor: DECOR,
+  decorOrder: DECOR_ORDER,
+  getSelectedDecor: () => decorPlace.type,
+  onSelectDecor: selectDecor,
   getPath: () => path,
   getState: () => state,
   getSim: () => sim,
@@ -682,6 +795,7 @@ function saveGame(){
     staff,
     maintenance,
     property,
+    decorations,
     ctrlPts,
     paidLength,
     frustum,
@@ -713,6 +827,10 @@ function loadGame(){
     property.distanceScale=restoredProperty.distanceScale;
     property.owned=restoredProperty.owned;
   }
+  if(restored.decorations){
+    decorations.length=0;
+    decorations.push(...normalizeDecorations(restored.decorations));
+  }
   for(const type of ['car','train']){
     maintenance.installed[type]=Math.min(maintenance.installed[type], UPGRADES[type].level);
     let missing=UPGRADES[type].level-maintenance.installed[type]-pendingCount(maintenance,type);
@@ -736,6 +854,7 @@ loadGame();
 buildShop();
 buildPropertyGeometry();
 buildScenery();
+buildDecorGeometry();
 rebuildAll(true);
 if(!paidLength)paidLength=path.len;   // first run: starter track is free
 rebuildTrains();
