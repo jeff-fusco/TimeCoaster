@@ -57,7 +57,7 @@ import {
   train as trainStaff,
   trainCost,
 } from './systems/staff.js';
-import { createScenery } from './render/scenery.js';
+import { buildChunkScenery, createClouds } from './render/scenery.js';
 import { initBuildControls } from './input/buildControls.js';
 import { createHudShop } from './ui/hudShop.js';
 import { createStaffPanel } from './ui/staffPanel.js';
@@ -178,11 +178,6 @@ sun.position.set(-22,38,16); sun.castShadow=true; sun.shadow.mapSize.set(2048,20
 const sS=34; sun.shadow.camera.left=-sS;sun.shadow.camera.right=sS;sun.shadow.camera.top=sS;sun.shadow.camera.bottom=-sS;sun.shadow.camera.near=1;sun.shadow.camera.far=130;
 scene.add(sun);
 
-(()=>{ // world grass beyond the purchasable park
-  const g=new THREE.Mesh(new THREE.CylinderGeometry(46,46,1,64),new THREE.MeshLambertMaterial({color:COL.grass}));
-  g.position.y=-0.5; g.receiveShadow=true; scene.add(g);
-})();
-
 // Recursively free GPU resources (geometry + materials) for every descendant.
 // keepGeometry=true skips geometry disposal — used for groups that reuse a
 // shared geometry instance (e.g. build-mode handles) while still freeing materials.
@@ -228,6 +223,7 @@ function speedAt(s){
 //  TRACK / STATION RENDERING
 // =========================================================================
 const propertyGrp=new THREE.Group(); scene.add(propertyGrp);
+const sceneryGrp=new THREE.Group(); scene.add(sceneryGrp);
 const trackGrp=new THREE.Group(); scene.add(trackGrp);
 const stationGrp=new THREE.Group(); scene.add(stationGrp);
 
@@ -239,6 +235,16 @@ function buildPropertyGeometry(){
     candidates: expansionCandidates(property),
     colors: COL,
     fmt: formatMoney,
+    disposeGroup,
+  });
+}
+
+function buildScenery(){
+  buildChunkScenery({
+    THREE,
+    group: sceneryGrp,
+    property,
+    colors: COL,
     disposeGroup,
   });
 }
@@ -279,7 +285,7 @@ function updateQueueVisuals(){
 // =========================================================================
 //  SCENERY
 // =========================================================================
-const { clouds } = createScenery({ THREE, scene, colors: COL });
+const { clouds } = createClouds({ THREE, scene, colors: COL });
 
 // =========================================================================
 //  TRAINS
@@ -576,11 +582,11 @@ const staffUI=createStaffPanel({
   costs: { hire: hireCost, train: trainCost, canHire, canTrain },
   onHire: role => {
     const spent=hireStaff(role, staff, state.money);
-    if(spent>0){ state.money-=spent; refreshHUD(); saveGame(); showToast(`Hired a ${STAFF[role].name.replace(/s$/,'')}`); }
+    if(spent>0){ state.money-=spent; spawnBankDelta(spent,true); refreshHUD(); saveGame(); showToast(`Hired a ${STAFF[role].name.replace(/s$/,'')}`); }
   },
   onTrain: role => {
     const spent=trainStaff(role, staff, state.money);
-    if(spent>0){ state.money-=spent; refreshHUD(); saveGame(); showToast(`${STAFF[role].name} training improved`); }
+    if(spent>0){ state.money-=spent; spawnBankDelta(spent,true); refreshHUD(); saveGame(); showToast(`${STAFF[role].name} training improved`); }
   },
   fmt,
 });
@@ -612,6 +618,7 @@ function buy(key){
   if(u.max!==undefined&&u.level>=u.max)return;
   const c=upgradeCost(u); if(state.money<c)return;
   state.money-=c; u.level+=1;
+  spawnBankDelta(c,true);
   if(key==='car'){
     enqueueInstall(maintenance, 'car');
     showToast('Car purchased - mechanics are installing it');
@@ -629,8 +636,10 @@ function buy(key){
 function buyProperty(key){
   const cost=buyLand(property,key,state);
   if(!cost){ showToast('Need more money or adjacent land'); return; }
+  spawnBankDelta(cost,true);
   landUI.close();
   buildPropertyGeometry();
+  buildScenery();
   refreshHUD();
   saveGame();
   showToast(`Land purchased - $${fmt(cost)}`);
@@ -644,6 +653,18 @@ function spawnCoinScreen(x,y,amount,spend){
   const el=document.createElement('div');el.className='pop'+(spend?' spend':'');
   el.textContent=(spend?'-$':'+$')+fmt(amount);el.style.left=x+'px';el.style.top=y+'px';
   document.body.appendChild(el);setTimeout(()=>el.remove(),1000);
+}
+function spawnBankDelta(amount,spend){
+  const bank=document.querySelector('.bank .money') || $('money');
+  if(!bank)return;
+  const r=bank.getBoundingClientRect();
+  const el=document.createElement('div');
+  el.className='bank-delta'+(spend?' spend':' earn');
+  el.textContent=(spend?'-$':'+$')+fmt(amount);
+  el.style.left=(r.left+r.width/2)+'px';
+  el.style.top=(r.bottom+8)+'px';
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),1050);
 }
 let toastTimer;
 function showToast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600);}
@@ -714,6 +735,7 @@ setInterval(saveGame,15000);
 loadGame();
 buildShop();
 buildPropertyGeometry();
+buildScenery();
 rebuildAll(true);
 if(!paidLength)paidLength=path.len;   // first run: starter track is free
 rebuildTrains();

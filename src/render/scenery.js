@@ -1,42 +1,5 @@
-// Static park scenery: a ring of trees plus drifting clouds.
-// Returns { clouds } so the caller can animate the clouds each frame.
-export function createScenery({ THREE, scene, colors }) {
+export function createClouds({ THREE, scene, colors }) {
   const clouds = [];
-
-  function tree(x, z, sc) {
-    const t = new THREE.Group();
-    const trunk = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.16, 0.22, 1.1, 6),
-      new THREE.MeshLambertMaterial({ color: colors.trunk }),
-    );
-    trunk.position.y = 0.55;
-    const f1 = new THREE.Mesh(
-      new THREE.ConeGeometry(0.95, 1.5, 8),
-      new THREE.MeshLambertMaterial({ color: colors.leaf }),
-    );
-    f1.position.y = 1.5;
-    const f2 = new THREE.Mesh(
-      new THREE.ConeGeometry(0.7, 1.2, 8),
-      new THREE.MeshLambertMaterial({ color: colors.leafHi }),
-    );
-    f2.position.y = 2.2;
-    t.add(trunk, f1, f2);
-    t.position.set(x, 0, z);
-    t.scale.setScalar(sc);
-    t.traverse(o => (o.castShadow = true));
-    scene.add(t);
-  }
-
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2 + 0.3;
-    const r = 19 + Math.sin(i * 3.1) * 2.5;
-    tree(Math.cos(a) * r, Math.sin(a) * r, 0.8 + (i % 3) * 0.25);
-  }
-  tree(-15, -2, 1.1);
-  tree(15, -12, 0.9);
-  tree(16, 10, 1);
-  tree(-14, 12, 0.95);
-
   function cloud(x, y, z) {
     const c = new THREE.Group();
     const m = new THREE.MeshLambertMaterial({ color: colors.cloud });
@@ -60,4 +23,83 @@ export function createScenery({ THREE, scene, colors }) {
   cloud(-22, 17, 8);
 
   return { clouds };
+}
+
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+function mulberry32(seed) {
+  return () => {
+    seed |= 0;
+    seed = seed + 0x6d2b79f5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+function tree({ THREE, colors, x, z, scale }) {
+  const t = new THREE.Group();
+  const trunk = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.16, 0.22, 1.1, 6),
+    new THREE.MeshLambertMaterial({ color: colors.trunk }),
+  );
+  trunk.position.y = 0.55;
+  const f1 = new THREE.Mesh(
+    new THREE.ConeGeometry(0.95, 1.5, 8),
+    new THREE.MeshLambertMaterial({ color: colors.leaf }),
+  );
+  f1.position.y = 1.5;
+  const f2 = new THREE.Mesh(
+    new THREE.ConeGeometry(0.7, 1.2, 8),
+    new THREE.MeshLambertMaterial({ color: colors.leafHi }),
+  );
+  f2.position.y = 2.2;
+  t.add(trunk, f1, f2);
+  t.position.set(x, 0.04, z);
+  t.scale.setScalar(scale);
+  t.traverse(o => (o.castShadow = true));
+  return t;
+}
+
+function safeTreeSpot(key, lx, lz) {
+  if (key !== '0,0') return true;
+  if (Math.abs(lx) < 7.5 && lz > 2) return false;
+  if (Math.abs(lx) < 3.5 && Math.abs(lz) < 3.5) return false;
+  return true;
+}
+
+export function buildChunkScenery({ THREE, group, property, colors, disposeGroup }) {
+  disposeGroup(group);
+  const size = property.chunkSize;
+  const margin = 3.2;
+
+  for (const key of property.owned) {
+    const [cx, cz] = key.split(',').map(Number);
+    if (!Number.isFinite(cx) || !Number.isFinite(cz)) continue;
+    const rand = mulberry32(hashString(`trees:${key}`));
+    const count = key === '0,0' ? 4 : 5 + Math.floor(rand() * 3);
+    let placed = 0;
+    let attempts = 0;
+    while (placed < count && attempts++ < 40) {
+      const lx = -size / 2 + margin + rand() * (size - margin * 2);
+      const lz = -size / 2 + margin + rand() * (size - margin * 2);
+      if (!safeTreeSpot(key, lx, lz)) continue;
+      const sc = 0.62 + rand() * 0.5;
+      group.add(tree({
+        THREE,
+        colors,
+        x: cx * size + lx,
+        z: cz * size + lz,
+        scale: sc,
+      }));
+      placed++;
+    }
+  }
 }

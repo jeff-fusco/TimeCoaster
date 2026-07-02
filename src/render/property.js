@@ -1,7 +1,7 @@
-// Land rendering: owned chunks are mowed park grass with a cream border;
-// adjacent purchasable chunks are sandy "for sale" lots with a dashed outline
-// and an RCT-style FOR SALE sign at the centre. Every sign/lot mesh carries
-// `userData.landKey` so a play-mode tap can open the purchase popup.
+// Land rendering: owned chunks are floating grass/dirt slabs; adjacent
+// purchasable chunks are recessed sandy slabs with a dashed outline and an
+// RCT-style FOR SALE sign. Every sign/lot mesh carries `userData.landKey` so a
+// play-mode tap can open the purchase popup.
 
 // draw the sign board face (cream card, ink border, red FOR SALE, price)
 function makeSignTexture(THREE, costLabel) {
@@ -82,11 +82,22 @@ export function buildPropertyGeometry({
 
   const size = property.chunkSize;
   const half = size / 2;
+  const ownedDepth = 1.45;
+  const candidateDepth = 0.75;
+  const ownedTopY = 0;
+  const candidateTopY = -0.35;
 
-  const ownedMat = new THREE.MeshLambertMaterial({ color: colors.grassHi });
-  const lotMat = new THREE.MeshLambertMaterial({ color: colors.platform, transparent: true, opacity: 0.3 });
+  const grassTopMat = new THREE.MeshLambertMaterial({ color: colors.grassHi });
+  const dirtSideMat = new THREE.MeshLambertMaterial({ color: colors.dirt });
+  const darkUnderMat = new THREE.MeshLambertMaterial({ color: colors.dirtDark || 0x6b4a2a });
+  const sandTopMat = new THREE.MeshLambertMaterial({ color: colors.sand || colors.platform, transparent: true, opacity: 0.76 });
+  const sandSideMat = new THREE.MeshLambertMaterial({ color: colors.sandSide || 0xb99a62, transparent: true, opacity: 0.62 });
   const borderMat = new THREE.LineBasicMaterial({ color: colors.landBorder, transparent: true, opacity: 0.85 });
   const lotLineMat = new THREE.LineDashedMaterial({ color: colors.landCandidate, dashSize: 1.1, gapSize: 0.7 });
+  const ownedSlabGeo = new THREE.BoxGeometry(size, ownedDepth, size);
+  const candidateSlabGeo = new THREE.BoxGeometry(size, candidateDepth, size);
+  const ownedSlabMats = [dirtSideMat, dirtSideMat, grassTopMat, darkUnderMat, dirtSideMat, dirtSideMat];
+  const candidateSlabMats = [sandSideMat, sandSideMat, sandTopMat, darkUnderMat, sandSideMat, sandSideMat];
 
   function borderPoints(x, z, y) {
     return [
@@ -97,20 +108,20 @@ export function buildPropertyGeometry({
     ];
   }
 
-  // owned park land: solid mowed grass extending the ground as the park grows
+  // owned park land: solid floating slabs, grass on top and dirt on the sides
   for (const key of property.owned) {
     const [cx, cz] = key.split(',').map(Number);
     if (!Number.isFinite(cx) || !Number.isFinite(cz)) continue;
     const x = cx * size;
     const z = cz * size;
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(size, size), ownedMat);
-    plane.rotation.x = -Math.PI / 2;
-    plane.position.set(x, 0.03, z);
-    plane.receiveShadow = true;
-    group.add(plane);
+    const slab = new THREE.Mesh(ownedSlabGeo, ownedSlabMats);
+    slab.position.set(x, ownedTopY - ownedDepth / 2, z);
+    slab.castShadow = true;
+    slab.receiveShadow = true;
+    group.add(slab);
 
     const border = new THREE.LineSegments(
-      new THREE.BufferGeometry().setFromPoints(borderPoints(x, z, 0.06)),
+      new THREE.BufferGeometry().setFromPoints(borderPoints(x, z, ownedTopY + 0.045)),
       borderMat,
     );
     group.add(border);
@@ -122,19 +133,20 @@ export function buildPropertyGeometry({
     const x = candidate.x * size;
     const z = candidate.z * size;
 
-    const lot = new THREE.Mesh(new THREE.PlaneGeometry(size, size), lotMat);
-    lot.rotation.x = -Math.PI / 2;
-    lot.position.set(x, 0.02, z);
+    const lot = new THREE.Mesh(candidateSlabGeo, candidateSlabMats);
+    lot.position.set(x, candidateTopY - candidateDepth / 2, z);
     lot.userData.landKey = candidate.key;
+    lot.castShadow = true;
+    lot.receiveShadow = true;
     group.add(lot);
 
-    const outlineGeo = new THREE.BufferGeometry().setFromPoints(borderPoints(x, z, 0.05));
+    const outlineGeo = new THREE.BufferGeometry().setFromPoints(borderPoints(x, z, candidateTopY + 0.06));
     const outline = new THREE.LineSegments(outlineGeo, lotLineMat);
     outline.computeLineDistances();
     group.add(outline);
 
     const sign = buildSign({ THREE, key: candidate.key, cost: candidate.cost, fmt, colors });
-    sign.position.set(x, 0, z);
+    sign.position.set(x, candidateTopY, z);
     // face the nearest owned neighbour so the sign reads from inside the park
     const toward = [
       [candidate.x + 1, candidate.z], [candidate.x - 1, candidate.z],

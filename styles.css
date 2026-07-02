@@ -120,10 +120,19 @@
   .build-cost{font-family:'Fredoka';font-size:12px;color:var(--ink-soft);text-align:center}
   .build-cost b{color:var(--ink)}
   .sep{width:100%;height:1px;background:var(--cream-edge)}
+  .build-delta{position:fixed;z-index:120;pointer-events:none;transform:translate(-50%,-100%);font-family:'Fredoka';font-weight:700;font-size:34px;line-height:1;color:#fff;text-shadow:0 3px 0 rgba(28,37,51,.45),0 0 14px rgba(28,37,51,.35);transition:opacity .08s,transform .08s;white-space:nowrap}
+  .build-delta.cost{color:#ff6b57}
+  .build-delta.refund{color:#42c96b}
+  .build-delta.neutral{color:#fff2c2}
+  .build-delta.hidden{opacity:0;transform:translate(-50%,-90%) scale(.86)}
 
   .pop{position:fixed;pointer-events:none;font-family:'Fredoka';font-weight:700;font-size:22px;color:#fff;text-shadow:0 2px 0 var(--amber-deep),0 0 8px rgba(0,0,0,.25);animation:rise 1s ease-out forwards;z-index:50}
   .pop.spend{color:#ffd9d2;text-shadow:0 2px 0 #b23b2c}
   @keyframes rise{0%{opacity:0;transform:translate(-50%,0) scale(.7)}15%{opacity:1;transform:translate(-50%,-12px) scale(1.1)}100%{opacity:0;transform:translate(-50%,-60px) scale(1)}}
+  .bank-delta{position:fixed;pointer-events:none;z-index:130;font-family:'Fredoka';font-weight:700;font-size:23px;line-height:1;text-shadow:0 2px 0 rgba(28,37,51,.3),0 0 10px rgba(255,255,255,.45);animation:bankDrop 1.05s ease-out forwards;white-space:nowrap}
+  .bank-delta.spend{color:#ff5b48}
+  .bank-delta.earn{color:var(--good)}
+  @keyframes bankDrop{0%{opacity:0;transform:translate(-50%,-10px) scale(.8)}15%{opacity:1;transform:translate(-50%,0) scale(1.05)}100%{opacity:0;transform:translate(-50%,24px) scale(.96)}}
 
   /* staff management overlay */
   .staff-panel{position:fixed;inset:0;z-index:160;display:grid;place-items:center;pointer-events:auto}

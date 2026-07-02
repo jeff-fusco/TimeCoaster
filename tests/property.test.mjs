@@ -5,6 +5,7 @@ import {
   chunkKey,
   createPropertyState,
   expansionCandidates,
+  isQueueReservedChunk,
   landCost,
   normalizePropertyState,
   pointInOwnedLand,
@@ -22,8 +23,9 @@ import {
 {
   const property = createPropertyState();
   const candidates = expansionCandidates(property);
-  assert.equal(candidates.length, 4);
-  assert.deepEqual(new Set(candidates.map(candidate => candidate.key)), new Set(['1,0', '-1,0', '0,1', '0,-1']));
+  assert.equal(candidates.length, 3);
+  assert.deepEqual(new Set(candidates.map(candidate => candidate.key)), new Set(['1,0', '-1,0', '0,-1']));
+  assert.equal(isQueueReservedChunk('0,1'), true, 'south land is reserved for queue expansion');
   assert.equal(landCost(property, '1,0'), 1188);
 }
 
@@ -36,6 +38,7 @@ import {
   assert.equal(property.owned.includes('1,0'), true);
   assert.equal(pointInOwnedLand(property, 13, 0), true);
   assert.equal(buyLand(property, chunkKey(3, 0), state), false, 'cannot buy non-adjacent land');
+  assert.equal(buyLand(property, chunkKey(0, 1), state), false, 'cannot buy queue-reserved south land');
   assert.ok(landCost(property, '2,0') > spent, 'land escalates after each purchase');
 }
 

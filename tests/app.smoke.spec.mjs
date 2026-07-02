@@ -18,7 +18,7 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   await page.goto('/index.html');
 
   await expect(page.locator('#scene canvas')).toBeVisible();
-  const cssResponse = await page.request.get('/styles.css?v=20260701-8');
+  const cssResponse = await page.request.get('/styles.css?v=20260701-16');
   await expect(cssResponse).toBeOK();
   expect(cssResponse.headers()['cache-control']).toContain('no-store');
   await expect(page.locator('.money #money')).toContainText(/\d/);
@@ -141,6 +141,7 @@ test('car purchase queues mechanic work before seats increase', async ({ page })
   await expect(page.locator('#riders')).toHaveText('4');
   await page.locator('#up-car').click();
   await expect(page.locator('#riders')).toHaveText('4');
+  await expect(page.locator('.bank-delta.spend')).toContainText('-$');
   await expect(page.locator('#work')).not.toHaveText('Idle');
   await expect(page.locator('#lv-car')).toContainText('pending');
   expect(pageErrors).toEqual([]);

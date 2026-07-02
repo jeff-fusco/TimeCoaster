@@ -45,9 +45,28 @@ function catmull(Vector3, p0, p1, p2, p3, t) {
   );
 }
 
+function hermite(Vector3, p0, m0, p1, m1, t) {
+  const t2 = t * t;
+  const t3 = t2 * t;
+  const h00 = 2 * t3 - 3 * t2 + 1;
+  const h10 = t3 - 2 * t2 + t;
+  const h01 = -2 * t3 + 3 * t2;
+  const h11 = t3 - t2;
+  return new Vector3(
+    h00 * p0.x + h10 * m0.x + h01 * p1.x + h11 * m1.x,
+    h00 * p0.y + h10 * m0.y + h01 * p1.y + h11 * m1.y,
+    h00 * p0.z + h10 * m0.z + h01 * p1.z + h11 * m1.z,
+  );
+}
+
 function horiz(Vector3, v) {
   const h = new Vector3(v.x, 0, v.z);
   return h.lengthSq() < 1e-6 ? new Vector3(1, 0, 0) : h.normalize();
+}
+
+function safeDir(Vector3, from, to, fallback) {
+  const dir = new Vector3().subVectors(to, from);
+  return dir.lengthSq() > 1e-6 ? dir.normalize() : fallback.clone();
 }
 
 function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
@@ -55,16 +74,50 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
   const P = ctrlPts.map(p => new Vector3(p.x, p.y, p.z));
   const out = [];
   const at = i => P[((i % n) + n) % n];
+  const stationA = at(0);
+  const stationB = at(1);
+  const stationDir = safeDir(Vector3, stationA, stationB, new Vector3(-1, 0, 0));
+  const stationLen = stationA.distanceTo(stationB);
+  const runwayLen = Math.max(2.8, Math.min(4.5, stationLen * 0.28));
+  const runwaySamples = Math.max(6, Math.round(samples.segment * 0.33));
+  const preStation = stationA.clone().addScaledVector(stationDir, -runwayLen);
+  const postStation = stationB.clone().addScaledVector(stationDir, runwayLen);
+
+  function pushLine(a, b, count, kind) {
+    for (let k = 0; k < count; k++) {
+      out.push({ pos: a.clone().lerp(b, k / count), kind });
+    }
+  }
 
   for (let i = 0; i < n; i++) {
     const node = ctrlPts[i];
     const seg = node.seg || 'plain';
-    const p0 = at(i - 1);
+    let p0 = at(i - 1);
     const p1 = at(i);
     const p2 = at(i + 1);
-    const p3 = at(i + 2);
+    let p3 = at(i + 2);
+    if (i === 2) p0 = postStation;
+    if (i === n - 2) p3 = preStation;
 
-    if (seg === 'loop') {
+    if (i === n - 1) {
+      const dist = Math.max(p1.distanceTo(preStation), 1);
+      const startDir = safeDir(Vector3, at(i - 1), preStation, stationDir);
+      const m0 = startDir.multiplyScalar(dist * 0.75);
+      const m1 = stationDir.clone().multiplyScalar(dist * 0.75);
+      for (let k = 0; k < samples.segment; k++) {
+        out.push({ pos: hermite(Vector3, p1, m0, preStation, m1, k / samples.segment), kind: seg });
+      }
+      pushLine(preStation, stationA, runwaySamples, 'station');
+    } else if (i === 1) {
+      pushLine(stationB, postStation, runwaySamples, 'station');
+      const dist = Math.max(postStation.distanceTo(p2), 1);
+      const endDir = safeDir(Vector3, postStation, p3, stationDir);
+      const m0 = stationDir.clone().multiplyScalar(dist * 0.75);
+      const m1 = endDir.multiplyScalar(dist * 0.75);
+      for (let k = 0; k < samples.segment; k++) {
+        out.push({ pos: hermite(Vector3, postStation, m0, p2, m1, k / samples.segment), kind: seg });
+      }
+    } else if (seg === 'loop') {
       const fwd = horiz(Vector3, new Vector3().subVectors(p1, p0));
       const R = 2.3;
       const C = p1.clone().addScaledVector(worldUp, R);
@@ -126,6 +179,68 @@ function transportUp(Vector3, worldUp, prevUp, t0, t1) {
     if (u.lengthSq() < 1e-9) u.set(1, 0, 0);
   }
   return u.normalize();
+}
+
+function flatUpFor(Vector3, worldUp, tangent) {
+  const up = worldUp.clone().addScaledVector(tangent, -worldUp.dot(tangent));
+  if (up.lengthSq() < 1e-9) up.set(0, 1, 0);
+  return up.normalize();
+}
+
+function smoothScalarLoop(values, locked, passes = 4) {
+  let out = values.slice();
+  const n = out.length;
+  for (let pass = 0; pass < passes; pass++) {
+    const next = out.slice();
+    for (let i = 0; i < n; i++) {
+      if (locked[i]) continue;
+      const prev = locked[(i - 1 + n) % n] ? out[i] : out[(i - 1 + n) % n];
+      const cur = out[i];
+      const after = locked[(i + 1) % n] ? out[i] : out[(i + 1) % n];
+      next[i] = prev * 0.25 + cur * 0.5 + after * 0.25;
+    }
+    out = next;
+  }
+  return out;
+}
+
+function limitScalarSteps(values, locked, maxStep) {
+  const out = values.slice();
+  const n = out.length;
+  for (let pass = 0; pass < 2; pass++) {
+    for (let i = 1; i < n; i++) {
+      if (locked[i]) continue;
+      const delta = out[i] - out[i - 1];
+      if (Math.abs(delta) > maxStep) out[i] = out[i - 1] + Math.sign(delta) * maxStep;
+    }
+    for (let i = n - 2; i >= 0; i--) {
+      if (locked[i]) continue;
+      const delta = out[i] - out[i + 1];
+      if (Math.abs(delta) > maxStep) out[i] = out[i + 1] + Math.sign(delta) * maxStep;
+    }
+  }
+  return out;
+}
+
+function preferStableBank(values, locked) {
+  const out = values.slice();
+  const n = out.length;
+  for (let i = 0; i < n; i++) {
+    if (locked[i]) {
+      out[i] = 0;
+      continue;
+    }
+    const cur = values[i];
+    const prev = values[(i - 2 + n) % n];
+    const next = values[(i + 2) % n];
+    const sameLean =
+      Math.sign(prev) === Math.sign(cur) &&
+      Math.sign(next) === Math.sign(cur) &&
+      Math.abs(prev) > 0.015 &&
+      Math.abs(next) > 0.015;
+    if (!sameLean) out[i] = cur * 0.35;
+  }
+  return out;
 }
 
 export function buildPath({
@@ -198,13 +313,17 @@ export function buildPath({
   const up = new Array(N);
   const right = new Array(N);
   const baseUp = new Array(N);
+  const desiredBank = new Array(N).fill(0);
+  const lockedBank = featUp.map((feature, i) => feature || kind[i] === 'station');
   const seed = worldUp.clone().addScaledVector(tan[0], -tan[0].y);
   if (seed.lengthSq() < 1e-9) seed.set(1, 0, 0);
   seed.normalize();
 
   for (let i = 0; i < N; i++) {
     let bUp;
-    if (featUp[i]) {
+    if (kind[i] === 'station') {
+      bUp = flatUpFor(Vector3, worldUp, tan[i]);
+    } else if (featUp[i]) {
       bUp = featUp[i].clone();
       bUp.addScaledVector(tan[i], -bUp.dot(tan[i]));
       if (bUp.lengthSq() < 1e-9) bUp.copy(i ? baseUp[i - 1] : seed);
@@ -214,14 +333,23 @@ export function buildPath({
     }
     baseUp[i] = bUp.clone();
 
-    const fUp = bUp.clone();
-    if (!featUp[i]) {
+    if (!featUp[i] && kind[i] !== 'station') {
       const kv = curvature(i);
       const rTmp = new Vector3().crossVectors(bUp, tan[i]).normalize();
       const aLat = speed[i] * speed[i] * kv.dot(rTmp);
-      const bank = Math.max(-physics.maxBank, Math.min(physics.maxBank, Math.atan2(aLat, physics.g)));
-      fUp.applyAxisAngle(tan[i], -bank);
+      desiredBank[i] = Math.max(-physics.maxBank, Math.min(physics.maxBank, Math.atan2(aLat, physics.g)));
     }
+  }
+
+  const bank = limitScalarSteps(
+    smoothScalarLoop(preferStableBank(desiredBank, lockedBank), lockedBank, 6),
+    lockedBank,
+    physics.bankStep || 0.045,
+  );
+
+  for (let i = 0; i < N; i++) {
+    const fUp = baseUp[i].clone();
+    if (!featUp[i]) fUp.applyAxisAngle(tan[i], -bank[i]);
     right[i] = new Vector3().crossVectors(fUp, tan[i]).normalize();
     up[i] = new Vector3().crossVectors(tan[i], right[i]).normalize();
   }
@@ -300,7 +428,7 @@ export function buildPath({
     nausea: +nausea.toFixed(1),
   };
 
-  return { N, pos, tan, up, right, kind, cum, len, height, speed, stats };
+  return { N, pos, tan, up, right, kind, cum, len, height, speed, bank, stats };
 }
 
 export function samplePathAt(path, s, Vector3) {

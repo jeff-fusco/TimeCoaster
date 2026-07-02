@@ -1,6 +1,10 @@
 export const COL = {
   grass: 0x6fb04a,
   grassHi: 0x7fc057,
+  dirt: 0xb98a4f,
+  dirtDark: 0x6b4a2a,
+  sand: 0xd8c79a,
+  sandSide: 0xb99a62,
   landBorder: 0xf5f0d7,
   landCandidate: 0xf5a623,
   track: 0xe8533f,

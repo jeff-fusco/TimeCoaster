@@ -81,13 +81,39 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
 {
   const ctrlPts = makeCtrlPts();
   const path = makePath(ctrlPts);
-  assert.equal(path.N, ctrlPts.length * PATH_SAMPLES.segment);
+  assert.equal(path.N, ctrlPts.length * PATH_SAMPLES.segment + Math.round(PATH_SAMPLES.segment * 0.67));
   assert.equal(path.kind[0], 'station');
   assert.equal(path.stats.inversions, 0);
-  assert.equal(path.stats.length, 59);
+  assert.equal(path.stats.length, 61);
   assert.ok(path.stats.lapTime > 5);
   assert.ok(path.stats.maxSpeed >= PHYS.vMin);
   assert.equal(path.stats.rollback, false);
+  assert.equal(path.kind.filter(kind => kind === 'station').length, PATH_SAMPLES.segment + Math.round(PATH_SAMPLES.segment * 0.67));
+  const stationDir = new Vec3().subVectors(
+    new Vec3(ctrlPts[1].x, ctrlPts[1].y, ctrlPts[1].z),
+    new Vec3(ctrlPts[0].x, ctrlPts[0].y, ctrlPts[0].z),
+  ).normalize();
+  const stationRuns = [];
+  let run = [];
+  path.kind.forEach((kind, i) => {
+    if (kind === 'station') {
+      run.push(i);
+      assert.equal(path.height[i], 0.7);
+      assert.ok(Math.abs(path.bank[i]) < 1e-9, 'station and runway samples stay unbanked');
+      assert.ok(path.up[i].y > 0.999, 'station and runway samples stay flat');
+    } else if (run.length) {
+      stationRuns.push(run);
+      run = [];
+    }
+  });
+  if (run.length) stationRuns.push(run);
+  assert.equal(stationRuns.length, 2);
+  stationRuns.forEach(samples => {
+    const before = (samples[0] - 1 + path.N) % path.N;
+    const after = (samples[samples.length - 1] + 1) % path.N;
+    assert.ok(path.tan[before].dot(stationDir) > 0.94, 'approach aligns before the flat station runway');
+    assert.ok(path.tan[after].dot(stationDir) > 0.94, 'departure aligns after the flat station runway');
+  });
 
   const start = samplePathAt(path, 0, Vec3);
   assert.ok(Math.abs(start.pos.x - ctrlPts[0].x) < 1e-9);
@@ -125,6 +151,25 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
   const launch = makePath(makeCtrlPts(), makeUpgrades(), { launch: true });
   assert.ok(launch.stats.maxSpeed > normal.stats.maxSpeed);
   assert.ok(speedAtPath(launch, launch.len / 2) > speedAtPath(normal, normal.len / 2));
+}
+
+{
+  const ctrlPts = makeCtrlPts();
+  ctrlPts[2].x = -11;
+  ctrlPts[3].x = -3;
+  ctrlPts[4].x = -11;
+  ctrlPts[5].x = 0;
+  ctrlPts[6].x = 11;
+  ctrlPts[7].x = 3;
+  ctrlPts[8].x = 11;
+  const path = makePath(ctrlPts);
+  const maxBank = Math.max(...path.bank.map(Math.abs));
+  const maxBankStep = path.bank.reduce((max, bank, i) => {
+    const next = path.bank[(i + 1) % path.bank.length];
+    return Math.max(max, Math.abs(next - bank));
+  }, 0);
+  assert.ok(maxBank > 0.02, 'turns still receive natural banking');
+  assert.ok(maxBankStep <= 0.05, 'banking changes smoothly between adjacent samples');
 }
 
 {

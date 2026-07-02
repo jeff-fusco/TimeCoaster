@@ -68,6 +68,11 @@ export function landCost(property, key) {
   return Math.ceil(property.baseCost * scale);
 }
 
+export function isQueueReservedChunk(key) {
+  const chunk = parseChunkKey(key);
+  return !!chunk && chunk.z > 0;
+}
+
 export function expansionCandidates(property) {
   const owned = new Set(property.owned);
   const candidates = new Set();
@@ -81,6 +86,7 @@ export function expansionCandidates(property) {
       [chunk.x, chunk.z - 1],
     ].forEach(([x, z]) => {
       const next = chunkKey(x, z);
+      if (isQueueReservedChunk(next)) return;
       if (!owned.has(next)) candidates.add(next);
     });
   }

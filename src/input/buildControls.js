@@ -53,7 +53,23 @@ export function initBuildControls({
 
   const HG_NORM = new THREE.SphereGeometry(0.55, 12, 9);
   const HG_STN = new THREE.SphereGeometry(0.65, 12, 9);
+  const glowMat = new THREE.MeshBasicMaterial({
+    color: colors.handleSel,
+    transparent: true,
+    opacity: 0.38,
+    depthWrite: false,
+  });
+  const dragGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.8), glowMat);
+  dragGlow.rotation.x = -Math.PI / 2;
+  dragGlow.position.y = 0.085;
+  dragGlow.renderOrder = 4;
+  dragGlow.visible = false;
+  scene.add(dragGlow);
   const $ = id => document.getElementById(id);
+  const costLabel = document.createElement('div');
+  costLabel.className = 'build-delta hidden';
+  document.body.appendChild(costLabel);
+  const labelWorld = new THREE.Vector3();
 
   function setMouseNDC(e) {
     const r = renderer.domElement.getBoundingClientRect();
@@ -101,6 +117,52 @@ export function initBuildControls({
 
   const snapVal = v => (controls.snapGrid ? Math.round(v * 2) / 2 : v);
   const clampHeight = y => Math.max(0.2, Math.min(MAX_TRACK_HEIGHT, Math.round(y * 10) / 10));
+
+  function hideCostLabel() {
+    costLabel.classList.add('hidden');
+  }
+
+  function hideDragFeedback() {
+    hideCostLabel();
+    dragGlow.visible = false;
+  }
+
+  function updateDragGlow(point) {
+    if (!point) {
+      dragGlow.visible = false;
+      return;
+    }
+    dragGlow.position.x = point.x;
+    dragGlow.position.z = point.z;
+    dragGlow.visible = true;
+  }
+
+  function updateDragCostLabel(point) {
+    const path = getPath();
+    if (!path || !point) {
+      hideCostLabel();
+      return;
+    }
+
+    const delta = path.len - getPaidLength();
+    let text = '$0';
+    let mode = 'neutral';
+    if (delta > 0.05) {
+      text = `-$${fmt(Math.ceil(delta * COST_PER_M))}`;
+      mode = 'cost';
+    } else if (delta < -0.05) {
+      text = `+$${fmt(Math.floor(-delta * COST_PER_M * FEATURE_REFUND))}`;
+      mode = 'refund';
+    }
+
+    labelWorld.set(point.x, point.y + 2.6, point.z).project(camera);
+    const x = (labelWorld.x * 0.5 + 0.5) * host.clientWidth;
+    const y = (-labelWorld.y * 0.5 + 0.5) * host.clientHeight;
+    costLabel.textContent = text;
+    costLabel.className = `build-delta ${mode}`;
+    costLabel.style.left = `${x}px`;
+    costLabel.style.top = `${y}px`;
+  }
 
   function updateFeatureButtons() {
     const ctrlPts = getCtrlPts();
@@ -244,6 +306,8 @@ export function initBuildControls({
       if (!ctrlPts[hit]?.station) {
         controls.dragging = true;
         controls.dragSnapshot = ctrlPts.map(p => ({ ...p }));
+        updateDragGlow(ctrlPts[hit]);
+        updateDragCostLabel(ctrlPts[hit]);
       }
       e.stopPropagation();
     } else {
@@ -269,6 +333,9 @@ export function initBuildControls({
       p.z = nextZ;
       if (p.station) p.y = STATION_Y;
       refreshHandlePositions();
+      buildPath();
+      updateDragGlow(p);
+      updateDragCostLabel(p);
       controls.needsRebuild = true;
       $('pointInfo').textContent = `Point ${controls.selectedIdx + 1}: (${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)})`;
       return;
@@ -283,6 +350,7 @@ export function initBuildControls({
   function onMouseUp() {
     if (!controls.dragging) return;
     controls.dragging = false;
+    hideDragFeedback();
     if (controls.needsRebuild) {
       buildPath();
       buildTrackGeometry();
@@ -460,6 +528,7 @@ export function initBuildControls({
     controls.selectedIdx = -1;
     controls.hoveredIdx = -1;
     controls.dragging = false;
+    hideDragFeedback();
     stopPlacing();
     disposeGroup(controls.handleGrp, true);
     controls.handles = [];
