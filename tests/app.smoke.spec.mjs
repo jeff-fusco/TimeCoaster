@@ -34,6 +34,8 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   await page.locator('#shopClose').click();
   await expect(page.locator('#shopPanel')).toBeHidden();
   await expect(page.locator('#modeBadge')).toContainText('Build Mode');
+  await expect.poll(() => page.evaluate(() => window.__TC3D_BOOTED === true)).toBe(true);
+  await expect(page.evaluate(() => window.__TC3D_BOOT_ERROR || null)).resolves.toBeNull();
 
   await expect.poll(async () => {
     return page.evaluate(() => {
@@ -44,23 +46,35 @@ test('loads the coaster scene and core controls', async ({ page }) => {
       if (!gl) return false;
 
       const pixels = new Uint8Array(4);
-      const points = [
-        [0.5, 0.5],
-        [0.25, 0.5],
-        [0.75, 0.5],
-        [0.5, 0.25],
-      ];
+      const buckets = new Set();
+      let visibleSamples = 0;
+      let nonSkySamples = 0;
 
-      for (const [xRatio, yRatio] of points) {
-        const x = Math.floor(canvas.width * xRatio);
-        const y = Math.floor(canvas.height * yRatio);
-        gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-        if (pixels[3] > 0 && (pixels[0] > 0 || pixels[1] > 0 || pixels[2] > 0)) {
-          return true;
+      for (let gx = 1; gx <= 11; gx++) {
+        for (let gy = 1; gy <= 7; gy++) {
+          const x = Math.floor(canvas.width * gx / 12);
+          const y = Math.floor(canvas.height * gy / 8);
+          gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+          if (pixels[3] === 0) continue;
+
+          visibleSamples++;
+          const r = pixels[0];
+          const g = pixels[1];
+          const b = pixels[2];
+          buckets.add(`${r >> 4},${g >> 4},${b >> 4}`);
+
+          const skyLike =
+            b >= 205 &&
+            g >= 180 &&
+            r >= 105 &&
+            r <= 190 &&
+            b - r >= 35 &&
+            g - r >= 18;
+          if (!skyLike) nonSkySamples++;
         }
       }
 
-      return false;
+      return visibleSamples >= 20 && buckets.size >= 4 && nonSkySamples >= 4;
     });
   }).toBe(true);
 
