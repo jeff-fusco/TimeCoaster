@@ -1,6 +1,9 @@
 export const CAR_LEN = 1.7;
 
-function buildCar({ THREE, colors, headColors }) {
+import { guestBuyerRoll } from '../systems/economy.js?v=20260703-11';
+import { addBalloon, addHat } from './guestAccessories.js?v=20260703-11';
+
+function buildCar({ THREE, colors, headColors, guestColors = [], seedBase = 0, hatFrac = 0, balloonFrac = 0 }) {
   const car = new THREE.Group();
   const chassis = new THREE.Mesh(
     new THREE.BoxGeometry(1.1, 0.55, 1.5),
@@ -18,6 +21,7 @@ function buildCar({ THREE, colors, headColors }) {
   car.add(trim);
 
   const heads = [];
+  const accColors = guestColors.length ? guestColors : headColors;
   [
     [-0.28, 0.42],
     [0.28, 0.42],
@@ -30,6 +34,11 @@ function buildCar({ THREE, colors, headColors }) {
     );
     head.position.set(sp[0], 0.82, sp[1]);
     head.castShadow = true;
+    // riders who bought from the vendor carts keep their merch on the ride
+    // (balloons a bit rarer up here — some get tied to the queue fence)
+    const seed = seedBase + i;
+    if (guestBuyerRoll(seed) < hatFrac) addHat(THREE, head, accColors[(seed + 2) % accColors.length]);
+    else if (guestBuyerRoll(seed + 7919) < balloonFrac * 0.6) addBalloon(THREE, head, accColors[(seed + 4) % accColors.length]);
     car.add(head);
     heads.push(head);
   });
@@ -66,9 +75,10 @@ export function rebuildTrains({
   path,
   colors,
   headColors,
+  guestColors = [],
   carLength = CAR_LEN,
 }) {
-  const { cars: carCount, trains: trainCount } = derived();
+  const { cars: carCount, trains: trainCount, hatFrac = 0, balloonFrac = 0 } = derived();
   const L = path ? path.len : 1;
   const oldTrains = trains.map(train => ({
     ...train,
@@ -90,7 +100,11 @@ export function rebuildTrains({
     const group = new THREE.Group();
     const cars = [];
     for (let c = 0; c < visCars; c++) {
-      const mesh = buildCar({ THREE, colors, headColors });
+      const mesh = buildCar({
+        THREE, colors, headColors, guestColors,
+        seedBase: 40000 + (n * 16 + c) * 4,
+        hatFrac, balloonFrac,
+      });
       group.add(mesh);
       cars.push(mesh);
     }

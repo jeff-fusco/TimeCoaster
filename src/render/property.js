@@ -2,6 +2,7 @@
 // purchasable chunks are recessed sandy slabs with a dashed outline and an
 // RCT-style FOR SALE sign. Every sign/lot mesh carries `userData.landKey` so a
 // play-mode tap can open the purchase popup.
+import { chunkBounds } from '../systems/property.js?v=20260703-11';
 
 // draw the sign board face (cream card, ink border, red FOR SALE, price)
 function makeSignTexture(THREE, costLabel) {
@@ -80,8 +81,6 @@ export function buildPropertyGeometry({
   });
   disposeGroup(group);
 
-  const size = property.chunkSize;
-  const half = size / 2;
   const ownedDepth = 1.45;
   const candidateDepth = 0.75;
   const ownedTopY = 0;
@@ -94,34 +93,34 @@ export function buildPropertyGeometry({
   const sandSideMat = new THREE.MeshLambertMaterial({ color: colors.sandSide || 0xb99a62, transparent: true, opacity: 0.62 });
   const borderMat = new THREE.LineBasicMaterial({ color: colors.landBorder, transparent: true, opacity: 0.85 });
   const lotLineMat = new THREE.LineDashedMaterial({ color: colors.landCandidate, dashSize: 1.1, gapSize: 0.7 });
-  const ownedSlabGeo = new THREE.BoxGeometry(size, ownedDepth, size);
-  const candidateSlabGeo = new THREE.BoxGeometry(size, candidateDepth, size);
   const ownedSlabMats = [dirtSideMat, dirtSideMat, grassTopMat, darkUnderMat, dirtSideMat, dirtSideMat];
   const candidateSlabMats = [sandSideMat, sandSideMat, sandTopMat, darkUnderMat, sandSideMat, sandSideMat];
 
-  function borderPoints(x, z, y) {
+  function borderPoints(bounds, y) {
     return [
-      new THREE.Vector3(x - half, y, z - half), new THREE.Vector3(x + half, y, z - half),
-      new THREE.Vector3(x + half, y, z - half), new THREE.Vector3(x + half, y, z + half),
-      new THREE.Vector3(x + half, y, z + half), new THREE.Vector3(x - half, y, z + half),
-      new THREE.Vector3(x - half, y, z + half), new THREE.Vector3(x - half, y, z - half),
+      new THREE.Vector3(bounds.minX, y, bounds.minZ), new THREE.Vector3(bounds.maxX, y, bounds.minZ),
+      new THREE.Vector3(bounds.maxX, y, bounds.minZ), new THREE.Vector3(bounds.maxX, y, bounds.maxZ),
+      new THREE.Vector3(bounds.maxX, y, bounds.maxZ), new THREE.Vector3(bounds.minX, y, bounds.maxZ),
+      new THREE.Vector3(bounds.minX, y, bounds.maxZ), new THREE.Vector3(bounds.minX, y, bounds.minZ),
     ];
   }
 
   // owned park land: solid floating slabs, grass on top and dirt on the sides
   for (const key of property.owned) {
-    const [cx, cz] = key.split(',').map(Number);
-    if (!Number.isFinite(cx) || !Number.isFinite(cz)) continue;
-    const x = cx * size;
-    const z = cz * size;
-    const slab = new THREE.Mesh(ownedSlabGeo, ownedSlabMats);
+    const bounds = chunkBounds(property, key);
+    if (!bounds) continue;
+    const width = bounds.maxX - bounds.minX;
+    const depth = bounds.maxZ - bounds.minZ;
+    const x = (bounds.minX + bounds.maxX) / 2;
+    const z = (bounds.minZ + bounds.maxZ) / 2;
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(width, ownedDepth, depth), ownedSlabMats);
     slab.position.set(x, ownedTopY - ownedDepth / 2, z);
     slab.castShadow = true;
     slab.receiveShadow = true;
     group.add(slab);
 
     const border = new THREE.LineSegments(
-      new THREE.BufferGeometry().setFromPoints(borderPoints(x, z, ownedTopY + 0.045)),
+      new THREE.BufferGeometry().setFromPoints(borderPoints(bounds, ownedTopY + 0.045)),
       borderMat,
     );
     group.add(border);
@@ -130,17 +129,21 @@ export function buildPropertyGeometry({
   // for-sale lots: sandy plot + dashed outline + clickable FOR SALE sign
   const owned = new Set(property.owned);
   for (const candidate of candidates) {
-    const x = candidate.x * size;
-    const z = candidate.z * size;
+    const bounds = chunkBounds(property, candidate.key);
+    if (!bounds) continue;
+    const width = bounds.maxX - bounds.minX;
+    const depth = bounds.maxZ - bounds.minZ;
+    const x = (bounds.minX + bounds.maxX) / 2;
+    const z = (bounds.minZ + bounds.maxZ) / 2;
 
-    const lot = new THREE.Mesh(candidateSlabGeo, candidateSlabMats);
+    const lot = new THREE.Mesh(new THREE.BoxGeometry(width, candidateDepth, depth), candidateSlabMats);
     lot.position.set(x, candidateTopY - candidateDepth / 2, z);
     lot.userData.landKey = candidate.key;
     lot.castShadow = true;
     lot.receiveShadow = true;
     group.add(lot);
 
-    const outlineGeo = new THREE.BufferGeometry().setFromPoints(borderPoints(x, z, candidateTopY + 0.06));
+    const outlineGeo = new THREE.BufferGeometry().setFromPoints(borderPoints(bounds, candidateTopY + 0.06));
     const outline = new THREE.LineSegments(outlineGeo, lotLineMat);
     outline.computeLineDistances();
     group.add(outline);
@@ -153,8 +156,9 @@ export function buildPropertyGeometry({
       [candidate.x, candidate.z + 1], [candidate.x, candidate.z - 1],
     ].find(([nx, nz]) => owned.has(`${nx},${nz}`));
     if (toward) {
-      const dx = toward[0] * size - x;
-      const dz = toward[1] * size - z;
+      const neighbor = chunkBounds(property, `${toward[0]},${toward[1]}`);
+      const dx = neighbor ? (neighbor.minX + neighbor.maxX) / 2 - x : 0;
+      const dz = neighbor ? (neighbor.minZ + neighbor.maxZ) / 2 - z : 0;
       sign.rotation.y = Math.atan2(dx, dz);
     }
     // a touch of RCT crookedness, deterministic per chunk

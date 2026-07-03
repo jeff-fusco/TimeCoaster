@@ -11,12 +11,13 @@ import {
 } from '../src/systems/staff.js';
 import { STAFF, STAFF_ORDER } from '../src/config/gameData.js';
 
-// fresh state has every role at zero — including the photographers
+// fresh state has every role at zero — including photographers and scientists
 {
   const s = createStaffState();
   assert.deepEqual(Object.keys(s).sort(), Object.keys(STAFF).sort());
   assert.ok(STAFF_ORDER.includes('photographers'));
-  assert.equal(STAFF_ORDER.length, 5);
+  assert.ok(STAFF_ORDER.includes('scientists'));
+  assert.equal(STAFF_ORDER.length, 6);
   for (const role of Object.keys(s)) {
     assert.deepEqual(s[role], { hired: 0, trained: 0 });
   }
@@ -78,6 +79,11 @@ import { STAFF, STAFF_ORDER } from '../src/config/gameData.js';
 
   s.photographers = { hired: 2, trained: 1 };
   assert.match(staffStatus('photographers', s.photographers), /\$6 photo sales/, '2 * 1.5 * 2.0 = $6');
+
+  assert.match(staffStatus('scientists', s.scientists), /R&D Lab locked/i);
+  s.scientists = { hired: 2, trained: 2 };
+  assert.match(staffStatus('scientists', s.scientists), /budget up to 14%/, 'scientists raise the R&D budget cap');
+  assert.match(staffStatus('scientists', s.scientists), /efficiency ×1\.36/, 'training improves research efficiency');
 }
 
 console.log('staff tests passed');

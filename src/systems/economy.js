@@ -6,12 +6,17 @@ export function featureUnlocked(feat, done = {}) {
   if (feat === 'loop') return hasResearchKey(done, 'loop');
   if (feat === 'corkscrew') return hasResearchKey(done, 'cork');
   if (feat === 'brake') return hasResearchKey(done, 'brakes');
+  if (feat === 'spiral') return hasResearchKey(done, 'spiral');
+  if (feat === 'giantLoop') return hasResearchKey(done, 'giantLoop');
+  if (feat === 'vertical') return hasResearchKey(done, 'verticalTrack');
+  if (feat === 'tunnel') return hasResearchKey(done, 'tunnels');
+  if (feat === 'teleporter') return hasResearchKey(done, 'teleporters');
   return true;
 }
 
 export function applyResearchEffects(upgrades, done = {}) {
   if (upgrades.train) {
-    upgrades.train.max = hasResearchKey(done, 'train3') ? 8 : 4;
+    upgrades.train.max = hasResearchKey(done, 'predictiveDispatch') ? 12 : hasResearchKey(done, 'train3') ? 8 : 4;
   }
   return upgrades;
 }
@@ -24,9 +29,20 @@ export function upgradeCost(upgrade) {
   return Math.floor(upgrade.base * Math.pow(upgrade.growth, upgrade.level));
 }
 
-export function researchEfficiency(fundingPct = 0) {
-  const pct = Math.max(0, Math.min(100, fundingPct));
-  return 1 / (1 + (pct / 100) * 0.45);
+// Vendor carts: what fraction of riders buy, and at what price.
+export const VENDOR = {
+  hatFracPerLevel: 0.06,
+  hatFracMax: 0.48,
+  hatPrice: 12,
+  balloonFracPerLevel: 0.08,
+  balloonFracMax: 0.64,
+  balloonPrice: 6,
+};
+
+// Deterministic per-guest roll in [0,1) — the same seed always buys (or not),
+// so hats/balloons stay on the same guests across frames and rebuilds.
+export function guestBuyerRoll(seed) {
+  return (((seed + 1) * 2654435761) >>> 0) % 1000 / 1000;
 }
 
 // Staff effect coefficients — hiring adds coverage, training adds skill.
@@ -43,6 +59,7 @@ export const STAFF_FX = {
   janitorAppeal: 0.04,   // ride rating income per janitor training level
   photoBase: 1.5,        // $ per dispatched train per photographer hired
   photoSkill: 1.0,       // photo value bonus per training level
+  scientistSkill: 0.18,  // research efficiency per scientist training level
 };
 
 const NO_STAFF = { hired: 0, trained: 0 };
@@ -61,15 +78,18 @@ export function deriveEconomy({
   const seatsPerCar = 4 + U.seats.level * 2;
   const cars = 1 + U.car.level;
   const seatsCap = cars * seatsPerCar;
-  const ticket = 2 + U.ticket.level;
-  const express = U.express.level * 5;
-  const hype = Math.pow(1.12, U.hype.level);
   const st = pathStats || {
     excitement: 0,
     lapTime: baseLap(),
     maxSpeed: fallbackMaxSpeed,
     length: 0,
   };
+  const premiumTicket = hasResearchKey(researchDone, 'premiumTickets')
+    ? 1 + Math.min(1.35, ((st.excitement || 0) / 160) + ((st.length || 0) / 1800))
+    : 1;
+  const ticket = (2 + U.ticket.level) * premiumTicket;
+  const express = U.express.level * 5;
+  const hype = Math.pow(1.12, U.hype.level);
   // Hired counts add coverage; training levels add skill — different levers.
   const op = staff.operators || NO_STAFF;
   const ent = staff.entertainers || NO_STAFF;
@@ -89,14 +109,30 @@ export function deriveEconomy({
 
   // Hired operators crew the platform (faster boarding, first enables
   // auto-launch); training drills them to launch sooner.
-  const loadDiv = 1 + FX.operatorBoard * op.hired;
+  const stationResearchDiv =
+    (hasResearchKey(researchDone, 'stationCrew') ? 1.25 : 1) *
+    (hasResearchKey(researchDone, 'movingPlatform') ? 1.45 : 1);
+  // queue-tab upgrades (older saves/fixtures may not carry the newer keys)
+  const canopyLvl = U.canopy?.level || 0;
+  const comfortLvl = U.comfort?.level || 0;
+  const turnstileLvl = U.turnstiles?.level || 0;
+  const hatFrac = Math.min(VENDOR.hatFracMax, VENDOR.hatFracPerLevel * (U.hats?.level || 0));
+  const balloonFrac = Math.min(VENDOR.balloonFracMax, VENDOR.balloonFracPerLevel * (U.balloons?.level || 0));
+  const vendorPerRider = hatFrac * VENDOR.hatPrice + balloonFrac * VENDOR.balloonPrice;
+  const loadDiv = (1 + FX.operatorBoard * op.hired) * stationResearchDiv * (1 + 0.06 * turnstileLvl);
   const unloadTime = station.baseUnload / loadDiv;
   const loadTime = station.baseLoad / loadDiv;
-  const dwellTime = unloadTime + loadTime;
+  // Dual-Berth Station: the rear berth unloads while the front berth loads, so
+  // unload drops out of the throughput cycle; only the load plus the short
+  // berth-advance shuttle remain. Drilled operators marshal the shuttle faster.
+  const dualBerth = hasResearchKey(researchDone, 'dualBerth');
+  const advanceTime = 1.15 / ((1 + 0.1 * op.trained) * (hasResearchKey(researchDone, 'movingPlatform') ? 1.25 : 1));
+  const dwellTime = dualBerth ? loadTime + advanceTime : unloadTime + loadTime;
   const lapTravel = Math.max(2, st.lapTime);
 
   const autoDispatch = op.hired >= 1;
-  const dispatchDelay = Math.max(0.3, (station.baseDispatch ?? 3) / (1 + FX.operatorLaunch * op.trained));
+  const dispatchResearchDiv = hasResearchKey(researchDone, 'predictiveDispatch') ? 1.85 : 1;
+  const dispatchDelay = Math.max(0.3, (station.baseDispatch ?? 3) / ((1 + FX.operatorLaunch * op.trained) * dispatchResearchDiv));
   // manual dispatch estimate assumes the player launches promptly (best case)
   const cycle = lapTravel + dwellTime + (autoDispatch ? dispatchDelay : 0);
 
@@ -104,25 +140,53 @@ export function deriveEconomy({
     station.queueBase +
     U.queue.level * station.queueStep +
     FX.entertainQueue * ent.trained +
-    (hasResearchKey(researchDone, 'queue2') ? 30 : 0);
+    (hasResearchKey(researchDone, 'queue2') ? 30 : 0) +
+    (hasResearchKey(researchDone, 'queueEntertainment') ? 45 : 0) +
+    (hasResearchKey(researchDone, 'virtualQueue') ? 140 : 0) +
+    (hasResearchKey(researchDone, 'pocketQueue') ? 650 : 0);
+  const marketingResearch =
+    (hasResearchKey(researchDone, 'flyers') ? 0.18 : 0) +
+    (hasResearchKey(researchDone, 'radio') ? 0.35 : 0) +
+    (hasResearchKey(researchDone, 'viral') ? Math.min(1.25, (st.excitement || 0) / 90 + (st.length || 0) / 1400) : 0) +
+    (hasResearchKey(researchDone, 'mythicReputation') ? 2.5 : 0);
   const arrivalRate =
     station.arrivalBase *
     (1 + st.excitement / 30) *
     (1 + U.market.level * 0.25) *
-    (1 + FX.entertainArrive * ent.hired);
+    (1 + FX.entertainArrive * ent.hired) *
+    (1 + 0.08 * comfortLvl) *
+    (1 + marketingResearch) *
+    (hasResearchKey(researchDone, 'queueEntertainment') ? 1.12 : 1);
 
   // photographers sell a photo package on every dispatched (non-empty) train
   const photoPerRide = photo.hired * FX.photoBase * (1 + FX.photoSkill * photo.trained) * (1 + st.excitement / 60);
 
+  // Boarded per dispatch: each train grabs up to its seats, capped by the line
+  // and by how many guests arrive between consecutive dispatches (cycle/trains).
+  // Seat-bound throughput therefore scales with the train count, and arrival
+  // boosters only pay off when arrivals are the true bottleneck.
   const estBoard =
-    Math.min(seatsCap, queueCap, arrivalRate * cycle * trains) / Math.max(1, trains);
+    Math.min(seatsCap, queueCap, arrivalRate * cycle / Math.max(1, trains));
+  const snackCap = station.snackCap + canopyLvl * 15;
+  // snack spend per guest rises with ticket prestige and theming, so stands
+  // stay a relevant income line beyond the early game
+  const snackPerGuest = station.snackPerGuest + 0.4 * U.ticket.level;
   const snackPerMin =
-    Math.min(Math.round(simQueue), station.snackCap) *
+    Math.min(Math.round(simQueue), snackCap) *
     U.snacks.level *
-    station.snackPerGuest *
-    janitorMult;
-  const photoPerMin = estBoard > 0.5 ? photoPerRide * (60 / cycle) * trains : 0;
-  const ridePerMin = Math.round(estBoard * perRider * (60 / cycle) * trains + photoPerMin);
+    snackPerGuest *
+    janitorMult *
+    hype;
+  const trainCyclesPerMin = (60 / cycle) * trains;
+  const photoPerMin = estBoard > 0.5 ? photoPerRide * trainCyclesPerMin : 0;
+  // Merch Exit Shop skims a share of every trainload's ride take (credited at
+  // dispatch via merchRate); royalties scale with theming so they stay relevant.
+  const merchRate = hasResearchKey(researchDone, 'merchExit') ? 0.06 : 0;
+  const merchPerTrain = merchRate * estBoard * perRider;
+  const royaltyPerMin = hasResearchKey(researchDone, 'realityLicensing')
+    ? Math.max(0, st.excitement - 75) * Math.max(1, st.length / 100) * 6 * hype
+    : 0;
+  const ridePerMin = Math.round(estBoard * (perRider + vendorPerRider) * trainCyclesPerMin + photoPerMin + merchPerTrain * trainCyclesPerMin + royaltyPerMin);
   const ratePerMin = ridePerMin + snackPerMin;
 
   return {
@@ -130,6 +194,7 @@ export function deriveEconomy({
     seatsCap,
     seatsPerCar,
     ticket,
+    express,
     hype,
     perRider,
     perRideFull,
@@ -137,6 +202,8 @@ export function deriveEconomy({
     unloadTime,
     loadTime,
     dwellTime,
+    berths: dualBerth ? 2 : 1,
+    advanceTime,
     lapTravel,
     cycle,
     autoDispatch,
@@ -144,10 +211,19 @@ export function deriveEconomy({
     queueCap,
     arrivalRate,
     photoPerRide,
+    merchRate,
+    merchPerTrain,
+    royaltyPerMin,
+    hatFrac,
+    balloonFrac,
+    vendorPerRider,
+    snackCap,
     snackPerMin,
     janitorMult,
     ridePerMin,
     ratingMult,
+    researchMult,
+    upkeepMult,
     ratePerMin,
   };
 }

@@ -6,47 +6,59 @@ import {
   formatMoney,
   gradeFor,
   hasResearchKey,
-  researchEfficiency,
   upgradeCost,
-} from './systems/economy.js';
+} from './systems/economy.js?v=20260703-11';
+import {
+  createResearchState,
+  clampResearchFundingPct,
+  fundingEfficiency,
+  hasScientist,
+  normalizeResearchState,
+  pathProjectState,
+  researchFundingCap,
+  stepResearch,
+} from './systems/research.js?v=20260703-11';
 import {
   DEFAULT_STATION,
   buildPath as buildTrackPath,
   samplePathAt,
   speedAtPath,
-} from './systems/path.js';
+} from './systems/path.js?v=20260703-11';
 import {
   applySaveData,
   readSave,
+  SAVE_KEYS,
   writeSave,
-} from './systems/save.js';
+} from './systems/save.js?v=20260703-11';
 import {
   createMaintenanceState,
   enqueueInstall,
   pendingCount,
   stepMaintenance,
-} from './systems/maintenance.js';
+} from './systems/maintenance.js?v=20260703-11';
 import {
   buyLand,
+  chunkBounds,
   createPropertyState,
   expansionCandidates,
   normalizePropertyState,
   pointInOwnedLand,
-} from './systems/property.js';
-import { buildTrackGeometry as renderTrackGeometry } from './render/track.js';
-import { buildPropertyGeometry as renderPropertyGeometry } from './render/property.js';
+} from './systems/property.js?v=20260703-11';
+import { buildTrackGeometry as renderTrackGeometry } from './render/track.js?v=20260703-11';
+import { buildPropertyGeometry as renderPropertyGeometry } from './render/property.js?v=20260703-11';
 import {
   buildStationAndQueue as renderStationAndQueue,
+  spawnStationWalkers,
   updateQueueVisuals as renderQueueVisuals,
-} from './render/station.js';
+} from './render/station.js?v=20260703-11';
 import {
   CAR_LEN,
   placeCar as renderPlaceCar,
   rebuildTrains as renderRebuildTrains,
   setTrainGlow,
   setTrainOccupancy,
-} from './render/train.js';
-import { dispatchTrain, stepTrains } from './systems/trainSim.js';
+} from './render/train.js?v=20260703-11';
+import { dispatchTrain, stepTrains } from './systems/trainSim.js?v=20260703-11';
 import {
   canHire,
   canTrain,
@@ -56,20 +68,22 @@ import {
   staffStatus,
   train as trainStaff,
   trainCost,
-} from './systems/staff.js';
-import { buildChunkScenery, createClouds } from './render/scenery.js';
+} from './systems/staff.js?v=20260703-11';
+import { buildChunkScenery, createClouds } from './render/scenery.js?v=20260703-11';
 import {
   canPlaceDecoration,
   createDecorationsState,
   decorationCost,
   normalizeDecorations,
   placeDecoration,
-} from './systems/decorations.js';
-import { buildDecorationModel, buildDecorations as renderDecorations } from './render/decorations.js';
-import { initBuildControls } from './input/buildControls.js';
-import { createHudShop } from './ui/hudShop.js';
-import { createStaffPanel } from './ui/staffPanel.js';
-import { createLandPopup } from './ui/landPopup.js';
+} from './systems/decorations.js?v=20260703-11';
+import { buildDecorationModel, buildDecorations as renderDecorations } from './render/decorations.js?v=20260703-11';
+import { initBuildControls } from './input/buildControls.js?v=20260703-11';
+import { createBalancePanel } from './ui/balancePanel.js?v=20260703-11';
+import { createHudShop } from './ui/hudShop.js?v=20260703-11';
+import { createResearchPanel } from './ui/researchPanel.js?v=20260703-11';
+import { createStaffPanel } from './ui/staffPanel.js?v=20260703-11';
+import { createLandPopup } from './ui/landPopup.js?v=20260703-11';
 import {
   BLOCK_GAP,
   CATS,
@@ -86,13 +100,13 @@ import {
   MPH,
   PHYS,
   RESEARCH,
-  RESEARCH_ORDER,
+  RESEARCH_PATHS,
   SHOP_ORDER,
   STAFF,
   STAFF_ORDER,
   STN,
   UPGRADES,
-} from './config/gameData.js';
+} from './config/gameData.js?v=20260703-11';
 
 /* =========================================================================
    TIME COASTER 3D
@@ -103,7 +117,7 @@ import {
 const WORLD_UP = new THREE.Vector3(0,1,0);
 
 // ── live game state ─────────────────────────────────────────────────────────
-const research = { fundingPct:0, points:0, done:{} };
+const research = createResearchState(RESEARCH_PATHS);
 const hasResearch = k => hasResearchKey(research.done, k);
 function featureUnlocked(feat){
   return featureUnlockedModel(feat, research.done);
@@ -112,7 +126,7 @@ function applyResearchEffects(){
   applyResearchEffectsModel(UPGRADES, research.done);
 }
 
-const state = { money:0, rides:0 };
+const state = { money:1000, rides:0 };
 const sim   = { queue:0 };     // live count of guests waiting in line
 const staff = createStaffState();   // hired/trained staff (separate from upgrades)
 const maintenance = createMaintenanceState(); // purchased car/train installs waiting on mechanics
@@ -164,20 +178,67 @@ const scene=new THREE.Scene();
 scene.background=new THREE.Color(0x8fd0e8);
 scene.fog=new THREE.Fog(0x9fd6ec,58,118);
 
-const MIN_FRUSTUM=10, MAX_FRUSTUM=140;     // how far you can zoom in / way out
+const MIN_FRUSTUM=10, MAX_FRUSTUM=140;     // zoom-in floor / zoom-out base (grows with park size)
+const MIN_CAM_HEIGHT=8, MAX_CAM_HEIGHT=132;
 let frustum=30, azimuth=Math.PI*0.25, camHeight=52;
+
+// Farthest owned-chunk edge from the origin, in world units — the camera's
+// zoom-out and pan limits grow with the park so big builds always fit in frame.
+function parkExtent(){
+  let ext=property.chunkSize/2;
+  for(const key of property.owned){
+    const bounds=chunkBounds(property,key);
+    if(!bounds)continue;
+    ext=Math.max(ext, Math.abs(bounds.minX), Math.abs(bounds.maxX), Math.abs(bounds.minZ), Math.abs(bounds.maxZ));
+  }
+  return ext;
+}
+function maxFrustumNow(){
+  return Math.max(MAX_FRUSTUM, parkExtent()*2.4);
+}
+// Wide views get a rising height floor: zoomed in close you can drop to ground
+// level, but a whole-park view is capped at an angle where the island still
+// fills the frame instead of half the screen being sky.
+function minCamHeightNow(){
+  const t=Math.max(0, Math.min(1, (frustum-40)/220));
+  return MIN_CAM_HEIGHT + t*30;
+}
+function clampCamera(){
+  frustum=Math.max(MIN_FRUSTUM, Math.min(maxFrustumNow(), frustum));
+  camHeight=Math.max(minCamHeightNow(), Math.min(MAX_CAM_HEIGHT, camHeight));
+}
 const camTarget=new THREE.Vector3(0,2.5,0);
-const camera=new THREE.OrthographicCamera(-1,1,1,-1,0.1,1200);
+// Negative near plane (valid for ortho): the camera sits a fixed ~62 units from
+// its target, so a park wider than that would otherwise clip against the near
+// plane when zoomed out to see all of it.
+const camera=new THREE.OrthographicCamera(-1,1,1,-1,-600,1600);
+function lowCameraT(){
+  return Math.max(0, Math.min(1, (52 - camHeight) / 44));
+}
+function effectiveFrustum(){
+  return frustum * (1 + lowCameraT() * 0.32);
+}
 function placeCamera(){
-  camera.position.set(camTarget.x+Math.cos(azimuth)*62,camTarget.y+camHeight,camTarget.z+Math.sin(azimuth)*62);
-  camera.lookAt(camTarget);
-  // keep haze proportional to zoom so a wide view isn't washed out
-  scene.fog.near=30+frustum*0.9; scene.fog.far=110+frustum*3.0;
+  const lowT=lowCameraT();
+  const camDist=62-lowT*34;
+  const focus=camTarget.clone();
+  focus.y-=lowT*1.2;
+  camera.position.set(camTarget.x+Math.cos(azimuth)*camDist,camTarget.y+camHeight,camTarget.z+Math.sin(azimuth)*camDist);
+  camera.lookAt(focus);
+  // Anchor fog to the focal subject's distance (not raw zoom): the orthographic
+  // camera sits a fixed distance back, so zooming in or looking top-down does not
+  // move it closer. Keying fog off focusDist keeps the ride crisp at any zoom or
+  // height while distant scenery still hazes into the sky (floating-island look).
+  const viewFrustum=effectiveFrustum();
+  const focusDist=camera.position.distanceTo(focus);
+  scene.fog.near=focusDist+viewFrustum*0.5;
+  scene.fog.far=focusDist+viewFrustum*3.0+150;
 }
 function resize(){
   const w=host.clientWidth,h=host.clientHeight,a=w/h;
-  camera.left=-frustum*a/2; camera.right=frustum*a/2;
-  camera.top=frustum/2; camera.bottom=-frustum/2;
+  const viewFrustum=effectiveFrustum();
+  camera.left=-viewFrustum*a/2; camera.right=viewFrustum*a/2;
+  camera.top=viewFrustum/2; camera.bottom=-viewFrustum/2;
   camera.updateProjectionMatrix(); renderer.setSize(w,h);
 }
 window.addEventListener('resize',resize);
@@ -282,7 +343,7 @@ function buildTrackGeometry(){
 
 function queueSignature(d = derived()){
   const station = `${ctrlPts[0]?.x},${ctrlPts[0]?.z},${ctrlPts[1]?.x},${ctrlPts[1]?.z}`;
-  return `${d.queueCap}|${UPGRADES.snacks.level}|${station}`;
+  return `${d.queueCap}|${UPGRADES.snacks.level}|${UPGRADES.canopy.level}|${UPGRADES.hats.level}|${UPGRADES.balloons.level}|${d.berths}|${station}`;
 }
 
 function refreshDecorBlockers(){
@@ -318,8 +379,8 @@ function buildStationAndQueue(){
   refreshDecorBlockers();
 }
 
-function updateQueueVisuals(){
-  renderQueueVisuals({ queue: sim.queue, stationRefs });
+function updateQueueVisuals(dt=0){
+  renderQueueVisuals({ queue: sim.queue, stationRefs, dt, time: performance.now()*0.001 });
 }
 
 function ensureQueueVisualFresh(d = derived()){
@@ -349,6 +410,7 @@ function rebuildTrains(){
     path,
     colors: COL,
     headColors: HEADS,
+    guestColors: GUEST_COLS,
     carLength: CAR_LEN,
   });
 }
@@ -393,11 +455,12 @@ const buildControls=initBuildControls({
   setPaidLength: next => { paidLength = next; },
   getTrains: () => trains,
   getFrustum: () => frustum,
-  setFrustum: next => { frustum = next; },
+  setFrustum: next => { frustum = next; clampCamera(); resize(); },
   getAzimuth: () => azimuth,
   setAzimuth: next => { azimuth = next; },
   getCamHeight: () => camHeight,
-  setCamHeight: next => { camHeight = next; },
+  setCamHeight: next => { camHeight = next; clampCamera(); resize(); },
+  getPanLimit: () => parkExtent() + 20,
   camTarget,
   resize,
   buildPath,
@@ -415,6 +478,14 @@ const buildControls=initBuildControls({
 });
 const bm=buildControls.state;
 function updateBuildCost(){ buildControls.updateBuildCost(); }
+// lightweight camera introspection (console/tooling; no gameplay effect)
+window.__TC3D_CAM__ = () => ({
+  frustum, camHeight, azimuth,
+  maxFrustum: maxFrustumNow(),
+  minCamHeight: minCamHeightNow(),
+  parkExtent: parkExtent(),
+  target: { x: camTarget.x, z: camTarget.z },
+});
 if(window.__TIME_COASTER_TEST__){
   window.__TC3D_DEBUG__ = {
     trainState: () => trains.map(tr => ({ s: tr.s, prevS: tr.prevS, L: tr.L, mode: tr.mode, phase: tr.phase, timer: tr.timer })),
@@ -437,6 +508,13 @@ if(window.__TIME_COASTER_TEST__){
       };
     },
     setFrustum: v => { frustum = v; resize(); placeCamera(); renderer.render(scene, camera); },
+    setAzimuth: v => { azimuth = v; placeCamera(); renderer.render(scene, camera); },
+    setCamHeight: v => { camHeight = v; resize(); placeCamera(); renderer.render(scene, camera); },
+    cameraFrame: () => ({
+      camHeight,
+      lowT: lowCameraT(),
+      effectiveFrustum: effectiveFrustum(),
+    }),
     // screen-space centres of the for-sale sign boards, for click tests
     landSigns: () => {
       const out = [];
@@ -470,11 +548,26 @@ function updateTrains(dt,d){
     trains, dt, economy:d, pathLen:path.len, stopS:stationRefs.stopS, sim, state,
     speedAt, stationBusy,
     carLen:CAR_LEN, blockGap:BLOCK_GAP,
+    berths:d.berths, advanceTime:d.advanceTime,
     autoDispatch:d.autoDispatch, dispatchDelay:d.dispatchDelay,
     placeTrain: tr => tr.cars.forEach((car,i)=>placeCar(car, tr.s-i*CAR_LEN)),
     setOccupancy: setTrainOccupancy,
     onDeposit: dispatchDeposit,
   });
+  // dwell-phase transitions drive guest walk animations: riders stream off to
+  // the exit walkway on unload, and the queue files onto the platform on load.
+  // With dual berths the waves use their own platform halves so both run at once.
+  for(const tr of trains){
+    const cur=tr.mode==='dwell'?tr.phase:'run';
+    if(tr._animPhase!==cur){
+      const dual=d.berths>1;
+      if(cur==='unload'&&tr.startBoard>0)
+        spawnStationWalkers(stationRefs,'exit',tr.startBoard,d.unloadTime,dual?(tr.berth==='front'?'front':'rear'):'all');
+      else if(cur==='load'&&tr.cycleBoard>0)
+        spawnStationWalkers(stationRefs,'board',tr.cycleBoard,d.loadTime,dual?'front':'all');
+      tr._animPhase=cur;
+    }
+  }
   // ready trains glow (pulsing) until launched; hint the player once if manual
   const pulse=0.45+0.35*Math.sin(performance.now()*0.006);
   let anyReady=false;
@@ -595,7 +688,15 @@ renderer.domElement.addEventListener('mousemove', e=>{
 });
 
 window.addEventListener('keydown', e=>{
-  if((e.key==='Escape'||e.key==='b'||e.key==='B') && decorPlace.type){ cancelDecorPlacement(); refreshHUD(); }
+  if(e.defaultPrevented) return;
+  if(e.key==='Escape'){
+    if(escapeMenu.open){ setEscapeMenu(false); e.preventDefault(); return; }
+    if(decorPlace.type){ cancelDecorPlacement(); refreshHUD(); e.preventDefault(); return; }
+    if(closeOpenPanels()){ e.preventDefault(); return; }
+    if(!bm.active){ setEscapeMenu(true); e.preventDefault(); }
+    return;
+  }
+  if((e.key==='b'||e.key==='B') && decorPlace.type){ cancelDecorPlacement(); refreshHUD(); }
 });
 // entering build mode drops any in-progress placement
 document.getElementById('buildToggle').addEventListener('click', ()=>{
@@ -664,18 +765,25 @@ function tick(){
     const d=derived();
     // guests arrive at the queue (capped by capacity)
     sim.queue=Math.min(d.queueCap, sim.queue + d.arrivalRate*dt);
-    // snack income scales with guests waiting (capped per stand), boosted by Janitors
-    if(UPGRADES.snacks.level>0) state.money += Math.min(sim.queue,STN.snackCap)*UPGRADES.snacks.level*STN.snackPerGuest*d.janitorMult/60*dt;
-    // research: drains a chosen % of projected income; high percentages are less efficient per dollar.
-    if(research.fundingPct>0 && state.money>0){
-      const fundingPct=Math.max(0,Math.min(100,research.fundingPct));
+    // snack income scales with guests waiting (capped per stand, raised by
+    // Shade Canopies), boosted by Janitors, tickets and theming
+    if(UPGRADES.snacks.level>0) state.money += d.snackPerMin/60*dt;
+    // Reality Licensing royalties trickle in passively from impossible rides
+    if(d.royaltyPerMin>0) state.money += d.royaltyPerMin/60*dt;
+    // research: Scientists convert a chosen % of projected income into progress on the active path.
+    const activeResearch=pathProjectState(research, RESEARCH_PATHS, RESEARCH);
+    if(research.fundingPct>0 && state.money>0 && hasScientist(staff) && activeResearch && !activeResearch.complete){
+      const fundingPct=clampResearchFundingPct(research.fundingPct, staff);
+      if(research.fundingPct!==fundingPct) research.fundingPct=fundingPct;
       const spendPerMin=Math.max(0,d.ratePerMin)*fundingPct/100;
       const spend=Math.min(state.money, spendPerMin/60*dt);
-      state.money-=spend; research.points+=spend/10*researchEfficiency(fundingPct);
+      state.money-=spend;
+      const unlocked=stepResearch({ research, researchPaths:RESEARCH_PATHS, projects:RESEARCH, staff, spend, fundingPct });
+      unlocked.forEach(handleResearchUnlock);
     }
     updateTrains(dt,d);
     ensureQueueVisualFresh(d);
-    updateQueueVisuals();
+    updateQueueVisuals(dt);
     hudAccum+=dt;
     if(hudAccum>=0.2){ refreshHUD(); hudAccum=0; }
   } else {
@@ -695,20 +803,12 @@ const ui=createHudShop({
   categories: CATS,
   upgrades: UPGRADES,
   shopOrder: SHOP_ORDER,
-  research: {
-    projects: RESEARCH,
-    get fundingPct(){ return research.fundingPct; },
-    set fundingPct(next){ research.fundingPct = next; },
-    get points(){ return research.points; },
-  },
-  researchOrder: RESEARCH_ORDER,
   derived,
-  researchEfficiency,
   getMaintenance: () => maintenance,
   decor: DECOR,
   decorOrder: DECOR_ORDER,
   getSelectedDecor: () => decorPlace.type,
-  onSelectDecor: selectDecor,
+  onSelectDecor: type => { selectDecor(type); setShopOpen(false); },
   getPath: () => path,
   getState: () => state,
   getSim: () => sim,
@@ -718,12 +818,78 @@ const ui=createHudShop({
   fmt,
   mph: MPH,
   onBuy: buy,
-  onResearchProject: researchProject,
-  onSetResearchFunding: pct => { research.fundingPct = pct; refreshHUD(); saveGame(); },
 });
 function buildShop(){ ui.buildShop(); }
 function renderShop(){ ui.renderShop(); }
-function refreshHUD(){ ui.refreshHUD(); updateMaintenanceHUD(); if(staffUI.isOpen()) staffUI.render(); if(landUI.isOpen()) landUI.render(); }
+let shopOpen=false;
+function setShopOpen(open){
+  shopOpen=open;
+  const panel=$('shopPanel');
+  const toggle=$('shopToggle');
+  const shop=$('shop');
+  if(panel) panel.hidden=!open;
+  if(toggle) toggle.classList.toggle('active',open);
+  if(open){
+    if(shop) shop.classList.remove('hidden');
+    renderShop();
+  }
+}
+function refreshHUD(){
+  ui.refreshHUD();
+  updateMaintenanceHUD();
+  const researchUnlocked=hasScientist(staff);
+  $('researchToggle').hidden=!researchUnlocked;
+  if(!researchUnlocked && researchUI.isOpen()) researchUI.close();
+  if(researchUI.isOpen()) researchUI.render();
+  if(staffUI.isOpen()) staffUI.render();
+  if(landUI.isOpen()) landUI.render();
+  if(balanceUI.isOpen()) balanceUI.render();
+}
+
+// ── park balance sheet ──────────────────────────────────────────────────────
+const balanceUI=createBalancePanel({
+  document,
+  derived,
+  getState: () => state,
+  getResearch: () => research,
+  canSpendResearch: () => hasScientist(staff),
+  researchPaths: RESEARCH_PATHS,
+  projects: RESEARCH,
+  pathProjectState,
+  fmt,
+});
+document.querySelector('.bank')?.addEventListener('click', ()=>{
+  if(bm.active) buildControls.exitBuildMode();
+  if(shopOpen) setShopOpen(false);
+  if(researchUI.isOpen()) researchUI.close();
+  if(staffUI.isOpen()) staffUI.close();
+  if(landUI.isOpen()) landUI.close();
+  balanceUI.toggle();
+});
+
+// ── R&D management panel ───────────────────────────────────────────────────
+const researchUI=createResearchPanel({
+  document,
+  research,
+  projects: RESEARCH,
+  researchPaths: RESEARCH_PATHS,
+  derived,
+  staff: () => staff,
+  fundingEfficiency,
+  researchFundingCap,
+  clampResearchFundingPct,
+  pathProjectState,
+  hasResearch,
+  fmt,
+  onSetActivePath: path => { research.activePath = path; refreshHUD(); saveGame(); },
+  onSetResearchFunding: pct => { research.fundingPct = clampResearchFundingPct(pct, staff); refreshHUD(); saveGame(); },
+});
+$('researchToggle').addEventListener('click', ()=>{
+  if(bm.active) buildControls.exitBuildMode();
+  if(shopOpen) setShopOpen(false);
+  if(balanceUI.isOpen()) balanceUI.close();
+  researchUI.toggle();
+});
 
 // ── staff management panel ──────────────────────────────────────────────────
 const staffUI=createStaffPanel({
@@ -734,9 +900,20 @@ const staffUI=createStaffPanel({
   getState: () => state,
   costs: { hire: hireCost, train: trainCost, canHire, canTrain },
   describe: staffStatus,
+  onSpendFeedback: (amount, x, y) => spawnCoinScreen(Math.max(0,x-26), Math.max(0,y-14), amount, true),
   onHire: role => {
+    const prevResearchCap=researchFundingCap(staff);
     const spent=hireStaff(role, staff, state.money);
-    if(spent>0){ state.money-=spent; spawnBankDelta(spent,true); refreshHUD(); saveGame(); showToast(`Hired a ${STAFF[role].name.replace(/s$/,'')}`); }
+    if(spent>0){
+      state.money-=spent;
+      spawnBankDelta(spent,true);
+      if(role==='scientists'){
+        const nextCap=researchFundingCap(staff);
+        if(research.fundingPct===0 || research.fundingPct>=prevResearchCap) research.fundingPct=nextCap;
+      }
+      refreshHUD(); saveGame(); showToast(`Hired a ${STAFF[role].name.replace(/s$/,'')}`);
+    }
+    return spent;
   },
   onTrain: role => {
     const spent=trainStaff(role, staff, state.money);
@@ -746,10 +923,32 @@ const staffUI=createStaffPanel({
       if(role==='entertainers') ensureQueueVisualFresh();
       refreshHUD(); saveGame(); showToast(`${STAFF[role].name} training improved`);
     }
+    return spent;
   },
   fmt,
 });
-$('staffToggle').addEventListener('click', ()=>staffUI.toggle());
+$('staffToggle').addEventListener('click', ()=>{
+  if(bm.active) buildControls.exitBuildMode();
+  if(shopOpen) setShopOpen(false);
+  if(balanceUI.isOpen()) balanceUI.close();
+  staffUI.toggle();
+});
+$('shopToggle').addEventListener('click', ()=>{
+  if(bm.active) buildControls.exitBuildMode();
+  if(researchUI.isOpen()) researchUI.close();
+  if(staffUI.isOpen()) staffUI.close();
+  if(balanceUI.isOpen()) balanceUI.close();
+  setShopOpen(!shopOpen);
+});
+$('shopClose').addEventListener('click', ()=>setShopOpen(false));
+$('shopBackdrop').addEventListener('click', ()=>setShopOpen(false));
+$('buildToggle').addEventListener('click', ()=>{
+  if(shopOpen) setShopOpen(false);
+  if(escapeMenu.open) setEscapeMenu(false);
+  if(researchUI.isOpen()) researchUI.close();
+  if(staffUI.isOpen()) staffUI.close();
+  if(balanceUI.isOpen()) balanceUI.close();
+});
 
 // ── land purchase popup (opened by clicking a FOR SALE sign in the scene) ───
 const landUI=createLandPopup({
@@ -761,14 +960,12 @@ const landUI=createLandPopup({
   fmt,
 });
 
-function researchProject(key){
+function handleResearchUnlock(key){
   const p=RESEARCH[key];
-  if(hasResearch(key))return;
-  if(research.points<p.rp){ showToast(`Need ${p.rp} RP - fund research to earn points`); return; }
-  research.points-=p.rp; research.done[key]=true;
+  if(!p)return;
   applyResearchEffects();
   if(key==='launch') buildPath();              // free speed level changes the physics
-  if(key==='queue2') ensureQueueVisualFresh();
+  if(['queue2','queueEntertainment','virtualQueue','pocketQueue'].includes(key)) ensureQueueVisualFresh();
   renderShop(); refreshHUD(); saveGame();
   showToast(`Researched: ${p.name}!`);
 }
@@ -791,6 +988,7 @@ function buy(key){
     showToast('Train purchased - mechanics are preparing it');
   }
   else if(key==='speed'){buildPath();} // re-derive speed profile/stats
+  else if(key==='hats'||key==='balloons'){rebuildTrains();} // riders on the trains get their merch too
   refreshHUD(); saveGame();
 }
 function buyProperty(key){
@@ -830,11 +1028,63 @@ let toastTimer;
 function showToast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600);}
 $('dispatchBtn').addEventListener('click', dispatchReadyTrain);
 
+const escapeMenu = {
+  open: false,
+  resetArmed: false,
+  resetTimer: null,
+};
+function resetEscapeConfirm(){
+  escapeMenu.resetArmed=false;
+  const reset=$('escapeReset');
+  if(reset) reset.textContent='Reset Park';
+  clearTimeout(escapeMenu.resetTimer);
+  escapeMenu.resetTimer=null;
+}
+function setEscapeMenu(open){
+  escapeMenu.open=open;
+  const panel=$('escapePanel');
+  if(panel) panel.hidden=!open;
+  resetEscapeConfirm();
+}
+function closeOpenPanels(){
+  let closed=false;
+  if(shopOpen){ setShopOpen(false); closed=true; }
+  if(researchUI.isOpen()){ researchUI.close(); closed=true; }
+  if(staffUI.isOpen()){ staffUI.close(); closed=true; }
+  if(landUI.isOpen()){ landUI.close(); closed=true; }
+  if(balanceUI.isOpen()){ balanceUI.close(); closed=true; }
+  return closed;
+}
+function resetSaveAndReload(){
+  SAVE_KEYS.forEach(key=>localStorage.removeItem(key));
+  location.reload();
+}
+function armOrResetPark(){
+  if(!escapeMenu.resetArmed){
+    escapeMenu.resetArmed=true;
+    const reset=$('escapeReset');
+    if(reset) reset.textContent='Confirm Reset';
+    showToast('Click Reset again to wipe this park');
+    clearTimeout(escapeMenu.resetTimer);
+    escapeMenu.resetTimer=setTimeout(resetEscapeConfirm,3500);
+    return;
+  }
+  resetSaveAndReload();
+}
+$('escapeResume').addEventListener('click', ()=>setEscapeMenu(false));
+$('escapeBackdrop').addEventListener('click', ()=>setEscapeMenu(false));
+$('escapeSave').addEventListener('click', ()=>{
+  showToast(saveGame() ? 'Game saved' : 'Save failed');
+  resetEscapeConfirm();
+});
+$('escapeReload').addEventListener('click', ()=>location.reload());
+$('escapeReset').addEventListener('click', armOrResetPark);
+
 // =========================================================================
 //  SAVE / LOAD
 // =========================================================================
 function saveGame(){
-  writeSave(localStorage, {
+  return writeSave(localStorage, {
     state,
     sim,
     upgrades: UPGRADES,
@@ -872,6 +1122,8 @@ function loadGame(){
     property.baseCost=restoredProperty.baseCost;
     property.growth=restoredProperty.growth;
     property.distanceScale=restoredProperty.distanceScale;
+    property.sizeGrowth=restoredProperty.sizeGrowth;
+    property.farGrowth=restoredProperty.farGrowth;
     property.owned=restoredProperty.owned;
   }
   if(restored.decorations){
@@ -888,9 +1140,11 @@ function loadGame(){
     y: point.station ? point.y : Math.max(0.2, Math.min(MAX_TRACK_HEIGHT, point.y)),
   }));
   if(typeof restored.paidLength==='number')paidLength=restored.paidLength;
-  if(typeof restored.frustum==='number')frustum=Math.max(MIN_FRUSTUM, Math.min(MAX_FRUSTUM, restored.frustum));
+  if(typeof restored.frustum==='number'){ frustum=restored.frustum; clampCamera(); }
   if(typeof restored.azimuth==='number')azimuth=restored.azimuth;
   applyResearchEffects();   // e.g. raise train cap if Block Sections was researched
+  normalizeResearchState(research, RESEARCH_PATHS);
+  research.fundingPct=clampResearchFundingPct(research.fundingPct, staff);
 }
 setInterval(saveGame,15000);
 
@@ -911,3 +1165,4 @@ updateQueueVisuals();
 resize();
 refreshHUD();
 tick();
+window.__TC3D_BOOTED = true;

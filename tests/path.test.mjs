@@ -135,6 +135,32 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
 }
 
 {
+  const baseline = makePath();
+  const segments = [
+    ['spiral', PATH_SAMPLES.spiral - PATH_SAMPLES.segment],
+    ['giantLoop', PATH_SAMPLES.giantLoop],
+    ['vertical', 0],
+    ['tunnel', PATH_SAMPLES.tunnel - PATH_SAMPLES.segment],
+    ['teleporter', 0],
+  ];
+  for (const [seg, sampleDelta] of segments) {
+    const ctrlPts = makeCtrlPts();
+    ctrlPts[3].seg = seg;
+    if (seg === 'vertical') ctrlPts[4].y = 14;
+    const path = makePath(ctrlPts);
+    assert.ok(path.kind.includes(seg), `${seg} produces real path samples`);
+    assert.equal(path.stats.featureCounts[seg], 1);
+    assert.ok(path.stats.excitement > baseline.stats.excitement, `${seg} affects excitement`);
+    if (sampleDelta) assert.equal(path.N, baseline.N + sampleDelta);
+    if (seg === 'tunnel') assert.ok(Math.min(...path.height) < 0, 'tunnel dives below the land plane');
+    if (seg === 'teleporter') {
+      const portalSpeed = Math.max(...path.speed.filter((speed, i) => path.kind[i] === 'teleporter'));
+      assert.ok(portalSpeed > baseline.stats.maxSpeed, 'teleporter acts as a high-speed portal accelerator');
+    }
+  }
+}
+
+{
   const ctrlPts = makeCtrlPts();
   ctrlPts[3].seg = 'brake';
   const upgrades = makeUpgrades();

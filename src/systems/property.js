@@ -3,6 +3,8 @@ export const DEFAULT_PROPERTY = {
   baseCost: 900,
   growth: 1.72,
   distanceScale: 0.32,
+  sizeGrowth: 0.35,
+  farGrowth: 1.28,
   owned: ['0,0'],
 };
 
@@ -21,6 +23,8 @@ export function createPropertyState(config = DEFAULT_PROPERTY) {
     baseCost: config.baseCost,
     growth: config.growth,
     distanceScale: config.distanceScale,
+    sizeGrowth: config.sizeGrowth,
+    farGrowth: config.farGrowth,
     owned: [...config.owned],
   };
 }
@@ -36,19 +40,53 @@ export function normalizePropertyState(property, fallback = DEFAULT_PROPERTY) {
     baseCost: Number.isFinite(src.baseCost) && src.baseCost > 0 ? src.baseCost : fallback.baseCost,
     growth: Number.isFinite(src.growth) && src.growth > 1 ? src.growth : fallback.growth,
     distanceScale: Number.isFinite(src.distanceScale) && src.distanceScale >= 0 ? src.distanceScale : fallback.distanceScale,
+    sizeGrowth: Number.isFinite(src.sizeGrowth) && src.sizeGrowth >= 0 ? src.sizeGrowth : fallback.sizeGrowth,
+    farGrowth: Number.isFinite(src.farGrowth) && src.farGrowth >= 1 ? src.farGrowth : fallback.farGrowth,
     owned,
+  };
+}
+
+export function plotSpan(property, index) {
+  const ring = Math.abs(index);
+  const outer = Math.max(0, ring - 1);
+  const deepOuter = Math.max(0, ring - 3);
+  return property.chunkSize * (1 + outer * property.sizeGrowth + deepOuter * property.sizeGrowth * 0.65);
+}
+
+export function plotCenter(property, index) {
+  const ring = Math.abs(index);
+  if (ring === 0) return 0;
+  let offset = plotSpan(property, 0) / 2;
+  for (let i = 1; i < ring; i += 1) offset += plotSpan(property, i);
+  offset += plotSpan(property, ring) / 2;
+  return Math.sign(index) * offset;
+}
+
+export function plotDimensions(property, key) {
+  const chunk = parseChunkKey(key);
+  if (!chunk) return null;
+  const width = plotSpan(property, chunk.x);
+  const depth = plotSpan(property, chunk.z);
+  return {
+    width,
+    depth,
+    area: width * depth,
+    baseArea: property.chunkSize * property.chunkSize,
   };
 }
 
 export function chunkBounds(property, key) {
   const chunk = parseChunkKey(key);
   if (!chunk) return null;
-  const half = property.chunkSize / 2;
+  const width = plotSpan(property, chunk.x);
+  const depth = plotSpan(property, chunk.z);
+  const cx = plotCenter(property, chunk.x);
+  const cz = plotCenter(property, chunk.z);
   return {
-    minX: chunk.x * property.chunkSize - half,
-    maxX: chunk.x * property.chunkSize + half,
-    minZ: chunk.z * property.chunkSize - half,
-    maxZ: chunk.z * property.chunkSize + half,
+    minX: cx - width / 2,
+    maxX: cx + width / 2,
+    minZ: cz - depth / 2,
+    maxZ: cz + depth / 2,
   };
 }
 
@@ -64,7 +102,10 @@ export function landCost(property, key) {
   if (!chunk) return Infinity;
   const ownedCount = Math.max(1, property.owned.length);
   const distance = Math.abs(chunk.x) + Math.abs(chunk.z);
-  const scale = Math.pow(property.growth, ownedCount - 1) * (1 + distance * property.distanceScale);
+  const dimensions = plotDimensions(property, key);
+  const areaScale = dimensions ? dimensions.area / dimensions.baseArea : 1;
+  const distancePremium = Math.pow(property.farGrowth, Math.max(0, distance - 1));
+  const scale = Math.pow(property.growth, ownedCount - 1) * (1 + distance * property.distanceScale) * areaScale * distancePremium;
   return Math.ceil(property.baseCost * scale);
 }
 
@@ -91,7 +132,10 @@ export function expansionCandidates(property) {
     });
   }
   return [...candidates]
-    .map(key => ({ key, ...parseChunkKey(key), cost: landCost(property, key) }))
+    .map(key => {
+      const dimensions = plotDimensions(property, key);
+      return { key, ...parseChunkKey(key), ...dimensions, cost: landCost(property, key) };
+    })
     .sort((a, b) => a.cost - b.cost || Math.abs(a.x) + Math.abs(a.z) - (Math.abs(b.x) + Math.abs(b.z)) || a.key.localeCompare(b.key));
 }
 

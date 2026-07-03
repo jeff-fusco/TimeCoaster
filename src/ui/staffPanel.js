@@ -10,6 +10,7 @@ export function createStaffPanel({
   describe = () => '',   // (role, entry) -> live status line
   onHire,
   onTrain,
+  onSpendFeedback = () => {},
   fmt,
 }) {
   const $ = id => document.getElementById(id);
@@ -17,6 +18,8 @@ export function createStaffPanel({
   const list = $('staffList');
   let open = false;
   let lastRenderKey = '';
+  let feedback = null;
+  let suppressClickUntil = 0;
 
   function render() {
     if (!list) return;
@@ -37,9 +40,10 @@ export function createStaffPanel({
       const hCost = costs.hire(role, staff);
       const tCost = costs.train(role, staff);
       const atTrainMax = s.trained >= cfg.trainMax;
+      const isFeedback = feedback?.role === role && performance.now() - feedback.time < 850;
 
       const row = document.createElement('div');
-      row.className = 'staff-row';
+      row.className = `staff-row${isFeedback ? ' staff-flash' : ''}`;
       row.innerHTML =
         `<div class="s-ic">${cfg.icon}</div>` +
         `<div class="s-info">` +
@@ -49,6 +53,7 @@ export function createStaffPanel({
         `<div class="s-fx"><b>Hire</b> ${cfg.hireDesc}</div>` +
         `<div class="s-fx"><b>Train</b> ${cfg.trainDesc}</div>` +
         `<div class="s-status">${describe(role, s)}</div>` +
+        `${isFeedback ? `<div class="s-feedback">${feedback.text}</div>` : ''}` +
         `</div>` +
         `<div class="s-acts">` +
         `<button class="staff-btn" data-act="hire" data-role="${role}" ${!hireable || money < hCost ? 'disabled' : ''}>` +
@@ -60,14 +65,40 @@ export function createStaffPanel({
     });
   }
 
+  function activateButton(btn, point = null) {
+    if (!btn || btn.disabled) return;
+    const { act, role } = btn.dataset;
+    const spent = act === 'hire' ? onHire(role) : onTrain(role);
+    if (spent > 0) {
+      const rect = btn.getBoundingClientRect();
+      const x = point?.x ?? rect.left + rect.width / 2;
+      const y = point?.y ?? rect.top + rect.height / 2;
+      feedback = {
+        role,
+        time: performance.now(),
+        text: `${act === 'hire' ? 'Hired' : 'Trained'} -$${fmt(spent)}`,
+      };
+      onSpendFeedback(spent, x, y, { act, role });
+      lastRenderKey = '';
+    }
+    render();
+  }
+
   if (list) {
-    list.addEventListener('click', e => {
+    list.addEventListener('pointerdown', e => {
       const btn = e.target.closest('.staff-btn');
       if (!btn || btn.disabled) return;
-      const { act, role } = btn.dataset;
-      if (act === 'hire') onHire(role);
-      else onTrain(role);
-      render();
+      e.preventDefault();
+      suppressClickUntil = performance.now() + 350;
+      btn.dataset.pointerHandled = '1';
+      activateButton(btn, { x: e.clientX, y: e.clientY });
+      setTimeout(() => { delete btn.dataset.pointerHandled; }, 0);
+    });
+
+    list.addEventListener('click', e => {
+      const btn = e.target.closest('.staff-btn');
+      if (!btn || btn.disabled || btn.dataset.pointerHandled || performance.now() < suppressClickUntil) return;
+      activateButton(btn);
     });
   }
 

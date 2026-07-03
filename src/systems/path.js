@@ -3,6 +3,9 @@ export const PATH_SAMPLES = {
   segment: 24,
   loop: 48,
   corkscrew: 46,
+  spiral: 76,
+  giantLoop: 80,
+  tunnel: 40,
 };
 
 export function stationLength(upgrades) {
@@ -117,18 +120,38 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       for (let k = 0; k < samples.segment; k++) {
         out.push({ pos: hermite(Vector3, postStation, m0, p2, m1, k / samples.segment), kind: seg });
       }
-    } else if (seg === 'loop') {
+    } else if (seg === 'loop' || seg === 'giantLoop') {
       const fwd = horiz(Vector3, new Vector3().subVectors(p1, p0));
-      const R = 2.3;
+      const R = seg === 'giantLoop' ? 5.2 : 2.3;
       const C = p1.clone().addScaledVector(worldUp, R);
-      for (let k = 0; k < samples.loop; k++) {
-        const th = (k / samples.loop) * Math.PI * 2;
+      const count = seg === 'giantLoop' ? samples.giantLoop : samples.loop;
+      for (let k = 0; k < count; k++) {
+        const th = (k / count) * Math.PI * 2;
         const pos = C.clone().addScaledVector(fwd, Math.sin(th) * R).addScaledVector(worldUp, -Math.cos(th) * R);
         const up = new Vector3().subVectors(C, pos).normalize();
-        out.push({ pos, kind: 'loop', featureUp: up });
+        out.push({ pos, kind: seg, featureUp: up });
       }
       for (let k = 0; k < samples.segment; k++) {
         out.push({ pos: catmull(Vector3, p0, p1, p2, p3, k / samples.segment), kind: 'plain' });
+      }
+    } else if (seg === 'spiral') {
+      const axis = new Vector3().subVectors(p2, p1);
+      const L = Math.max(axis.length(), 0.001);
+      const axisN = axis.clone().normalize();
+      const ref = Math.abs(axisN.y) > 0.85 ? new Vector3(1, 0, 0) : worldUp;
+      const n1 = new Vector3().crossVectors(axisN, ref).normalize();
+      const n2 = new Vector3().crossVectors(axisN, n1).normalize();
+      const r0 = Math.min(3.2, Math.max(1.8, L * 0.28));
+      const turns = Math.max(1.5, Math.min(3.5, L / 4));
+      for (let k = 0; k < samples.spiral; k++) {
+        const t = k / samples.spiral;
+        const ease = Math.sin(Math.PI * t);
+        const phi = Math.PI * 2 * turns * t;
+        const center = p1.clone().addScaledVector(axisN, L * t);
+        const off = n1.clone().multiplyScalar(Math.cos(phi) * r0 * ease).addScaledVector(n2, Math.sin(phi) * r0 * ease);
+        const pos = center.clone().add(off);
+        const up = off.lengthSq() > 0.01 ? off.clone().normalize() : worldUp.clone();
+        out.push({ pos, kind: 'spiral', featureUp: up });
       }
     } else if (seg === 'corkscrew') {
       const axis = new Vector3().subVectors(p2, p1);
@@ -148,6 +171,34 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
         const pos = center.clone().add(off);
         const up = r > 0.05 ? off.clone().normalize() : worldUp.clone();
         out.push({ pos, kind: 'corkscrew', featureUp: up });
+      }
+    } else if (seg === 'vertical') {
+      for (let k = 0; k < samples.segment; k++) {
+        const t = k / samples.segment;
+        const e = t * t * (3 - 2 * t);
+        out.push({
+          pos: new Vector3(
+            p1.x + (p2.x - p1.x) * e,
+            p1.y + (p2.y - p1.y) * t,
+            p1.z + (p2.z - p1.z) * e,
+          ),
+          kind: 'vertical',
+        });
+      }
+    } else if (seg === 'tunnel') {
+      const depth = Math.max(2.6, Math.min(7.5, p1.distanceTo(p2) * 0.22));
+      for (let k = 0; k < samples.tunnel; k++) {
+        const t = k / samples.tunnel;
+        const pos = catmull(Vector3, p0, p1, p2, p3, t);
+        pos.y -= depth * Math.sin(Math.PI * t);
+        out.push({ pos, kind: 'tunnel' });
+      }
+    } else if (seg === 'teleporter') {
+      for (let k = 0; k < samples.segment; k++) {
+        const t = k / samples.segment;
+        const pos = p1.clone().lerp(p2, t);
+        pos.y += Math.sin(Math.PI * t) * 0.8;
+        out.push({ pos, kind: 'teleporter' });
       }
     } else if (seg === 'station') {
       for (let k = 0; k < samples.segment; k++) {
@@ -298,6 +349,7 @@ export function buildPath({
     const gravitySpeed = gravitySpeedAt(i);
     if (k === 'lift') speed[i] = Math.max(gravitySpeed, physics.liftSpeed * speedMult);
     else if (k === 'brake') speed[i] = gravitySpeed < 0 ? gravitySpeed : Math.min(gravitySpeed, physics.brakeSpeed * speedMult);
+    else if (k === 'teleporter') speed[i] = Math.max(Math.abs(gravitySpeed), launchSpeed * 1.45);
     else if (k === 'station') speed[i] = physics.stationSpeed;
     else speed[i] = gravitySpeed;
   }
@@ -401,11 +453,27 @@ export function buildPath({
 
   dirChanges = Math.min(dirChanges, 20);
   const airBonus = Math.min(airCount, Math.round(N * 0.25));
-  const inversions = ctrlPts.filter(p => p.seg === 'loop' || p.seg === 'corkscrew').length;
+  const inversions = ctrlPts.filter(p => p.seg === 'loop' || p.seg === 'corkscrew' || p.seg === 'giantLoop' || p.seg === 'spiral').length;
+  const featureCounts = ctrlPts.reduce((out, p) => {
+    out[p.seg || 'plain'] = (out[p.seg || 'plain'] || 0) + 1;
+    return out;
+  }, {});
   let excitement =
-    2 + maxDrop * 2.2 + maxSpeed * 0.5 + inversions * 7 + airBonus * 0.12 + len * 0.13 + Math.min(maxVertG, 4) * 1.1;
-  const intensity = 4 + maxSpeed * 0.55 + maxVertG * 5 + maxLatG * 6 + inversions * 5;
-  const nausea = maxLatG * 7 + inversions * 6 + dirChanges * 0.7 + Math.max(0, intensity - 55) * 0.3;
+    2 + maxDrop * 2.2 + maxSpeed * 0.5 + inversions * 7 + airBonus * 0.12 + len * 0.13 + Math.min(maxVertG, 4) * 1.1 +
+    (featureCounts.spiral || 0) * 10 +
+    (featureCounts.giantLoop || 0) * 18 +
+    (featureCounts.vertical || 0) * 9 +
+    (featureCounts.tunnel || 0) * 15 +
+    (featureCounts.teleporter || 0) * 35;
+  const intensity =
+    4 + maxSpeed * 0.55 + maxVertG * 5 + maxLatG * 6 + inversions * 5 +
+    (featureCounts.giantLoop || 0) * 8 +
+    (featureCounts.vertical || 0) * 10 +
+    (featureCounts.teleporter || 0) * 14;
+  const nausea =
+    maxLatG * 7 + inversions * 6 + dirChanges * 0.7 + Math.max(0, intensity - 55) * 0.3 +
+    (featureCounts.spiral || 0) * 4 +
+    (featureCounts.teleporter || 0) * 9;
 
   if (intensity > 80) excitement *= 0.85;
   if (intensity > 120) excitement *= 0.8;
@@ -423,6 +491,7 @@ export function buildPath({
     dirChanges,
     maxDrop,
     rollback,
+    featureCounts,
     excitement: +excitement.toFixed(1),
     intensity: +intensity.toFixed(1),
     nausea: +nausea.toFixed(1),

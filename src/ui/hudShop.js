@@ -3,10 +3,7 @@ export function createHudShop({
   categories,
   upgrades,
   shopOrder,
-  research,
-  researchOrder,
   derived,
-  researchEfficiency = () => 1,
   getMaintenance = () => null,
   decor = {},
   decorOrder = [],
@@ -21,8 +18,6 @@ export function createHudShop({
   fmt,
   mph,
   onBuy,
-  onResearchProject,
-  onSetResearchFunding,
 }) {
   let activeTab = 'ride';
   const $ = id => document.getElementById(id);
@@ -57,10 +52,6 @@ export function createHudShop({
     const body = $('shopBody');
     if (!body) return;
     body.innerHTML = '';
-    if (activeTab === 'research') {
-      renderResearch(body);
-      return;
-    }
     if (activeTab === 'decor') {
       renderDecor(body);
       return;
@@ -102,39 +93,6 @@ export function createHudShop({
       body.appendChild(el);
     });
     refreshHUD();
-  }
-
-  function renderResearch(body) {
-    const card = document.createElement('div');
-    card.className = 'rcard';
-    const pct = Math.max(0, Math.min(100, research.fundingPct || 0));
-    const d = derived();
-    const spendPerMin = Math.max(0, d.ratePerMin) * pct / 100;
-    const eff = researchEfficiency(pct);
-    const rpm = spendPerMin / 10 * eff;
-    card.innerHTML =
-      `<div class="rh">Research Points</div>` +
-      `<div class="rpts" id="rpts">${Math.floor(research.points)} RP</div>` +
-      `<div class="rsub">R&D uses <b id="rdPct">${pct}%</b> of income: <b id="rdSpend">$${fmt(spendPerMin)}/min</b> -> <b id="rdRp">${rpm.toFixed(1)} RP/min</b></div>` +
-      `<div class="research-slider"><input id="rdSlider" type="range" min="0" max="80" step="1" value="${pct}"></div>`;
-    body.appendChild(card);
-
-    card.querySelector('#rdSlider').addEventListener('input', e => {
-      onSetResearchFunding(Number(e.target.value));
-    });
-
-    researchOrder.forEach(key => {
-      const project = research.projects[key];
-      const done = hasResearch(key);
-      const ready = !done && research.points >= project.rp;
-      const el = document.createElement('div');
-      el.className = `proj${done ? ' done' : ready ? ' ready' : ''}`;
-      el.innerHTML =
-        `<div class="ic">${project.icon}</div><div><div class="nm">${project.name}</div><div class="ds">${project.desc}</div></div>` +
-        `<div class="rp">${done ? 'Done' : `${project.rp} RP`}</div>`;
-      if (!done) el.addEventListener('click', () => onResearchProject(key));
-      body.appendChild(el);
-    });
   }
 
   function refreshHUD() {
@@ -217,23 +175,6 @@ export function createHudShop({
       if (lv) lv.textContent = selected === key ? 'Placing — click the ground' : '';
     });
 
-    const rp = $('rpts');
-    if (rp) {
-      rp.textContent = `${Math.floor(research.points)} RP`;
-      const pct = Math.max(0, Math.min(100, research.fundingPct || 0));
-      const spendPerMin = Math.max(0, d.ratePerMin) * pct / 100;
-      const rpm = spendPerMin / 10 * researchEfficiency(pct);
-      if ($('rdPct')) $('rdPct').textContent = `${pct}%`;
-      if ($('rdSpend')) $('rdSpend').textContent = `$${fmt(spendPerMin)}/min`;
-      if ($('rdRp')) $('rdRp').textContent = `${rpm.toFixed(1)} RP/min`;
-      const slider = $('rdSlider');
-      if (slider && Number(slider.value) !== pct) slider.value = pct;
-      document.querySelectorAll('#shopBody .proj').forEach((el, i) => {
-        const key = researchOrder[i];
-        if (!key || hasResearch(key)) return;
-        el.classList.toggle('ready', research.points >= research.projects[key].rp);
-      });
-    }
   }
 
   return {

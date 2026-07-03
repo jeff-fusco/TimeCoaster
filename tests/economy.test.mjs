@@ -5,10 +5,16 @@ import {
   featureUnlocked,
   formatMoney,
   gradeFor,
-  researchEfficiency,
   upgradeCost,
 } from '../src/systems/economy.js';
-import { RESEARCH } from '../src/config/gameData.js';
+import {
+  clampResearchFundingPct,
+  createResearchState,
+  fundingEfficiency,
+  researchFundingCap,
+  stepResearch,
+} from '../src/systems/research.js';
+import { RESEARCH, RESEARCH_PATHS } from '../src/config/gameData.js';
 
 function makeUpgrades() {
   return {
@@ -43,6 +49,12 @@ const station = {
   assert.equal(featureUnlocked('brake', { brakes: true }), true);
   assert.equal(featureUnlocked('loop', { loop: true }), true);
   assert.equal(featureUnlocked('corkscrew', { cork: true }), true);
+  assert.equal(featureUnlocked('spiral'), false);
+  assert.equal(featureUnlocked('spiral', { spiral: true }), true);
+  assert.equal(featureUnlocked('giantLoop', { giantLoop: true }), true);
+  assert.equal(featureUnlocked('vertical', { verticalTrack: true }), true);
+  assert.equal(featureUnlocked('tunnel', { tunnels: true }), true);
+  assert.equal(featureUnlocked('teleporter', { teleporters: true }), true);
 }
 
 {
@@ -51,6 +63,8 @@ const station = {
   assert.equal(upgrades.train.max, 4);
   applyResearchEffects(upgrades, { train3: true });
   assert.equal(upgrades.train.max, 8);
+  applyResearchEffects(upgrades, { train3: true, predictiveDispatch: true });
+  assert.equal(upgrades.train.max, 12);
 }
 
 {
@@ -66,14 +80,45 @@ const station = {
 }
 
 {
-  assert.equal(RESEARCH.brakes.rp, 300, 'first research unlock is no longer nearly free');
-  assert.ok(RESEARCH.train3.rp >= 2000, 'late train research is a long-arc target');
+  assert.equal(RESEARCH.brakes.cost, 600, 'first research unlock is no longer nearly free');
+  assert.ok(RESEARCH.teleporters.cost >= 10000000, 'late track research is a true long-arc target');
+  assert.deepEqual(RESEARCH_PATHS.track.projects.slice(0, 3), ['brakes', 'loop', 'cork']);
 }
 
 {
-  assert.equal(researchEfficiency(0), 1);
-  assert.ok(researchEfficiency(50) < researchEfficiency(10), 'higher funding % has lower RP per dollar');
-  assert.ok(1000 * 0.05 * researchEfficiency(5) > 100 * 0.5 * researchEfficiency(50), 'larger actual spend still wins');
+  const scientists = { scientists: { hired: 1, trained: 0 } };
+  assert.equal(fundingEfficiency(0, scientists), 1);
+  assert.ok(fundingEfficiency(50, scientists) < fundingEfficiency(10, scientists), 'higher funding % has lower progress per dollar');
+  assert.ok(1000 * 0.05 * fundingEfficiency(5, scientists) > 100 * 0.5 * fundingEfficiency(50, scientists), 'larger actual spend still wins');
+  assert.equal(researchFundingCap({ scientists: { hired: 0, trained: 0 } }), 0);
+  assert.equal(researchFundingCap(scientists), 7, 'first scientist unlocks a 7% R&D budget');
+  assert.equal(researchFundingCap({ scientists: { hired: 3, trained: 0 } }), 21);
+  assert.equal(clampResearchFundingPct(50, { scientists: { hired: 2, trained: 0 } }), 14);
+}
+
+{
+  const research = createResearchState(RESEARCH_PATHS);
+  const noStaff = stepResearch({
+    research,
+    researchPaths: RESEARCH_PATHS,
+    projects: RESEARCH,
+    staff: {},
+    spend: RESEARCH.brakes.cost * 2,
+    fundingPct: 20,
+  });
+  assert.deepEqual(noStaff, [], 'research is gated behind Scientists');
+  assert.equal(research.done.brakes, undefined);
+
+  const unlocked = stepResearch({
+    research,
+    researchPaths: RESEARCH_PATHS,
+    projects: RESEARCH,
+    staff: { scientists: { hired: 1, trained: 0 } },
+    spend: RESEARCH.brakes.cost,
+    fundingPct: 0,
+  });
+  assert.deepEqual(unlocked, ['brakes']);
+  assert.equal(research.done.brakes, true);
 }
 
 {
@@ -114,8 +159,47 @@ const station = {
   assert.equal(economy.seatsPerCar, 8);
   assert.equal(economy.seatsCap, 16);
   assert.equal(economy.queueCap, 50);
-  assert.equal(economy.snackPerMin, 36);
+  // 12 in line × snacks lv1 × ($3 base + $0.4 × ticket lv2) per guest
+  assert.ok(Math.abs(economy.snackPerMin - 12 * (3 + 0.8)) < 1e-9);
   assert.ok(economy.perRideFull > 140);
+}
+
+{
+  const upgrades = makeUpgrades();
+  upgrades.car.level = 1;
+  upgrades.ticket.level = 2;
+  const pathStats = { excitement: 90, lapTime: 30, maxSpeed: 12, length: 240 };
+  const baseline = deriveEconomy({ upgrades, pathStats, simQueue: 20, researchDone: {}, station, fallbackMaxSpeed: 4 });
+  const researched = deriveEconomy({
+    upgrades,
+    pathStats,
+    simQueue: 20,
+    researchDone: {
+      stationCrew: true,
+      movingPlatform: true,
+      predictiveDispatch: true,
+      queueEntertainment: true,
+      virtualQueue: true,
+      pocketQueue: true,
+      premiumTickets: true,
+      merchExit: true,
+      realityLicensing: true,
+      flyers: true,
+      radio: true,
+      viral: true,
+      mythicReputation: true,
+    },
+    station,
+    fallbackMaxSpeed: 4,
+  });
+  assert.ok(researched.loadTime < baseline.loadTime, 'operations research speeds station loading');
+  assert.ok(researched.dispatchDelay < baseline.dispatchDelay, 'predictive dispatch tightens launch delay');
+  assert.ok(researched.queueCap > baseline.queueCap + 700, 'guest research adds major queue capacity');
+  assert.ok(researched.arrivalRate > baseline.arrivalRate * 2, 'marketing research increases demand');
+  assert.ok(researched.perRider > baseline.perRider, 'premium tickets increase rider value');
+  assert.ok(researched.merchPerTrain > 0, 'merch exit adds per-train revenue');
+  assert.ok(researched.royaltyPerMin > 0, 'reality licensing adds impossible-ride royalties');
+  assert.ok(researched.ratePerMin > baseline.ratePerMin);
 }
 
 // Staff powers each drive a different lever of the pipeline.
@@ -169,6 +253,73 @@ const station = {
   assert.equal(gradeFor(42), 'Exciting');
   assert.equal(gradeFor(65), 'Thrilling');
   assert.equal(gradeFor(90), 'Legendary');
+}
+
+// Queue-tab upgrades: Shade Canopies extend snack reach, Queue Comfort raises
+// arrivals, Smart Turnstiles speed boarding.
+{
+  const base = makeUpgrades();
+  base.snacks.level = 2;
+  const args = { pathStats: null, station, simQueue: 200, researchDone: {} };
+  const plain = deriveEconomy({ ...args, upgrades: base });
+  assert.equal(plain.snackCap, station.snackCap, 'base snack cap comes from station config');
+  assert.equal(plain.snackPerMin, 30 * 2 * station.snackPerGuest);
+
+  const withCanopy = deriveEconomy({ ...args, upgrades: { ...base, canopy: { level: 4 } } });
+  assert.equal(withCanopy.snackCap, station.snackCap + 60, 'each canopy level serves +15 guests');
+  assert.ok(withCanopy.snackPerMin > plain.snackPerMin, 'canopies raise snack income with a long line');
+
+  const withComfort = deriveEconomy({ ...args, upgrades: { ...base, comfort: { level: 5 } } });
+  assert.ok(Math.abs(withComfort.arrivalRate / plain.arrivalRate - 1.4) < 1e-9, 'comfort adds 8% arrivals per level');
+
+  const withTurnstiles = deriveEconomy({ ...args, upgrades: { ...base, turnstiles: { level: 3 } } });
+  assert.ok(withTurnstiles.loadTime < plain.loadTime, 'turnstiles speed boarding');
+  assert.ok(Math.abs(plain.loadTime / withTurnstiles.loadTime - 1.18) < 1e-9, '6% per level, multiplicative');
+}
+
+// Vendor carts: a level-scaled fraction of riders buy hats/balloons.
+{
+  const args = { pathStats: null, station, researchDone: {} };
+  const plain = deriveEconomy({ ...args, upgrades: makeUpgrades() });
+  assert.equal(plain.hatFrac, 0);
+  assert.equal(plain.vendorPerRider, 0);
+
+  const carts = deriveEconomy({
+    ...args,
+    upgrades: { ...makeUpgrades(), hats: { level: 4 }, balloons: { level: 5 } },
+  });
+  assert.ok(Math.abs(carts.hatFrac - 0.24) < 1e-9, '6% of riders per hat level');
+  assert.ok(Math.abs(carts.balloonFrac - 0.4) < 1e-9, '8% per balloon level');
+  assert.ok(Math.abs(carts.vendorPerRider - (0.24 * 12 + 0.4 * 6)) < 1e-9, 'hats $12, balloons $6');
+  assert.ok(carts.ridePerMin > plain.ridePerMin, 'vendor sales raise projected income');
+
+  const maxed = deriveEconomy({
+    ...args,
+    upgrades: { ...makeUpgrades(), hats: { level: 99 }, balloons: { level: 99 } },
+  });
+  assert.ok(Math.abs(maxed.hatFrac - 0.48) < 1e-9, 'hat uptake caps at 48%');
+  assert.ok(Math.abs(maxed.balloonFrac - 0.64) < 1e-9, 'balloon uptake caps at 64%');
+}
+
+// Dual-Berth Station drops unload from the throughput cycle; operator training
+// speeds the berth-advance shuttle on top.
+{
+  const args = { upgrades: makeUpgrades(), pathStats: null, station };
+  const single = deriveEconomy({ ...args, researchDone: {} });
+  const dual = deriveEconomy({ ...args, researchDone: { dualBerth: true } });
+  assert.equal(single.berths, 1);
+  assert.equal(dual.berths, 2);
+  assert.ok(dual.dwellTime < single.dwellTime, 'dual berth shortens the station dwell');
+  assert.ok(Math.abs(dual.dwellTime - (dual.loadTime + dual.advanceTime)) < 1e-9, 'dual dwell = load + advance shuttle');
+
+  const trainedOps = deriveEconomy({
+    ...args,
+    researchDone: { dualBerth: true },
+    staff: { operators: { hired: 0, trained: 3 } },
+  });
+  assert.ok(trainedOps.advanceTime < dual.advanceTime, 'operator training speeds the berth shuttle');
+  const movingPlat = deriveEconomy({ ...args, researchDone: { dualBerth: true, movingPlatform: true } });
+  assert.ok(movingPlat.advanceTime < dual.advanceTime, 'moving platforms speed the berth shuttle');
 }
 
 console.log('economy tests passed');

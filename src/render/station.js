@@ -1,3 +1,6 @@
+import { guestBuyerRoll } from '../systems/economy.js?v=20260703-11';
+import { addBalloon, addHat } from './guestAccessories.js?v=20260703-11';
+
 function horiz(THREE, v) {
   const h = new THREE.Vector3(v.x, 0, v.z);
   return h.lengthSq() < 1e-6 ? new THREE.Vector3(1, 0, 0) : h.normalize();
@@ -14,7 +17,7 @@ function box(THREE, grp, color, w, h, d, x, y, z, shadow) {
   return mesh;
 }
 
-function guest(THREE, grp, x, gndY, z, colorIndex, headColors, guestColors) {
+function guest(THREE, grp, x, gndY, z, colorIndex, headColors, guestColors, opts = {}) {
   const group = new THREE.Group();
   const body = new THREE.Mesh(
     new THREE.CylinderGeometry(0.12, 0.16, 0.42, 6),
@@ -26,6 +29,8 @@ function guest(THREE, grp, x, gndY, z, colorIndex, headColors, guestColors) {
     new THREE.MeshLambertMaterial({ color: headColors[colorIndex % headColors.length] }),
   );
   head.position.y = 0.5;
+  if (opts.hat) addHat(THREE, head, opts.hat);
+  if (opts.balloon) addBalloon(THREE, head, opts.balloon);
   group.add(body, head);
   group.position.set(x, gndY, z);
   group.castShadow = true;
@@ -33,7 +38,8 @@ function guest(THREE, grp, x, gndY, z, colorIndex, headColors, guestColors) {
   return group;
 }
 
-function crowdCluster(THREE, grp, x, gndY, z, colorIndex, headColors, guestColors) {
+// opts.members: per-member accessory colors [{hat, balloon} x4]
+function crowdCluster(THREE, grp, x, gndY, z, colorIndex, headColors, guestColors, opts = {}) {
   const group = new THREE.Group();
   for (let i = 0; i < 4; i++) {
     const a = (i / 4) * Math.PI * 2 + colorIndex * 0.7;
@@ -48,6 +54,9 @@ function crowdCluster(THREE, grp, x, gndY, z, colorIndex, headColors, guestColor
       new THREE.MeshLambertMaterial({ color: headColors[(colorIndex + i) % headColors.length] }),
     );
     head.position.set(body.position.x, 0.42, body.position.z);
+    const acc = opts.members?.[i];
+    if (acc?.hat) addHat(THREE, head, acc.hat);
+    if (acc?.balloon) addBalloon(THREE, head, acc.balloon);
     group.add(body, head);
   }
   group.position.set(x, gndY, z);
@@ -88,6 +97,9 @@ function buildQueue({
   poolSize,
   platLen,
   platTop,
+  canopyLevel = 0,
+  hatFrac = 0,
+  balloonFrac = 0,
   stationRefs,
   colors,
   headColors,
@@ -98,7 +110,9 @@ function buildQueue({
   const spacing = 0.75;
   const gapW = 1.3;
   const slotsPerLane = Math.max(3, Math.floor(laneLen / spacing));
-  const nLanes = Math.max(2, Math.ceil(queueCap / slotsPerLane));
+  // Lanes hold the *mesh pool* (clusters stand in for 4 guests each), not the
+  // raw capacity — otherwise a late-game 1000-cap pier is mostly empty ground.
+  const nLanes = Math.max(2, Math.ceil(Math.max(poolSize, 1) / slotsPerLane));
   const depth = nLanes * laneGap;
   const xL = -laneLen / 2;
   const xR = laneLen / 2;
@@ -174,13 +188,15 @@ function buildQueue({
 
   // lane boundaries run along x; each has a walk-through gap at alternating
   // ends so the path serpentines. Guests walk lane k toward its "exit" end.
+  // The boarding gate sits at xL — trains travel toward -x through the station,
+  // so the front (loading) berth is at that end; the exit serves the rear berth.
   const entranceAtRight = (nLanes - 1) % 2 === 0;
   for (let k = 0; k <= nLanes; k++) {
     const z = startZ + k * laneGap;
     let gapSide = 0; // -1 gap at xL, +1 gap at xR, 0 solid
-    if (k === 0) gapSide = +1;                               // boarding gate
+    if (k === 0) gapSide = -1;                               // boarding gate
     else if (k === nLanes) gapSide = entranceAtRight ? 1 : -1; // entrance
-    else gapSide = k % 2 === 1 ? -1 : 1;                     // U-turns
+    else gapSide = k % 2 === 1 ? 1 : -1;                     // U-turns
     const solid = laneLen - gapW;
     railX(gapSide > 0 ? xL + solid / 2 : xR - solid / 2, z, solid);
     post(xL, z);
@@ -192,7 +208,7 @@ function buildQueue({
   railZ(xR, startZ + depth / 2, depth);
 
   // ── boarding gate steps up to the platform deck ──
-  const gateX = xR - gapW / 2;
+  const gateX = xL + gapW / 2;
   box(THREE, grp, 0xcdb884, gapW - 0.2, 0.24, 0.7, gateX, plazaTop + 0.12, startZ - 0.42, true);
   box(THREE, grp, 0xd8c79a, gapW - 0.2, 0.24, 0.5, gateX, plazaTop + 0.34, startZ - 0.68, true);
 
@@ -222,6 +238,26 @@ function buildQueue({
   board.castShadow = true;
   grp.add(board);
 
+  // shade parasols over the lanes — one per Shade Canopies level
+  if (canopyLevel > 0) {
+    const parasolPoleMat = new THREE.MeshLambertMaterial({ color: 0xfbf3e2 });
+    const n = Math.min(canopyLevel, 12);
+    for (let i = 0; i < n; i++) {
+      const px = xL + 1.4 + ((i * 2.31 + 0.7) % Math.max(laneLen - 2.8, 1));
+      const pz = startZ + 0.35 + ((i * 1.63) % Math.max(depth - 0.7, 0.7));
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.7, 5), parasolPoleMat);
+      pole.position.set(px, plazaTop + 0.85, pz);
+      grp.add(pole);
+      const top = new THREE.Mesh(
+        new THREE.ConeGeometry(0.62, 0.34, 8),
+        new THREE.MeshLambertMaterial({ color: guestColors[i % guestColors.length] }),
+      );
+      top.position.set(px, plazaTop + 1.75, pz);
+      top.castShadow = true;
+      grp.add(top);
+    }
+  }
+
   // pennant string across the back of the plaza
   const flagCols = [...guestColors, colors.roof];
   const flagY = plazaTop + 2.0;
@@ -246,8 +282,55 @@ function buildQueue({
     grp.add(flag);
   }
 
+  // ── vendor carts (hats/balloons) trade along the back of the plaza ──
+  const hatColorFor = seed => guestColors[(seed + 2) % guestColors.length];
+  const balloonColorFor = seed => guestColors[(seed + 4) % guestColors.length];
+  const boughtHat = seed => guestBuyerRoll(seed) < hatFrac ? hatColorFor(seed) : null;
+  const boughtBalloon = seed => guestBuyerRoll(seed + 7919) < balloonFrac ? balloonColorFor(seed) : null;
+  const cartZ = plazaZ1 - 0.85;
+  if (hatFrac > 0) {
+    const cx = -laneLen * 0.28;
+    box(THREE, grp, colors.trunk, 1.0, 0.75, 0.7, cx, plazaTop + 0.4, cartZ, true);
+    box(THREE, grp, 0xfbf3e2, 1.2, 0.14, 0.85, cx, plazaTop + 0.85, cartZ, true);
+    for (let i = 0; i < 3; i++) {
+      const hat = new THREE.Mesh(
+        new THREE.ConeGeometry(0.11, 0.2, 7),
+        new THREE.MeshLambertMaterial({ color: guestColors[i % guestColors.length] }),
+      );
+      hat.position.set(cx - 0.3 + i * 0.3, plazaTop + 1.02, cartZ);
+      hat.castShadow = true;
+      grp.add(hat);
+    }
+  }
+  if (balloonFrac > 0) {
+    const cx = laneLen * 0.28;
+    box(THREE, grp, colors.trunk, 0.9, 0.75, 0.7, cx, plazaTop + 0.4, cartZ, true);
+    for (let i = 0; i < 5; i++) {
+      const a = (i / 5) * Math.PI * 2;
+      const bx = cx + Math.cos(a) * 0.24;
+      const bz = cartZ + Math.sin(a) * 0.2;
+      const by = plazaTop + 1.55 + (i % 2) * 0.22;
+      const balloon = new THREE.Mesh(
+        new THREE.SphereGeometry(0.11, 8, 6),
+        new THREE.MeshLambertMaterial({ color: guestColors[i % guestColors.length] }),
+      );
+      balloon.position.set(bx, by, bz);
+      balloon.castShadow = true;
+      grp.add(balloon);
+      const string = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.008, 0.008, by - plazaTop - 0.8, 3),
+        new THREE.MeshLambertMaterial({ color: 0xf5f0d7 }),
+      );
+      string.position.set(bx, plazaTop + 0.8 + (by - plazaTop - 0.8) / 2, bz);
+      grp.add(string);
+    }
+  }
+
   // ── guest pool: slot 0 at the boarding gate, snaking back to the entrance ──
   stationRefs.queueSlots = [];
+  stationRefs.queueSlotCoords = [];
+  stationRefs.queuePlazaTop = plazaTop;
+  stationRefs.queueShuffleCap = Math.min(26, slotsPerLane);
   const individualSlots = Math.min(poolSize, 120);
   const clusterSize = 4;
   for (let i = 0; i < poolSize; i++) {
@@ -255,16 +338,20 @@ function buildQueue({
     if (lane >= nLanes) break;
     const idx = i % slotsPerLane;
     const frac = slotsPerLane > 1 ? idx / (slotsPerLane - 1) : 0.5;
-    const from = lane % 2 === 0 ? xR - 0.55 : xL + 0.55;
-    const to = lane % 2 === 0 ? xL + 0.55 : xR - 0.55;
+    const from = lane % 2 === 0 ? xL + 0.55 : xR - 0.55;
+    const to = lane % 2 === 0 ? xR - 0.55 : xL + 0.55;
     const x = THREE.MathUtils.lerp(from, to, frac);
     const z = startZ + (lane + 0.5) * laneGap;
+    const guestStart = i < individualSlots ? i : individualSlots + (i - individualSlots) * clusterSize;
     const g = i < individualSlots
-      ? guest(THREE, grp, x, plazaTop, z, i, headColors, guestColors)
-      : crowdCluster(THREE, grp, x, plazaTop, z, i, headColors, guestColors);
+      ? guest(THREE, grp, x, plazaTop, z, i, headColors, guestColors,
+          { hat: boughtHat(i), balloon: boughtBalloon(i) })
+      : crowdCluster(THREE, grp, x, plazaTop, z, i, headColors, guestColors,
+          { members: [0, 1, 2, 3].map(m => ({ hat: boughtHat(guestStart + m), balloon: boughtBalloon(guestStart + m) })) });
     g.visible = false;
     stationRefs.queueGuests.push(g);
-    stationRefs.queueSlots.push({ guestStart: i < individualSlots ? i : individualSlots + (i - individualSlots) * clusterSize });
+    stationRefs.queueSlots.push({ guestStart });
+    stationRefs.queueSlotCoords.push({ x, z });
   }
   return {
     depth,
@@ -272,6 +359,10 @@ function buildQueue({
     nLanes,
     slotsPerLane,
     poolSize,
+    gateX: xR - gapW / 2,
+    xL,
+    xR,
+    gapW,
     visualCapacity: poolSize <= individualSlots ? poolSize : individualSlots + (poolSize - individualSlots) * clusterSize,
     bounds: {
       cx: 0,
@@ -306,6 +397,10 @@ export function buildStationAndQueue({
   disposeGroup(stationGrp);
   stationRefs.queueGuests = [];
   stationRefs.queueSlots = [];
+  stationRefs.queueSlotCoords = [];
+  stationRefs.queueAnim = null;
+  stationRefs.walkers = null;
+  stationRefs.walkerGeom = null;
   stationRefs.decorBlockers = [];
   if (!path) return;
 
@@ -363,6 +458,9 @@ export function buildStationAndQueue({
     poolSize,
     platLen: PLAT_LEN,
     platTop: PLAT_H,
+    canopyLevel: upgrades.canopy?.level || 0,
+    hatFrac: d.hatFrac || 0,
+    balloonFrac: d.balloonFrac || 0,
     stationRefs,
     colors,
     headColors,
@@ -396,18 +494,213 @@ export function buildStationAndQueue({
     },
   ];
 
-  // snack kiosk serves the line from the edge of the queue plaza
+  // snack kiosk serves the line from the gate-side margin of the queue plaza
   if (upgrades.snacks.level > 0) {
-    const kx = Math.max(PLAT_LEN, 8) / 2 + 0.55;
+    const kx = -(Math.max(PLAT_LEN, 8) / 2 + 0.55);
     const kz = qStart + 1.7;
     box(THREE, grp, 0xe85d75, 1.2, 1.0, 1.2, kx, 0.56, kz, true);
     box(THREE, grp, colors.cloud, 1.5, 0.18, 1.5, kx, 1.2, kz, true);
   }
+
+  // ── exit walkway: steps down at the rear (unload) end of the platform, a
+  //    strip along the plaza's margin, and an EXIT sign where guests stroll off ──
+  const plazaTop = stationRefs.queuePlazaTop ?? 0.06;
+  const exitX = queueInfo.xR + 0.82;
+  const exitEndZ = qStart + queueInfo.depth + 1.5;
+  box(THREE, grp, 0xcdb884, queueInfo.gapW - 0.2, 0.24, 0.7, exitX, plazaTop + 0.34, qStart - 0.68, true);
+  box(THREE, grp, 0xd8c79a, queueInfo.gapW - 0.2, 0.24, 0.5, exitX, plazaTop + 0.12, qStart - 0.42, true);
+  const walkway = new THREE.Mesh(
+    new THREE.BoxGeometry(1.05, 0.05, exitEndZ - (qStart - 0.9)),
+    new THREE.MeshLambertMaterial({ color: 0xdccfa4 }),
+  );
+  walkway.position.set(exitX, plazaTop + 0.028, (qStart - 0.9 + exitEndZ) / 2);
+  walkway.receiveShadow = true;
+  grp.add(walkway);
+  const exitPostMat = new THREE.MeshLambertMaterial({ color: colors.trunk });
+  for (const dx of [-0.62, 0.62]) {
+    const p = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.7, 6), exitPostMat);
+    p.position.set(exitX + dx, plazaTop + 0.85, exitEndZ + 0.3);
+    p.castShadow = true;
+    grp.add(p);
+  }
+  const exitTex = makeBoardTexture(THREE, 'EXIT', '#46b06a', '#fbf3e2');
+  const exitBoard = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5, 0.46, 0.1),
+    [
+      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
+      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
+      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
+      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
+      new THREE.MeshLambertMaterial({ map: exitTex }),
+      new THREE.MeshLambertMaterial({ map: exitTex }),
+    ],
+  );
+  exitBoard.position.set(exitX, plazaTop + 1.55, exitEndZ + 0.3);
+  exitBoard.castShadow = true;
+  grp.add(exitBoard);
+
+  // ── dual-berth unload deck: a short siding platform past the rear end where
+  //    the unloading train stands (visible once Dual-Berth Station is researched)
+  if ((d.berths || 1) > 1) {
+    const deckX = PLAT_LEN / 2 + 2.4;
+    box(THREE, grp, colors.platform, 4.6, PLAT_H, PLAT_W - 0.5, deckX, PLAT_H / 2, PLAT_SIDE - 0.2, true);
+    const deckPostMat = new THREE.MeshLambertMaterial({ color: 0xcdb884 });
+    for (const dx of [-1.7, 1.7]) {
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.11, 2.2, 6), deckPostMat);
+      p.position.set(deckX + dx, PLAT_H + 1.1, PLAT_SIDE + 0.6);
+      p.castShadow = true;
+      grp.add(p);
+    }
+    box(THREE, grp, colors.roof, 5.0, 0.22, PLAT_W - 0.2, deckX, PLAT_H + 2.24, PLAT_SIDE - 0.2, true);
+  }
+
+  // ── walker pool: guests that visibly board (gate → platform → train) and
+  //    alight (train → platform → exit walkway). Spawned via spawnStationWalkers.
+  const walkerPool = [];
+  for (let i = 0; i < 64; i++) {
+    const seed = i + 9001;
+    const g = guest(THREE, grp, 0, plazaTop, 0, i * 3 + 1, headColors, guestColors, {
+      hat: guestBuyerRoll(seed) < (d.hatFrac || 0) ? guestColors[(seed + 2) % guestColors.length] : null,
+      balloon: guestBuyerRoll(seed + 7919) < (d.balloonFrac || 0) ? guestColors[(seed + 4) % guestColors.length] : null,
+    });
+    g.visible = false;
+    walkerPool.push(g);
+  }
+  stationRefs.walkers = { pool: walkerPool, active: [] };
+  stationRefs.walkerGeom = {
+    platLen: PLAT_LEN,
+    platH: PLAT_H,
+    platSide: PLAT_SIDE,
+    platW: PLAT_W,
+    qStart,
+    plazaTop,
+    gateX: queueInfo.gateX,
+    exitX,
+    exitEndZ,
+  };
 }
 
-export function updateQueueVisuals({ queue, stationRefs }) {
+// Spawn animated walkers for a boarding ('board') or alighting ('exit') wave.
+// `riders` scales the wave size (token representation, capped by the pool) so a
+// 700-seat train reads as a bustling crowd; `duration` is the phase length the
+// walk should roughly fit inside. `zone` limits the platform stretch used:
+// 'front' = load berth (gate end), 'rear' = unload berth/deck (exit end).
+export function spawnStationWalkers(stationRefs, kind, riders, duration = 2, zone = 'all') {
+  const w = stationRefs.walkers;
+  const g = stationRefs.walkerGeom;
+  if (!w || !g || riders <= 0) return;
+  const count = Math.min(
+    w.pool.length,
+    Math.max(4, Math.min(34, Math.ceil(riders / 22) + 3)),
+  );
+  let x0 = -g.platLen / 2 + 1.1;
+  let x1 = g.platLen / 2 - 1.1;
+  if (zone === 'front') x1 = Math.max(x0 + 0.5, -0.3);
+  else if (zone === 'rear') { x0 = 0.3; x1 = g.platLen / 2 + 4.0; }
+  for (let i = 0; i < count; i++) {
+    const mesh = w.pool.pop();
+    if (!mesh) break;
+    const spreadX = x0 + Math.random() * (x1 - x0);
+    const pts = kind === 'board'
+      ? [
+          { x: g.gateX, y: g.plazaTop, z: g.qStart - 0.15 },
+          { x: g.gateX, y: g.platH, z: g.platSide + 0.7 },
+          { x: spreadX, y: g.platH, z: g.platSide - 0.35 },
+          { x: spreadX, y: g.platH, z: g.platSide - g.platW / 2 + 0.18 },
+        ]
+      : [
+          { x: spreadX, y: g.platH, z: g.platSide - g.platW / 2 + 0.3 },
+          { x: g.platLen / 2 - 0.7, y: g.platH, z: g.platSide + 0.55 },
+          { x: g.exitX, y: g.plazaTop, z: g.qStart - 0.3 },
+          { x: g.exitX, y: g.plazaTop, z: g.exitEndZ },
+        ];
+    let len = 0;
+    for (let s = 1; s < pts.length; s++) {
+      len += Math.hypot(pts[s].x - pts[s - 1].x, pts[s].z - pts[s - 1].z);
+    }
+    w.active.push({
+      mesh,
+      pts,
+      dist: 0,
+      len,
+      speed: Math.min(7, Math.max(1.2, len / Math.max(0.7, duration * 0.8))),
+      delay: (i / count) * Math.max(0.3, duration * 0.5) + Math.random() * 0.15,
+    });
+  }
+}
+
+function placeWalker(walker) {
+  const pts = walker.pts;
+  let remaining = walker.dist;
+  for (let s = 1; s < pts.length; s++) {
+    const a = pts[s - 1];
+    const b = pts[s];
+    const seg = Math.hypot(b.x - a.x, b.z - a.z);
+    if (remaining <= seg || s === pts.length - 1) {
+      const t = seg > 1e-6 ? Math.min(1, remaining / seg) : 1;
+      walker.mesh.position.set(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t, a.z + (b.z - a.z) * t);
+      return;
+    }
+    remaining -= seg;
+  }
+}
+
+// Per-frame queue + walker animation.
+// - Queue guests shuffle forward along the serpentine slot path when a train
+//   boards (instead of the front of the line blinking out), with an idle bob.
+// - Walkers (boarding/alighting guests) advance along their waypoint paths.
+export function updateQueueVisuals({ queue, stationRefs, dt = 0, time = 0 }) {
   const n = Math.round(queue);
   const pool = stationRefs.queueGuests;
   const slots = stationRefs.queueSlots || [];
-  for (let i = 0; i < pool.length; i++) pool[i].visible = (slots[i]?.guestStart ?? i) < n;
+  const coords = stationRefs.queueSlotCoords || [];
+  const plazaTop = stationRefs.queuePlazaTop ?? 0.06;
+
+  // visible mesh count: slots are ordered by guestStart, so it's a prefix
+  let m = 0;
+  while (m < pool.length && (slots[m]?.guestStart ?? m) < n) m++;
+
+  const anim = stationRefs.queueAnim || (stationRefs.queueAnim = { advance: 0, prevM: m });
+  if (m < anim.prevM) {
+    anim.advance = Math.min(anim.advance + (anim.prevM - m), stationRefs.queueShuffleCap || 20);
+  }
+  anim.prevM = m;
+  if (anim.advance > 0 && dt > 0) {
+    anim.advance = Math.max(0, anim.advance - dt * (2.5 + anim.advance * 2.4));
+  }
+
+  const hasCoords = coords.length > 0;
+  for (let i = 0; i < pool.length; i++) {
+    const g = pool[i];
+    const visible = i < m;
+    g.visible = visible;
+    if (!visible || !hasCoords) continue;
+    // ease from the pre-boarding slot (i + advance) forward to slot i
+    const f = Math.min(coords.length - 1, i + anim.advance);
+    const j = Math.floor(f);
+    const t = f - j;
+    const a = coords[j];
+    const b = coords[Math.min(j + 1, coords.length - 1)];
+    g.position.x = a.x + (b.x - a.x) * t;
+    g.position.z = a.z + (b.z - a.z) * t;
+    g.position.y = plazaTop + (i < 120 ? Math.abs(Math.sin(time * 2.2 + i * 1.7)) * 0.03 : 0);
+  }
+
+  // walkers: staggered start, then advance along their waypoint polyline
+  const w = stationRefs.walkers;
+  if (w && w.active.length && dt > 0) {
+    for (let i = w.active.length - 1; i >= 0; i--) {
+      const walker = w.active[i];
+      if ((walker.delay -= dt) > 0) continue;
+      walker.mesh.visible = true;
+      walker.dist += walker.speed * dt;
+      if (walker.dist >= walker.len) {
+        walker.mesh.visible = false;
+        w.active.splice(i, 1);
+        w.pool.push(walker.mesh);
+        continue;
+      }
+      placeWalker(walker);
+    }
+  }
 }

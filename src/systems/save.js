@@ -22,7 +22,8 @@ export function createSaveData({
     upgrades: Object.fromEntries(Object.entries(upgrades).map(([key, value]) => [key, value.level])),
     research: {
       fundingPct: research.fundingPct,
-      points: research.points,
+      activePath: research.activePath,
+      progress: { ...research.progress },
       done: { ...research.done },
     },
     staff: staff ? Object.fromEntries(Object.entries(staff).map(([role, v]) => [role, { hired: v.hired, trained: v.trained }])) : {},
@@ -36,6 +37,8 @@ export function createSaveData({
       baseCost: property.baseCost,
       growth: property.growth,
       distanceScale: property.distanceScale,
+      sizeGrowth: property.sizeGrowth,
+      farGrowth: property.farGrowth,
       owned: [...property.owned],
     } : undefined,
     decorations: Array.isArray(decorations) ? decorations.map(d => ({ ...d })) : [],
@@ -69,7 +72,7 @@ export function readSave(storage) {
 
 const finite = value => Number.isFinite(value);
 const validPoint = point => point && finite(point.x) && finite(point.y) && finite(point.z);
-const STAFF_ROLES = new Set(['operators', 'entertainers', 'mechanics', 'janitors']);
+const STAFF_ROLES = new Set(['operators', 'entertainers', 'mechanics', 'janitors', 'photographers', 'scientists']);
 const INSTALL_TYPES = new Set(['car', 'train']);
 
 export function applySaveData(data, { state, sim, upgrades, research, staff }) {
@@ -99,9 +102,19 @@ export function applySaveData(data, { state, sim, upgrades, research, staff }) {
   }
 
   if (data.research) {
+    if (!research.progress || typeof research.progress !== 'object') research.progress = {};
+    if (!research.done || typeof research.done !== 'object') research.done = {};
     if (finite(data.research.fundingPct)) research.fundingPct = Math.max(0, Math.min(100, data.research.fundingPct));
     else if (finite(data.research.budget)) research.fundingPct = Math.max(0, Math.min(80, Math.round(data.research.budget / 10)));
-    if (finite(data.research.points)) research.points = data.research.points;
+    if (typeof data.research.activePath === 'string') research.activePath = data.research.activePath;
+    if (data.research.progress && typeof data.research.progress === 'object') {
+      Object.entries(data.research.progress).forEach(([path, progress]) => {
+        if (finite(progress)) research.progress[path] = Math.max(0, progress);
+      });
+    } else if (finite(data.research.points)) {
+      const path = typeof research.activePath === 'string' ? research.activePath : 'track';
+      research.progress[path] = Math.max(0, data.research.points * 10);
+    }
     if (data.research.done) research.done = { ...data.research.done };
   }
 
@@ -128,6 +141,8 @@ export function applySaveData(data, { state, sim, upgrades, research, staff }) {
       baseCost: finite(data.property.baseCost) ? data.property.baseCost : undefined,
       growth: finite(data.property.growth) ? data.property.growth : undefined,
       distanceScale: finite(data.property.distanceScale) ? data.property.distanceScale : undefined,
+      sizeGrowth: finite(data.property.sizeGrowth) ? data.property.sizeGrowth : undefined,
+      farGrowth: finite(data.property.farGrowth) ? data.property.farGrowth : undefined,
       owned: data.property.owned.filter(key => typeof key === 'string'),
     };
   }

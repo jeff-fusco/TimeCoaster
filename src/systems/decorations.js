@@ -1,7 +1,7 @@
 // Decorations: bought from the Decor shop tab and placed anywhere on owned
 // land. Pure state + rules — rendering lives in render/decorations.js.
-import { DECOR } from '../config/gameData.js';
-import { pointInOwnedLand } from './property.js';
+import { DECOR } from '../config/gameData.js?v=20260703-11';
+import { pointInOwnedLand } from './property.js?v=20260703-11';
 
 export const DECOR_MIN_SPACING = 1.1;   // decorations keep a little breathing room
 export const DECOR_LAND_MARGIN = 0.6;   // and stay clear of the slab edge

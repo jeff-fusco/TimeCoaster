@@ -32,7 +32,8 @@ function makeGameState() {
     },
     research: {
       fundingPct: 25,
-      points: 17.5,
+      activePath: 'track',
+      progress: { track: 175 },
       done: { loop: true },
     },
     maintenance: {
@@ -45,6 +46,8 @@ function makeGameState() {
       baseCost: 900,
       growth: 1.72,
       distanceScale: 0.32,
+      sizeGrowth: 0.35,
+      farGrowth: 1.28,
       owned: ['0,0', '1,0'],
     },
     ctrlPts: [
@@ -65,11 +68,15 @@ function makeGameState() {
   assert.equal(data.queue, 7.25);
   assert.deepEqual(data.upgrades, { car: 1, seats: 2, train: 0 });
   assert.equal(data.research.fundingPct, 25);
+  assert.equal(data.research.activePath, 'track');
+  assert.deepEqual(data.research.progress, { track: 175 });
   assert.deepEqual(data.research.done, { loop: true });
   assert.deepEqual(data.maintenance.installed, { car: 1, train: 0 });
   assert.deepEqual(data.maintenance.queue, [{ type: 'car', duration: 8 }]);
   assert.deepEqual(data.maintenance.current, { type: 'train', duration: 12, progress: 5 });
   assert.deepEqual(data.property.owned, ['0,0', '1,0']);
+  assert.equal(data.property.sizeGrowth, 0.35);
+  assert.equal(data.property.farGrowth, 1.28);
 
   game.ctrlPts[2].seg = 'plain';
   game.research.done.loop = false;
@@ -82,10 +89,11 @@ function makeGameState() {
     state: { money: 0, rides: 0 },
     sim: { queue: 0 },
     upgrades: {},
-    research: { fundingPct: 0, points: 0, done: {} },
+    research: { fundingPct: 0, activePath: 'track', progress: {}, done: {} },
   };
   applySaveData({ research: { budget: 90, points: 5, done: {} } }, target);
   assert.equal(target.research.fundingPct, 9, 'legacy fixed $90/min budget migrates to a percent');
+  assert.equal(target.research.progress.track, 50, 'legacy RP migrates into path progress');
 }
 
 {
@@ -110,14 +118,14 @@ function makeGameState() {
       seats: { level: 0 },
       speed: { level: 0 },
     },
-    research: { fundingPct: 0, points: 0, done: {} },
+    research: { fundingPct: 0, activePath: 'track', progress: {}, done: {} },
   };
   const restored = applySaveData({
     money: 777,
     rides: 4,
     queue: 12,
     upgrades: { capacity: 5, speed: 2, unknown: 99 },
-    research: { fundingPct: 30, points: 44, done: { train3: true } },
+    research: { fundingPct: 30, activePath: 'operations', points: 44, done: { train3: true } },
     maintenance: {
       installed: { car: 2, train: 1 },
       queue: [{ type: 'car', duration: 8 }, { type: 'bad', duration: 2 }],
@@ -128,6 +136,8 @@ function makeGameState() {
       baseCost: 900,
       growth: 1.72,
       distanceScale: 0.32,
+      sizeGrowth: 0.4,
+      farGrowth: 1.35,
       owned: ['0,0', '0,1'],
     },
     ctrlPts: [
@@ -146,6 +156,8 @@ function makeGameState() {
   assert.equal(target.upgrades.seats.level, 5);
   assert.equal(target.upgrades.speed.level, 2);
   assert.equal(target.research.fundingPct, 30);
+  assert.equal(target.research.activePath, 'operations');
+  assert.equal(target.research.progress.operations, 440);
   assert.deepEqual(target.research.done, { train3: true });
   assert.equal(restored.ctrlPts[0].seg, 'station');
   assert.equal(restored.ctrlPts[1].seg, 'plain');
@@ -158,6 +170,8 @@ function makeGameState() {
     current: { type: 'train', duration: 12, progress: 3 },
   });
   assert.deepEqual(restored.property.owned, ['0,0', '0,1']);
+  assert.equal(restored.property.sizeGrowth, 0.4);
+  assert.equal(restored.property.farGrowth, 1.35);
 }
 
 {
@@ -167,7 +181,7 @@ function makeGameState() {
     state: { money: 1, rides: 2 },
     sim: { queue: 3 },
     upgrades: {},
-    research: { fundingPct: 0, points: 0, done: {} },
+    research: { fundingPct: 0, activePath: 'track', progress: {}, done: {} },
   };
   assert.deepEqual(applySaveData(null, target), {});
   assert.deepEqual(target.state, { money: 1, rides: 2 });
@@ -178,7 +192,7 @@ function makeGameState() {
     state: { money: 1, rides: 2 },
     sim: { queue: 3 },
     upgrades: { speed: { level: 0 } },
-    research: { fundingPct: 0, points: 0, done: {} },
+    research: { fundingPct: 0, activePath: 'track', progress: {}, done: {} },
   };
   const restored = applySaveData({
     money: Number.NaN,
@@ -200,7 +214,7 @@ function makeGameState() {
   assert.equal(target.sim.queue, 3);
   assert.equal(target.upgrades.speed.level, 0);
   assert.equal(target.research.fundingPct, 0);
-  assert.equal(target.research.points, 0);
+  assert.deepEqual(target.research.progress, {});
   assert.deepEqual(target.research.done, { loop: true });
   assert.deepEqual(restored, {});
 }

@@ -18,15 +18,21 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   await page.goto('/index.html');
 
   await expect(page.locator('#scene canvas')).toBeVisible();
-  const cssResponse = await page.request.get('/styles.css?v=20260701-19');
+  const cssResponse = await page.request.get('/styles.css?v=20260703-11');
   await expect(cssResponse).toBeOK();
   expect(cssResponse.headers()['cache-control']).toContain('no-store');
   const threeResponse = await page.request.get('/vendor/three.module.js');
   await expect(threeResponse).toBeOK();
   expect(threeResponse.headers()['cache-control']).toContain('no-store');
   await expect(page.locator('.money #money')).toContainText(/\d/);
-  await expect(page.locator('#shop')).toBeVisible();
+  await expect(page.locator('#shopToggle')).toBeVisible();
+  await expect(page.locator('.bottom .ctrl')).toHaveText(['🎟 Shop', '🔧 Build', '👥 Staff', '🔬 R&D']);
+  await expect(page.locator('#shopPanel')).toBeHidden();
+  await page.locator('#shopToggle').click();
+  await expect(page.locator('#shopPanel')).toBeVisible();
   await expect(page.locator('#shopBody')).toBeVisible();
+  await page.locator('#shopClose').click();
+  await expect(page.locator('#shopPanel')).toBeHidden();
   await expect(page.locator('#modeBadge')).toContainText('Build Mode');
 
   await expect.poll(async () => {
@@ -60,7 +66,7 @@ test('loads the coaster scene and core controls', async ({ page }) => {
 
   await page.locator('#buildToggle').click();
   await expect(page.locator('#buildPanel')).toBeVisible();
-  await expect(page.locator('#shop')).toHaveClass(/hidden/);
+  await expect(page.locator('#shopPanel')).toBeHidden();
 
   await page.locator('#buildToggle').click();
   await expect(page.locator('#buildPanel')).toHaveClass(/hidden/);
@@ -79,12 +85,143 @@ test('staff panel opens and closes from the bottom controls', async ({ page }) =
   });
   await page.goto('/index.html');
 
+  await expect(page.locator('#researchToggle')).toBeHidden();
   await page.locator('#staffToggle').click();
   await expect(page.locator('#staffPanel')).toBeVisible();
-  await expect(page.locator('#staffList .staff-row')).toHaveCount(5);
+  await expect(page.locator('#staffList .staff-row')).toHaveCount(6);
   await expect(page.locator('#staffList .staff-row .s-status').first()).toContainText(/dispatch trains yourself/i);
+  const scientists = page.locator('#staffList .staff-row').filter({ hasText: 'Scientists' });
+  await scientists.locator('[data-act="hire"]').click();
   await page.locator('#staffClose').click();
   await expect(page.locator('#staffPanel')).toBeHidden();
+  await expect(page.locator('#researchToggle')).toBeVisible();
+  await page.locator('#researchToggle').click();
+  await expect(page.locator('#researchPanel')).toBeVisible();
+  await expect(page.locator('#rdPct')).toHaveText('7%');
+  await expect(page.locator('#rdSlider')).toHaveAttribute('max', '7');
+  expect(pageErrors).toEqual([]);
+});
+
+test('clicking park funds opens a live balance sheet', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+  });
+  await page.goto('/index.html');
+
+  const hudRate = (await page.locator('#rate').textContent()).replace(/\s+/g, '');
+  await page.locator('.bank').click();
+  await expect(page.locator('#balancePanel')).toBeVisible();
+  await expect(page.locator('#balanceSheet')).toContainText('Per Rider');
+  await expect(page.locator('#balanceSheet')).toContainText('Per Dispatch');
+  await expect(page.locator('#balanceSheet')).toContainText('Throughput');
+  await expect(page.locator('#balanceSheet')).toContainText(hudRate);
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#balancePanel')).toBeHidden();
+  expect(pageErrors).toEqual([]);
+});
+
+test('staff and research buttons exit build mode before opening', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v5', JSON.stringify({
+      money: 1000,
+      rides: 0,
+      queue: 8,
+      staff: { scientists: { hired: 1, trained: 0 } },
+      research: { fundingPct: 0, activePath: 'track', progress: {}, done: {} },
+    }));
+  });
+  await page.goto('/index.html');
+
+  await page.locator('#buildToggle').click();
+  await expect(page.locator('#buildPanel')).toBeVisible();
+  await page.locator('#staffToggle').click();
+  await expect(page.locator('#buildPanel')).toHaveClass(/hidden/);
+  await expect(page.locator('#staffPanel')).toBeVisible();
+  await page.locator('#staffClose').click();
+
+  await page.locator('#buildToggle').click();
+  await expect(page.locator('#buildPanel')).toBeVisible();
+  await page.locator('#researchToggle').click();
+  await expect(page.locator('#buildPanel')).toHaveClass(/hidden/);
+  await expect(page.locator('#researchPanel')).toBeVisible();
+  expect(pageErrors).toEqual([]);
+});
+
+test('low camera angle widens framing without adding future land', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+  });
+  await page.goto('/index.html');
+
+  const frame = await page.evaluate(() => {
+    window.__TC3D_DEBUG__.setAzimuth(Math.PI * 0.25);
+    window.__TC3D_DEBUG__.setFrustum(38);
+    window.__TC3D_DEBUG__.setCamHeight(8); // ground-level floor (lowT = 1)
+    return window.__TC3D_DEBUG__.cameraFrame();
+  });
+  expect(frame.lowT).toBeCloseTo(1, 3);
+  expect(frame.effectiveFrustum).toBeGreaterThan(38);
+
+  const framedPixels = await page.evaluate(() => {
+    const canvas = document.querySelector('#scene canvas');
+    const gl = canvas.getContext('webgl2') || canvas.getContext('webgl');
+    const pixel = new Uint8Array(4);
+    let island = 0;
+    let sky = 0;
+
+    for (let y = Math.floor(canvas.height * 0.5); y < Math.floor(canvas.height * 0.88); y += 18) {
+      for (let x = Math.floor(canvas.width * 0.22); x < Math.floor(canvas.width * 0.78); x += 18) {
+        gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+        const [r, g, b, a] = pixel;
+        if (a === 0) continue;
+        if (r > 120 && g > 170 && b > 200) sky += 1;
+        if ((g > r * 0.85 && b < 220) || (r > 130 && g > 90 && b < 190)) island += 1;
+      }
+    }
+
+    return { island, sky };
+  });
+
+  expect(framedPixels.island).toBeGreaterThan(0);
+  expect(pageErrors).toEqual([]);
+});
+
+test('escape menu saves and guards reset', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+  });
+  await page.goto('/index.html');
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#escapePanel')).toBeVisible();
+
+  await page.locator('#escapeSave').click();
+  await expect(page.locator('#toast')).toContainText(/saved/i);
+
+  await page.locator('#escapeReset').click();
+  await expect(page.locator('#escapeReset')).toHaveText('Confirm Reset');
+
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#escapePanel')).toBeHidden();
+  await expect(page.locator('#escapeReset')).toHaveText('Reset Park');
   expect(pageErrors).toEqual([]);
 });
 
@@ -111,25 +248,86 @@ test('staff training rebuilds queue visuals when capacity changes', async ({ pag
   expect(pageErrors).toEqual([]);
 });
 
-test('research funding slider previews income-based spend and RP', async ({ page }) => {
+test('staff buttons accept rapid repeated purchases and show feedback', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', err => pageErrors.push(err.message));
 
   await page.addInitScript(() => {
     window.__TIME_COASTER_TEST__ = true;
     localStorage.clear();
+    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 10000, rides: 0, queue: 8 }));
   });
   await page.goto('/index.html');
 
-  await page.locator('#tab-research').click();
-  await expect(page.locator('#rdSlider')).toBeVisible();
-  await page.locator('#rdSlider').evaluate(slider => {
-    slider.value = '25';
-    slider.dispatchEvent(new Event('input', { bubbles: true }));
+  await page.locator('#staffToggle').click();
+  const operators = page.locator('#staffList .staff-row').filter({ hasText: 'Ride Operators' });
+  const hire = operators.locator('[data-act="hire"]');
+  const box = await hire.boundingBox();
+  expect(box).toBeTruthy();
+
+  for (let i = 0; i < 3; i += 1) {
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  }
+
+  await expect(operators.locator('.s-count')).toContainText('3');
+  await expect(operators.locator('.s-feedback')).toContainText(/Hired -\$/);
+  await expect(page.locator('.bank-delta.spend')).toHaveCount(3);
+  await expect(page.locator('.pop.spend')).toHaveCount(3);
+  const clickX = box.x + box.width / 2;
+  const clickY = box.y + box.height / 2;
+  const pointerPops = await page.locator('.pop.spend').evaluateAll(nodes =>
+    nodes.map(node => ({
+      left: Number.parseFloat(node.style.left),
+      top: Number.parseFloat(node.style.top),
+      text: node.textContent,
+    }))
+  );
+  expect(pointerPops.every(pop => pop.text.startsWith('-$'))).toBe(true);
+  expect(pointerPops.every(pop => pop.left < clickX && pop.top < clickY)).toBe(true);
+  expect(pageErrors).toEqual([]);
+});
+
+test('research funding slider drags and keeps future research hidden', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v5', JSON.stringify({
+      money: 1000,
+      rides: 0,
+      queue: 8,
+      staff: { scientists: { hired: 3, trained: 0 } },
+      research: { fundingPct: 0, activePath: 'track', progress: {}, done: {} },
+    }));
   });
-  await expect(page.locator('#rdPct')).toHaveText('25%');
+  await page.goto('/index.html');
+
+  await expect(page.locator('#tab-research')).toHaveCount(0);
+  await page.locator('#researchToggle').click();
+  await expect(page.locator('#researchPanel')).toBeVisible();
+  await expect(page.locator('#rdSlider')).toBeVisible();
+  await expect(page.locator('#rdSlider')).toHaveAttribute('max', '21');
+  const box = await page.locator('#rdSlider').boundingBox();
+  expect(box).toBeTruthy();
+  await page.mouse.move(box.x + box.width * 0.05, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.42, box.y + box.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  await expect.poll(async () => {
+    const text = await page.locator('#rdPct').textContent();
+    return Number(text.replace('%', ''));
+  }).toBeGreaterThan(5);
   await expect(page.locator('#rdSpend')).not.toHaveText('$0/min');
-  await expect(page.locator('#rdRp')).toContainText('RP/min');
+  await expect(page.locator('#rdRp')).toContainText('progress');
+  await expect(page.locator('.research-current')).toContainText('Block Brakes');
+  await expect(page.locator('.research-current')).not.toContainText('Track');
+  await expect(page.locator('.research-queue')).toHaveCount(0);
+  await expect(page.locator('#researchPanel')).not.toContainText('Path Queue');
+  await page.locator('#researchClose').click();
+  await expect(page.locator('#researchPanel')).toBeHidden();
   expect(pageErrors).toEqual([]);
 });
 
@@ -166,6 +364,8 @@ test('car purchase queues mechanic work before seats increase', async ({ page })
   await page.goto('/index.html');
 
   await expect(page.locator('#riders')).toHaveText('4');
+  await page.locator('#shopToggle').click();
+  await expect(page.locator('#shopPanel')).toBeVisible();
   await page.locator('#up-car').click();
   await expect(page.locator('#riders')).toHaveText('4');
   await expect(page.locator('.bank-delta.spend')).toContainText('-$');
@@ -186,7 +386,9 @@ test('clicking a for-sale sign opens purchase details and buys the plot', async 
   await page.goto('/index.html');
 
   // the shop no longer has a Land tab — land is bought in the world
+  await page.locator('#shopToggle').click();
   await expect(page.locator('#tab-property')).toHaveCount(0);
+  await page.locator('#shopClose').click();
   await expect.poll(async () => page.evaluate(() => window.__TC3D_DEBUG__?.ownedLand?.() ?? 0)).toBe(1);
 
   // zoom out until a neighbouring for-sale sign is on screen, then click it
@@ -240,6 +442,8 @@ test('decor tab places a flower bed on owned land', async ({ page }) => {
   });
   await page.goto('/index.html');
 
+  await page.locator('#shopToggle').click();
+  await expect(page.locator('#shopPanel')).toBeVisible();
   await page.locator('#tab-decor').click();
   await expect(page.locator('#decor-flowers')).toBeVisible();
   await page.locator('#decor-flowers').click();

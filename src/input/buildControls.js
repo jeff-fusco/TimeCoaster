@@ -19,6 +19,7 @@ export function initBuildControls({
   setAzimuth,
   getCamHeight,
   setCamHeight,
+  getPanLimit = () => 60,
   camTarget,
   resize,
   buildPath,
@@ -34,7 +35,7 @@ export function initBuildControls({
   isBuildPointAllowed = () => true,
   onPlayClick = () => false,
 }) {
-  const { COST_PER_M, FEATURE_COST, FEATURE_REFUND, MIN_FRUSTUM, MAX_FRUSTUM, STATION_Y, MAX_TRACK_HEIGHT = 18 } = constants;
+  const { COST_PER_M, FEATURE_COST, FEATURE_REFUND, STATION_Y, MAX_TRACK_HEIGHT = 18 } = constants;
   const raycaster = new THREE.Raycaster();
   const mouseNDC = new THREE.Vector2();
   const controls = {
@@ -179,7 +180,7 @@ export function initBuildControls({
       const locked = !featureUnlocked(feat);
       button.classList.toggle('feat-active', feat === cur);
       button.classList.toggle('locked-feat', locked);
-      button.title = locked ? 'Unlock in the R&D shop tab (Research)' : '';
+      button.title = locked ? 'Unlock in the R&D Lab' : '';
     });
   }
 
@@ -252,15 +253,16 @@ export function initBuildControls({
     dragY = e.clientY;
     if (dragMode === 'rotate') {
       setAzimuth(getAzimuth() - dx * 0.01);
-      setCamHeight(Math.max(18, Math.min(132, getCamHeight() - dy * 0.4)));
+      setCamHeight(getCamHeight() - dy * 0.4); // setter clamps (zoom-aware angle floor)
     } else {
       const scale = getFrustum() / host.clientHeight;
       const azimuth = getAzimuth();
       const sr = new THREE.Vector3(Math.sin(azimuth), 0, -Math.cos(azimuth));
       const su = new THREE.Vector3(-Math.cos(azimuth), 0, -Math.sin(azimuth));
       camTarget.addScaledVector(sr, -dx * scale).addScaledVector(su, dy * scale);
-      camTarget.x = Math.max(-60, Math.min(60, camTarget.x));
-      camTarget.z = Math.max(-60, Math.min(60, camTarget.z));
+      const panLimit = getPanLimit();
+      camTarget.x = Math.max(-panLimit, Math.min(panLimit, camTarget.x));
+      camTarget.z = Math.max(-panLimit, Math.min(panLimit, camTarget.z));
     }
   }
 
@@ -476,7 +478,7 @@ export function initBuildControls({
     const cur = ctrlPts[idx].seg || 'plain';
     if (next === cur) return;
     if (!featureUnlocked(next)) {
-      showToast(`${next} is locked - research it in the R&D shop tab first`);
+      showToast(`${next} is locked - research it in the R&D Lab first`);
       return;
     }
     const net = (FEATURE_COST[next] || 0) - Math.floor((FEATURE_COST[cur] || 0) * FEATURE_REFUND);
@@ -559,7 +561,7 @@ export function initBuildControls({
   }
 
   function zoomBy(f) {
-    setFrustum(Math.min(MAX_FRUSTUM, Math.max(MIN_FRUSTUM, getFrustum() * f)));
+    setFrustum(getFrustum() * f); // setter clamps (zoom-out limit grows with the park)
     resize();
   }
 
@@ -579,6 +581,7 @@ export function initBuildControls({
       if (controls.placingMode) stopPlacing();
       else if (controls.selectedIdx >= 0) selectHandle(-1);
       else exitBuildMode();
+      e.preventDefault();
     }
     if (controls.active && controls.selectedIdx >= 0) {
       if (e.key === 'ArrowUp') {
@@ -614,10 +617,10 @@ export function initBuildControls({
   $('hDown').addEventListener('click', () => adjustHeight(-0.5));
   $('featRow').addEventListener('click', onFeatureClick);
   $('buildToggle').addEventListener('click', () => (controls.active ? exitBuildMode() : enterBuildMode()));
-  $('rotL').addEventListener('click', () => rotateView(+1));
-  $('rotR').addEventListener('click', () => rotateView(-1));
-  $('zoomIn').addEventListener('click', () => zoomBy(0.8));
-  $('zoomOut').addEventListener('click', () => zoomBy(1.25));
+  $('rotL')?.addEventListener('click', () => rotateView(+1));
+  $('rotR')?.addEventListener('click', () => rotateView(-1));
+  $('zoomIn')?.addEventListener('click', () => zoomBy(0.8));
+  $('zoomOut')?.addEventListener('click', () => zoomBy(1.25));
 
   return {
     state: controls,

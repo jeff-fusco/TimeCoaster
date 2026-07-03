@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260701-19" />
+<link rel="stylesheet" href="styles.css?v=20260703-11" />
 </head>
 <body>
 <div id="scene"></div>
@@ -46,12 +46,10 @@
   <div class="bottom-stack">
     <button class="dispatch-btn" id="dispatchBtn" type="button" disabled>🚂 Dispatch</button>
     <div class="bottom">
-      <button class="ctrl" id="rotL" title="Rotate left (A / Q · or drag)">⟲</button>
-      <button class="ctrl" id="zoomOut" title="Zoom out (− · or scroll)">－</button>
-      <button class="ctrl" id="zoomIn"  title="Zoom in (+ · or scroll)">＋</button>
-      <button class="ctrl" id="rotR" title="Rotate right (D / E · or drag)">⟳</button>
-      <button class="ctrl" id="staffToggle" title="Staff management">👥 Staff</button>
+      <button class="ctrl" id="shopToggle" title="Upgrade shop">🎟 Shop</button>
       <button class="ctrl" id="buildToggle" title="Toggle build mode (B)">🔧 Build</button>
+      <button class="ctrl" id="staffToggle" title="Staff management">👥 Staff</button>
+      <button class="ctrl" id="researchToggle" title="Research and development">🔬 R&D</button>
     </div>
   </div>
 </div>
@@ -72,13 +70,28 @@
   <div class="bp-row" id="featRow" style="display:none">
     <span class="bp-label">Segment</span>
     <button class="bp-btn" data-feat="plain">Plain<span class="fcost">free</span></button>
-    <button class="bp-btn" data-feat="lift">⛓ Lift<span class="fcost">$120</span></button>
-    <button class="bp-btn" data-feat="brake">🛑 Brake<span class="fcost">$60</span></button>
-    <button class="bp-btn" data-feat="loop">🔁 Loop<span class="fcost">$900</span></button>
-    <button class="bp-btn" data-feat="corkscrew">🌀 Corkscrew<span class="fcost">$1.4k</span></button>
+    <button class="bp-btn" data-feat="lift">⛓ Lift<span class="fcost">$180</span></button>
+    <button class="bp-btn" data-feat="brake">🛑 Brake<span class="fcost">$100</span></button>
+    <button class="bp-btn" data-feat="loop">🔁 Loop<span class="fcost">$1.8k</span></button>
+    <button class="bp-btn" data-feat="corkscrew">🌀 Corkscrew<span class="fcost">$2.8k</span></button>
+    <button class="bp-btn" data-feat="spiral">🌀 Spiral<span class="fcost">$9k</span></button>
+    <button class="bp-btn" data-feat="giantLoop">🎢 Giant<span class="fcost">$28k</span></button>
+    <button class="bp-btn" data-feat="vertical">↕️ Vertical<span class="fcost">$16k</span></button>
+    <button class="bp-btn" data-feat="tunnel">⛏️ Tunnel<span class="fcost">$42k</span></button>
+    <button class="bp-btn" data-feat="teleporter">🌀 Portal<span class="fcost">$250k</span></button>
   </div>
   <div class="build-cost" id="buildCost">Track: <b>0m</b> · build cost <b>$8/m</b></div>
   <div class="point-info" id="pointInfo">Click a handle to select · drag to move · scroll to change height</div>
+</div>
+
+<div class="staff-panel" id="shopPanel" hidden>
+  <div class="staff-backdrop" id="shopBackdrop"></div>
+  <div class="staff-card shop-card">
+    <div class="staff-title">🎟 Upgrade Shop</div>
+    <div class="staff-sub">Buy ride, queue, decor, and promo upgrades.</div>
+    <div class="shop" id="shop"></div>
+    <button class="bp-btn primary" id="shopClose">Close</button>
+  </div>
 </div>
 
 <div class="staff-panel" id="staffPanel" hidden>
@@ -88,6 +101,26 @@
     <div class="staff-sub">Hire staff and train them to run the park for you.</div>
     <div class="staff-list" id="staffList"></div>
     <button class="bp-btn primary" id="staffClose">Close</button>
+  </div>
+</div>
+
+<div class="staff-panel" id="balancePanel" hidden>
+  <div class="staff-backdrop" id="balanceBackdrop"></div>
+  <div class="staff-card balance-card">
+    <div class="staff-title">Park Balance Sheet</div>
+    <div class="staff-sub">Income estimate, bottlenecks, and recurring costs.</div>
+    <div class="balance-sheet" id="balanceSheet"></div>
+    <button class="bp-btn primary" id="balanceClose">Close</button>
+  </div>
+</div>
+
+<div class="staff-panel" id="researchPanel" hidden>
+  <div class="staff-backdrop" id="researchBackdrop"></div>
+  <div class="staff-card research-card">
+    <div class="staff-title">🔬 R&D Lab</div>
+    <div class="staff-sub">Fund research from park income and unlock new ride systems.</div>
+    <div class="research-list" id="researchList"></div>
+    <button class="bp-btn primary" id="researchClose">Close</button>
   </div>
 </div>
 
@@ -104,7 +137,20 @@
   </div>
 </div>
 
-<div class="shop" id="shop"></div>
+<div class="staff-panel" id="escapePanel" hidden>
+  <div class="staff-backdrop" id="escapeBackdrop"></div>
+  <div class="staff-card escape-card">
+    <div class="staff-title">Game Menu</div>
+    <div class="staff-sub">Manage this park session.</div>
+    <div class="escape-actions">
+      <button class="menu-btn primary" id="escapeResume">Resume</button>
+      <button class="menu-btn" id="escapeSave">Save Now</button>
+      <button class="menu-btn" id="escapeReload">Reload Save</button>
+      <button class="menu-btn danger" id="escapeReset">Reset Park</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 <div class="title">Time Coaster 3D</div>
 
@@ -115,6 +161,30 @@
   }
 }
 </script>
-<script type="module" src="src/main.js?v=20260701-19"></script>
+<script>
+window.__TC3D_VERSION = '20260703-11';
+window.__TC3D_BOOTED = false;
+window.addEventListener('error', event => {
+  window.__TC3D_BOOT_ERROR = event.message || 'Load error';
+});
+window.addEventListener('unhandledrejection', event => {
+  window.__TC3D_BOOT_ERROR = event.reason?.message || String(event.reason || 'Load error');
+});
+setTimeout(() => {
+  if (window.__TC3D_BOOTED) return;
+  const params = new URLSearchParams(location.search);
+  if (params.get('tc3d_retry') !== window.__TC3D_VERSION) {
+    params.set('tc3d_retry', window.__TC3D_VERSION);
+    const query = params.toString();
+    location.replace(`${location.pathname}${query ? `?${query}` : ''}${location.hash}`);
+    return;
+  }
+  const el = document.createElement('div');
+  el.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9999;max-width:min(440px,92vw);padding:16px 18px;border:2px solid #1c2533;border-radius:14px;background:#fbf3e2;box-shadow:0 14px 30px rgba(28,37,51,.22);font:600 14px Inter,system-ui,sans-serif;color:#1c2533;text-align:center';
+  el.textContent = `Time Coaster could not finish loading. Try a hard refresh. ${window.__TC3D_BOOT_ERROR || ''}`;
+  document.body.appendChild(el);
+}, 8000);
+</script>
+<script type="module" src="src/main.js?v=20260703-11"></script>
 </body>
 </html>

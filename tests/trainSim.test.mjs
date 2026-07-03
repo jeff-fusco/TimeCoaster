@@ -119,6 +119,75 @@ function run(args) {
   assert.equal(state.money, 4 * ECONOMY.perRider + 12, 'no photos sold on an empty train');
 }
 
+// Vendor carts (hats/balloons) add per-rider merch income at dispatch.
+{
+  const state = { money: 0, rides: 0 };
+  const economy = { ...ECONOMY, vendorPerRider: 2.5 };
+  const full = makeTrain({ mode: 'dwell', phase: 'ready', cycleBoard: 4, boarded: 4 });
+  dispatchTrain(full, { economy, state });
+  assert.equal(state.money, 4 * ECONOMY.perRider + Math.round(4 * 2.5), 'ride income + vendor sales');
+}
+
+// Merch Exit Shop research skims a share of each trainload's ride income.
+{
+  const state = { money: 0, rides: 0 };
+  const economy = { ...ECONOMY, merchRate: 0.06 };
+  const full = makeTrain({ mode: 'dwell', phase: 'ready', cycleBoard: 100, boarded: 100 });
+  dispatchTrain(full, { economy, state });
+  const ride = Math.round(100 * ECONOMY.perRider);
+  assert.equal(state.money, ride + Math.round(100 * ECONOMY.perRider * 0.06), 'ride income + merch share');
+}
+
+// Dual-Berth Station: a second train docks at the rear berth to unload while
+// the front berth loads, then advances forward and loads once the front clears.
+{
+  const carLen = 1.7;
+  const blockGap = 2.4;
+  const front = makeTrain({ s: STOP_S, mode: 'dwell', phase: 'load', berth: 'front', cycleBoard: 4 });
+  const rear = makeTrain({ s: 1.5, prevS: 1.5, boarded: 6 });
+  const trains = [front, rear];
+  const sim = { queue: 10 };
+  const state = { money: 0, rides: 0 };
+  const rearStop = STOP_S - blockGap; // single car: trainLen 0
+
+  // rear train crosses the rear-berth point and docks to unload
+  let guard = 0;
+  while (rear.mode !== 'dwell' && guard++ < 50) run({ trains, sim, state, berths: 2, carLen, blockGap });
+  assert.equal(rear.mode, 'dwell', 'second train docks while the front berth is busy');
+  assert.equal(rear.berth, 'rear');
+  assert.equal(rear.phase, 'unload');
+  assert.ok(Math.abs(rear.s - rearStop) < 1e-6, 'docks exactly at the rear berth point');
+
+  // unload completes at the rear berth while the front train is still boarding
+  guard = 0;
+  while (rear.phase === 'unload' && guard++ < 50) run({ trains, sim, state, berths: 2, carLen, blockGap });
+  assert.equal(rear.boarded, 0, 'riders got off at the rear berth');
+  assert.ok(rear.phase === 'waitBerth' || rear.phase === 'advance', 'waits for the front berth');
+
+  // dispatch the front train; the rear train advances and starts loading
+  guard = 0;
+  while (front.phase !== 'ready' && guard++ < 100) run({ trains, sim, state, berths: 2, carLen, blockGap });
+  dispatchTrain(front, { economy: ECONOMY, state });
+  guard = 0;
+  while (rear.phase !== 'load' && guard++ < 300) run({ trains, sim, state, berths: 2, carLen, blockGap });
+  assert.equal(rear.phase, 'load', 'advanced to the front berth and began loading');
+  assert.equal(rear.berth, 'front');
+  assert.ok(Math.abs(rear.s - STOP_S) < 1e-6, 'loads at the front berth point');
+  assert.equal(rear.cycleBoard, 8, 'reserved guests from the queue on arrival at the front berth');
+}
+
+// Dual-Berth: an empty station still lets a train dock straight at the front.
+{
+  const trains = [makeTrain({ boarded: 3 })];
+  const sim = { queue: 5 };
+  const state = { money: 0, rides: 0 };
+  let guard = 0;
+  while (trains[0].mode !== 'dwell' && guard++ < 50) run({ trains, sim, state, berths: 2 });
+  assert.equal(trains[0].berth, 'front', 'empty station: dock directly at the front berth');
+  assert.equal(trains[0].phase, 'unload');
+  assert.ok(Math.abs(trains[0].s - STOP_S) < 1e-6);
+}
+
 // Negative path speed rolls a train backward and wraps around the loop cleanly.
 {
   const trains = [makeTrain({ s: 0.2, prevS: 0.2 })];

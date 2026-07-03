@@ -8,6 +8,7 @@ import {
   isQueueReservedChunk,
   landCost,
   normalizePropertyState,
+  plotDimensions,
   pointInOwnedLand,
 } from '../src/systems/property.js';
 
@@ -27,6 +28,9 @@ import {
   assert.deepEqual(new Set(candidates.map(candidate => candidate.key)), new Set(['1,0', '-1,0', '0,-1']));
   assert.equal(isQueueReservedChunk('0,1'), true, 'south land is reserved for queue expansion');
   assert.equal(landCost(property, '1,0'), 1188);
+  assert.deepEqual(plotDimensions(property, '1,0'), { width: 24, depth: 24, area: 576, baseArea: 576 });
+  assert.equal(Math.round(plotDimensions(property, '2,0').area), 778, 'farther east plots get larger');
+  assert.ok(landCost(property, '2,0') > landCost(property, '1,0') * 2, 'larger distant plots carry a premium');
 }
 
 {
@@ -51,6 +55,8 @@ import {
     owned: ['bad', '1,0', '1,0'],
   });
   assert.equal(property.chunkSize, 30);
+  assert.equal(property.sizeGrowth, 0.35);
+  assert.equal(property.farGrowth, 1.28);
   assert.deepEqual(property.owned, ['0,0', '1,0']);
 }
 
