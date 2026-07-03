@@ -1,7 +1,7 @@
 export const CAR_LEN = 1.7;
 
-import { guestBuyerRoll } from '../systems/economy.js?v=20260703-11';
-import { addBalloon, addHat } from './guestAccessories.js?v=20260703-11';
+import { guestBuyerRoll } from '../systems/economy.js?v=20260703-12';
+import { addBalloon, addHat } from './guestAccessories.js?v=20260703-12';
 
 function buildCar({ THREE, colors, headColors, guestColors = [], seedBase = 0, hatFrac = 0, balloonFrac = 0 }) {
   const car = new THREE.Group();

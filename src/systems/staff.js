@@ -2,9 +2,9 @@
 // role's skill (a different effect per role — see STAFF_FX in economy.js).
 // Kept separate from the upgrade shop: costs climb steeply per role so staff
 // is a long-arc investment, not a one-session buyout.
-import { STAFF, STN } from '../config/gameData.js?v=20260703-11';
-import { STAFF_FX } from './economy.js?v=20260703-11';
-import { researchFundingCap } from './research.js?v=20260703-11';
+import { STAFF, STN } from '../config/gameData.js?v=20260703-12';
+import { STAFF_FX } from './economy.js?v=20260703-12';
+import { researchFundingCap } from './research.js?v=20260703-12';
 
 export function createStaffState() {
   const state = {};

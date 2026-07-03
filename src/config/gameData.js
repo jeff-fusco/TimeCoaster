@@ -168,7 +168,7 @@ export const RESEARCH = {
   tunnels: { path: 'track', name: 'Underground Tunneling', desc: 'Unlock tunnel segments that dive below the land slab', icon: '⛏️', cost: 3200000 },
   teleporters: { path: 'track', name: 'Teleporter Track', desc: 'Unlock portal-linked accelerator segments', icon: '🌀', cost: 18000000 },
 
-  launch: { path: 'operations', name: 'Launch System', desc: '+1 free Faster Track level', icon: '🚀', cost: 1800 },
+  launch: { path: 'operations', name: 'Launch System', desc: 'Raise launch energy like +1 Faster Track level', icon: '🚀', cost: 1800 },
   train3: { path: 'operations', name: 'Block Sections', desc: 'Raise train cap to 9 trains', icon: '🚆', cost: 12000 },
   stationCrew: { path: 'operations', name: 'Station Crew Systems', desc: 'Load and unload guests 25% faster', icon: '⏱️', cost: 65000 },
   dualBerth: { path: 'operations', name: 'Dual-Berth Station', desc: 'Rear berth unloads while the front berth loads — two trains work the station at once', icon: '🚉', cost: 180000 },

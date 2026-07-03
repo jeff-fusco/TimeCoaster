@@ -153,7 +153,7 @@ export function createHudShop({
       if (researchLocked) {
         el.className = 'ticket locked research-locked';
         costEl.textContent = 'R&D';
-        level.textContent = 'Needs Auto Dispatch';
+        level.textContent = 'Needs research';
         return;
       }
       const cost = upgradeCost(upgrade);

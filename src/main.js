@@ -7,7 +7,7 @@ import {
   gradeFor,
   hasResearchKey,
   upgradeCost,
-} from './systems/economy.js?v=20260703-11';
+} from './systems/economy.js?v=20260703-12';
 import {
   createResearchState,
   clampResearchFundingPct,
@@ -17,25 +17,25 @@ import {
   pathProjectState,
   researchFundingCap,
   stepResearch,
-} from './systems/research.js?v=20260703-11';
+} from './systems/research.js?v=20260703-12';
 import {
   DEFAULT_STATION,
   buildPath as buildTrackPath,
   samplePathAt,
   speedAtPath,
-} from './systems/path.js?v=20260703-11';
+} from './systems/path.js?v=20260703-12';
 import {
   applySaveData,
   readSave,
   SAVE_KEYS,
   writeSave,
-} from './systems/save.js?v=20260703-11';
+} from './systems/save.js?v=20260703-12';
 import {
   createMaintenanceState,
   enqueueInstall,
   pendingCount,
   stepMaintenance,
-} from './systems/maintenance.js?v=20260703-11';
+} from './systems/maintenance.js?v=20260703-12';
 import {
   buyLand,
   chunkBounds,
@@ -43,22 +43,22 @@ import {
   expansionCandidates,
   normalizePropertyState,
   pointInOwnedLand,
-} from './systems/property.js?v=20260703-11';
-import { buildTrackGeometry as renderTrackGeometry } from './render/track.js?v=20260703-11';
-import { buildPropertyGeometry as renderPropertyGeometry } from './render/property.js?v=20260703-11';
+} from './systems/property.js?v=20260703-12';
+import { buildTrackGeometry as renderTrackGeometry } from './render/track.js?v=20260703-12';
+import { buildPropertyGeometry as renderPropertyGeometry } from './render/property.js?v=20260703-12';
 import {
   buildStationAndQueue as renderStationAndQueue,
   spawnStationWalkers,
   updateQueueVisuals as renderQueueVisuals,
-} from './render/station.js?v=20260703-11';
+} from './render/station.js?v=20260703-12';
 import {
   CAR_LEN,
   placeCar as renderPlaceCar,
   rebuildTrains as renderRebuildTrains,
   setTrainGlow,
   setTrainOccupancy,
-} from './render/train.js?v=20260703-11';
-import { dispatchTrain, stepTrains } from './systems/trainSim.js?v=20260703-11';
+} from './render/train.js?v=20260703-12';
+import { dispatchTrain, stepTrains } from './systems/trainSim.js?v=20260703-12';
 import {
   canHire,
   canTrain,
@@ -68,22 +68,22 @@ import {
   staffStatus,
   train as trainStaff,
   trainCost,
-} from './systems/staff.js?v=20260703-11';
-import { buildChunkScenery, createClouds } from './render/scenery.js?v=20260703-11';
+} from './systems/staff.js?v=20260703-12';
+import { buildChunkScenery, createClouds } from './render/scenery.js?v=20260703-12';
 import {
   canPlaceDecoration,
   createDecorationsState,
   decorationCost,
   normalizeDecorations,
   placeDecoration,
-} from './systems/decorations.js?v=20260703-11';
-import { buildDecorationModel, buildDecorations as renderDecorations } from './render/decorations.js?v=20260703-11';
-import { initBuildControls } from './input/buildControls.js?v=20260703-11';
-import { createBalancePanel } from './ui/balancePanel.js?v=20260703-11';
-import { createHudShop } from './ui/hudShop.js?v=20260703-11';
-import { createResearchPanel } from './ui/researchPanel.js?v=20260703-11';
-import { createStaffPanel } from './ui/staffPanel.js?v=20260703-11';
-import { createLandPopup } from './ui/landPopup.js?v=20260703-11';
+} from './systems/decorations.js?v=20260703-12';
+import { buildDecorationModel, buildDecorations as renderDecorations } from './render/decorations.js?v=20260703-12';
+import { initBuildControls } from './input/buildControls.js?v=20260703-12';
+import { createBalancePanel } from './ui/balancePanel.js?v=20260703-12';
+import { createHudShop } from './ui/hudShop.js?v=20260703-12';
+import { createResearchPanel } from './ui/researchPanel.js?v=20260703-12';
+import { createStaffPanel } from './ui/staffPanel.js?v=20260703-12';
+import { createLandPopup } from './ui/landPopup.js?v=20260703-12';
 import {
   BLOCK_GAP,
   CATS,
@@ -106,7 +106,7 @@ import {
   STAFF_ORDER,
   STN,
   UPGRADES,
-} from './config/gameData.js?v=20260703-11';
+} from './config/gameData.js?v=20260703-12';
 
 /* =========================================================================
    TIME COASTER 3D
@@ -126,7 +126,7 @@ function applyResearchEffects(){
   applyResearchEffectsModel(UPGRADES, research.done);
 }
 
-const state = { money:1000, rides:0 };
+const state = { money:0, rides:0 };
 const sim   = { queue:0 };     // live count of guests waiting in line
 const staff = createStaffState();   // hired/trained staff (separate from upgrades)
 const maintenance = createMaintenanceState(); // purchased car/train installs waiting on mechanics
@@ -971,7 +971,7 @@ function handleResearchUnlock(key){
 }
 function buy(key){
   const u=UPGRADES[key];
-  if(u.requiresResearch && !hasResearch(u.requiresResearch)){ showToast('Research Auto Dispatch first'); return; }
+  if(u.requiresResearch && !hasResearch(u.requiresResearch)){ showToast('Finish the required research first'); return; }
   if(u.max!==undefined&&u.level>=u.max)return;
   const c=upgradeCost(u); if(state.money<c)return;
   state.money-=c; u.level+=1;

@@ -58,7 +58,7 @@ function run(args) {
   assert.equal(trains[0].mode, 'run');
 }
 
-// Auto Dispatch launches a ready train after the delay, no click needed.
+// Auto-launch crews launch a ready train after the delay, no click needed.
 {
   const trains = [makeTrain()];
   const sim = { queue: 10 };

@@ -1,5 +1,5 @@
-import { guestBuyerRoll } from '../systems/economy.js?v=20260703-11';
-import { addBalloon, addHat } from './guestAccessories.js?v=20260703-11';
+import { guestBuyerRoll } from '../systems/economy.js?v=20260703-12';
+import { addBalloon, addHat } from './guestAccessories.js?v=20260703-12';
 
 function horiz(THREE, v) {
   const h = new THREE.Vector3(v.x, 0, v.z);

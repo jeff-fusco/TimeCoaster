@@ -18,13 +18,13 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   await page.goto('/index.html');
 
   await expect(page.locator('#scene canvas')).toBeVisible();
-  const cssResponse = await page.request.get('/styles.css?v=20260703-11');
+  const cssResponse = await page.request.get('/styles.css?v=20260703-12');
   await expect(cssResponse).toBeOK();
   expect(cssResponse.headers()['cache-control']).toContain('no-store');
   const threeResponse = await page.request.get('/vendor/three.module.js');
   await expect(threeResponse).toBeOK();
   expect(threeResponse.headers()['cache-control']).toContain('no-store');
-  await expect(page.locator('.money #money')).toContainText(/\d/);
+  await expect(page.locator('.money #money')).toHaveText('0');
   await expect(page.locator('#shopToggle')).toBeVisible();
   await expect(page.locator('.bottom .ctrl')).toHaveText(['🎟 Shop', '🔧 Build', '👥 Staff', '🔬 R&D']);
   await expect(page.locator('#shopPanel')).toBeHidden();
@@ -105,7 +105,36 @@ test('staff panel opens and closes from the bottom controls', async ({ page }) =
   await expect(page.locator('#staffList .staff-row')).toHaveCount(6);
   await expect(page.locator('#staffList .staff-row .s-status').first()).toContainText(/dispatch trains yourself/i);
   const scientists = page.locator('#staffList .staff-row').filter({ hasText: 'Scientists' });
+  await expect(scientists.locator('[data-act="hire"]')).toBeDisabled();
+  await page.locator('#staffClose').click();
+  await expect(page.locator('#staffPanel')).toBeHidden();
+  await expect(page.locator('#researchToggle')).toBeHidden();
+  expect(pageErrors).toEqual([]);
+});
+
+test('hiring a scientist unlocks the research lab', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 1000, rides: 0, queue: 8 }));
+  });
+  await page.goto('/index.html');
+
+  await expect(page.locator('#researchToggle')).toBeHidden();
+  await page.locator('#staffToggle').click();
+  const scientists = page.locator('#staffList .staff-row').filter({ hasText: 'Scientists' });
   await scientists.locator('[data-act="hire"]').click();
+  await expect.poll(async () => {
+    const raw = await page.locator('#money').textContent();
+    return Number((raw || '').replace(/,/g, ''));
+  }).toBeLessThanOrEqual(100);
+  await expect.poll(async () => {
+    const raw = await page.locator('#money').textContent();
+    return Number((raw || '').replace(/,/g, ''));
+  }).toBeGreaterThan(90);
   await page.locator('#staffClose').click();
   await expect(page.locator('#staffPanel')).toBeHidden();
   await expect(page.locator('#researchToggle')).toBeVisible();

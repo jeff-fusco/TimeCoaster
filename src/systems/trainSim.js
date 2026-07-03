@@ -11,7 +11,7 @@
 //
 // A train that finishes boarding enters the `ready` phase and waits at the
 // platform. It departs only when dispatched — either manually (the player clicks
-// it) or automatically once the Auto Dispatch research is owned. Ride income is
+// it) or automatically once trained operators are running launches. Ride income is
 // credited at dispatch, so launching is a real action with economic weight.
 //
 // Block sections: a following train slows/stops so its lead car never gets
