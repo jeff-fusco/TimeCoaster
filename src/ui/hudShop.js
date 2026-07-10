@@ -12,6 +12,8 @@ export function createHudShop({
   getPath,
   getState,
   getSim,
+  getMeasuredRate = () => null,   // rolling actual $/min; null until enough signal
+  getExcitementBonus = () => 0,   // decor theming added on top of track excitement
   hasResearch,
   gradeFor,
   upgradeCost,
@@ -77,7 +79,8 @@ export function createHudShop({
     card.className = 'rcard';
     card.innerHTML =
       `<div class="rh">Decorations</div>` +
-      `<div class="rsub">Pick a piece, then click anywhere on owned land to place it. Esc to stop placing.</div>`;
+      `<div class="rsub">Click owned land to place. <b>Scroll</b> raises for stacking, <b>R</b> rotates, ` +
+      `pieces overlap freely — build structures around your coaster. Esc to stop.</div>`;
     body.appendChild(card);
 
     decorOrder.forEach(key => {
@@ -92,6 +95,16 @@ export function createHudShop({
       el.addEventListener('click', () => onSelectDecor(key));
       body.appendChild(el);
     });
+
+    const remove = document.createElement('div');
+    remove.className = 'ticket decor-ticket';
+    remove.id = 'decor-remove';
+    remove.innerHTML =
+      `<div class="ic">🗑</div>` +
+      `<div class="body"><div class="nm">Demolish</div><div class="ds">Click placed pieces to remove them</div><div class="lv" id="decor-lv-remove"></div></div>` +
+      `<div class="cost">+50%</div>`;
+    remove.addEventListener('click', () => onSelectDecor('remove'));
+    body.appendChild(remove);
     refreshHUD();
   }
 
@@ -104,7 +117,10 @@ export function createHudShop({
     const stats = path ? path.stats : null;
 
     $('money').textContent = fmt(state.money);
-    $('rate').textContent = `$${fmt(d.ratePerMin)} / min`;
+    // show what the park actually earned over the last minute once we have
+    // signal; fall back to the model estimate while warming up
+    const measured = getMeasuredRate();
+    $('rate').textContent = `$${fmt(measured === null ? d.ratePerMin : measured)} / min`;
     $('riders').textContent = d.seatsCap;
     $('perride').textContent = `$${fmt(d.perRideFull)}`;
     $('queue').textContent = `${Math.round(sim.queue)}/${d.queueCap}`;
@@ -113,7 +129,7 @@ export function createHudShop({
       $('topspeed').textContent = Math.round(stats.maxSpeed * mph);
       $('trackLen').textContent = `${stats.length}m`;
       $('laptime').textContent = `${stats.lapTime.toFixed(1)}s`;
-      const exc = stats.excitement;
+      const exc = stats.excitement + getExcitementBonus();
       const intn = stats.intensity;
       const nau = stats.nausea;
       $('vExc').textContent = exc.toFixed(0);
@@ -172,8 +188,15 @@ export function createHudShop({
       el.classList.toggle('locked', !affordable);
       el.classList.toggle('selected', selected === key);
       const lv = $(`decor-lv-${key}`);
-      if (lv) lv.textContent = selected === key ? 'Placing — click the ground' : '';
+      if (lv) lv.textContent = selected === key ? 'Placing — scroll raises · R rotates' : '';
     });
+    const removeEl = $('decor-remove');
+    if (removeEl) {
+      removeEl.classList.add('affordable');
+      removeEl.classList.toggle('selected', selected === 'remove');
+      const lv = $('decor-lv-remove');
+      if (lv) lv.textContent = selected === 'remove' ? 'Demolishing — click pieces' : '';
+    }
 
   }
 

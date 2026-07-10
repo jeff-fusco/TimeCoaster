@@ -25,6 +25,19 @@ export function createResearchPanel({
     return staff().scientists || { hired: 0, trained: 0 };
   }
 
+  const escText = value => String(value ?? '').replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  }[c]));
+
+  // The department has a face: the top scientist headlines the lab.
+  function deptHeadLine(sci) {
+    const people = sci.people || [];
+    if (!people.length) return '';
+    const head = people.reduce((best, p) =>
+      ((p.coverage || 0) * 10 + (p.level || 0)) > ((best.coverage || 0) * 10 + (best.level || 0)) ? p : best, people[0]);
+    return `<div class="rsub dept-head">🔬 Head of R&D: <b>${escText(head.name)}</b> · Lv ${head.level}/${head.potential}</div>`;
+  }
+
   function renderLocked() {
     list.innerHTML =
       `<div class="rcard research-funding">` +
@@ -153,6 +166,7 @@ export function createResearchPanel({
       `<div class="research-range-fill" style="width:${maxPct > 0 ? (pct / maxPct) * 100 : 0}%"></div>` +
       `<div class="research-range-thumb" style="left:${maxPct > 0 ? (pct / maxPct) * 100 : 0}%"></div>` +
       `</div></div>` +
+      deptHeadLine(sci) +
       `</div>`;
 
     bindFundingSlider(active, d, sci, maxPct);

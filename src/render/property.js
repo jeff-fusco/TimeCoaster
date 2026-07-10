@@ -2,7 +2,7 @@
 // purchasable chunks are recessed sandy slabs with a dashed outline and an
 // RCT-style FOR SALE sign. Every sign/lot mesh carries `userData.landKey` so a
 // play-mode tap can open the purchase popup.
-import { chunkBounds } from '../systems/property.js?v=20260703-12';
+import { chunkBounds } from '../systems/property.js?v=20260703-13';
 
 // draw the sign board face (cream card, ink border, red FOR SALE, price)
 function makeSignTexture(THREE, costLabel) {

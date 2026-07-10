@@ -1,28 +1,33 @@
 // Hats and balloons worn by guests who bought from the vendor carts.
 // Both attach as children of a guest's head mesh, so they inherit the head's
 // visibility (queue count, train occupancy) and motion for free.
+// Sizes are deliberately chunky so the merch reads from a zoomed-out camera.
+
+export const HAT_SIZE = { radius: 0.13, height: 0.26, yOffset: 0.2 };
+export const BALLOON_SIZE = { radius: 0.14, x: 0.16, y: 0.58, z: 0.05, stringR: 0.014, stringLen: 0.48 };
 
 export function addHat(THREE, head, color) {
   const hat = new THREE.Mesh(
-    new THREE.ConeGeometry(0.09, 0.18, 7),
+    new THREE.ConeGeometry(HAT_SIZE.radius, HAT_SIZE.height, 7),
     new THREE.MeshLambertMaterial({ color }),
   );
-  hat.position.y = 0.16;
+  hat.position.y = HAT_SIZE.yOffset;
   head.add(hat);
   return hat;
 }
 
 export function addBalloon(THREE, head, color) {
+  const B = BALLOON_SIZE;
   const balloon = new THREE.Mesh(
-    new THREE.SphereGeometry(0.09, 8, 6),
+    new THREE.SphereGeometry(B.radius, 8, 6),
     new THREE.MeshLambertMaterial({ color }),
   );
-  balloon.position.set(0.14, 0.52, 0.05);
+  balloon.position.set(B.x, B.y, B.z);
   const string = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.008, 0.008, 0.42, 3),
+    new THREE.CylinderGeometry(B.stringR, B.stringR, B.stringLen, 3),
     new THREE.MeshLambertMaterial({ color: 0xf5f0d7 }),
   );
-  string.position.set(0.14, 0.26, 0.05);
+  string.position.set(B.x, B.y - B.radius - B.stringLen / 2 + 0.04, B.z);
   head.add(balloon, string);
   return balloon;
 }

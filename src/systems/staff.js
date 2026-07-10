@@ -2,9 +2,10 @@
 // role's skill (a different effect per role — see STAFF_FX in economy.js).
 // Kept separate from the upgrade shop: costs climb steeply per role so staff
 // is a long-arc investment, not a one-session buyout.
-import { STAFF, STN } from '../config/gameData.js?v=20260703-12';
-import { STAFF_FX } from './economy.js?v=20260703-12';
-import { researchFundingCap } from './research.js?v=20260703-12';
+import { STAFF, STN } from '../config/gameData.js?v=20260703-13';
+import { STAFF_FX } from './economy.js?v=20260703-13';
+import { campaignEfficiency, marketingBudgetCap } from './marketing.js?v=20260703-13';
+import { researchFundingCap } from './research.js?v=20260703-13';
 
 export function createStaffState() {
   const state = {};
@@ -82,6 +83,10 @@ export function staffStatus(role, entry) {
       if (!hired) return 'R&D Lab locked';
       const efficiency = 1 + FX.scientistSkill * trained;
       return `R&D budget up to ${researchFundingCap({ scientists: entry })}% · efficiency ×${efficiency.toFixed(2)}`;
+    }
+    case 'marketers': {
+      if (!hired) return 'Marketing HQ locked';
+      return `Campaign budget up to ${marketingBudgetCap({ marketers: entry })}% - efficiency x${campaignEfficiency(12, { marketers: entry }).toFixed(2)}`;
     }
     default:
       return '';

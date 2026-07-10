@@ -17,7 +17,8 @@ import { STAFF, STAFF_ORDER } from '../src/config/gameData.js';
   assert.deepEqual(Object.keys(s).sort(), Object.keys(STAFF).sort());
   assert.ok(STAFF_ORDER.includes('photographers'));
   assert.ok(STAFF_ORDER.includes('scientists'));
-  assert.equal(STAFF_ORDER.length, 6);
+  assert.ok(STAFF_ORDER.includes('marketers'));
+  assert.equal(STAFF_ORDER.length, 7);
   for (const role of Object.keys(s)) {
     assert.deepEqual(s[role], { hired: 0, trained: 0 });
   }
@@ -84,6 +85,10 @@ import { STAFF, STAFF_ORDER } from '../src/config/gameData.js';
   s.scientists = { hired: 2, trained: 2 };
   assert.match(staffStatus('scientists', s.scientists), /budget up to 14%/, 'scientists raise the R&D budget cap');
   assert.match(staffStatus('scientists', s.scientists), /efficiency ×1\.36/, 'training improves research efficiency');
+  assert.match(staffStatus('marketers', s.marketers), /Marketing HQ locked/i);
+  s.marketers = { hired: 2, trained: 2 };
+  assert.match(staffStatus('marketers', s.marketers), /budget up to 12%/, 'marketers raise the campaign budget cap');
+  assert.match(staffStatus('marketers', s.marketers), /efficiency x1\.23/, 'training improves campaign efficiency after budget drag');
 }
 
 console.log('staff tests passed');

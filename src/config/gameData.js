@@ -64,16 +64,16 @@ export const FEATURE_COST = {
 };
 export const FEATURE_REFUND = 0.6;
 
+// Starter coaster: deliberately tiny and symmetric — turn out of the station,
+// round the corner, arc over a centered hill on the far side, and curve home.
+// Three points is the whole ride; the player's first upgrades are literally
+// making it bigger.
 export const DEFAULT_CTRL = [
   { x: 2.85, y: 0.7, z: 9.0, station: true, seg: 'station' },
   { x: -2.85, y: 0.7, z: 9.0, station: true, seg: 'plain' },
-  { x: -7.5, y: 0.9, z: 5.5, seg: 'plain' },
-  { x: -9.8, y: 1.1, z: 0.0, seg: 'plain' },
-  { x: -7.5, y: 0.9, z: -5.5, seg: 'plain' },
-  { x: 0.0, y: 1.3, z: -9.3, seg: 'plain' },
-  { x: 7.5, y: 0.9, z: -5.5, seg: 'plain' },
-  { x: 9.8, y: 1.1, z: 0.0, seg: 'plain' },
-  { x: 7.5, y: 0.9, z: 5.5, seg: 'plain' },
+  { x: -6.0, y: 0.8, z: -0.8, seg: 'plain' },  // left corner at track level
+  { x: 0.0, y: 2.8, z: -2.8, seg: 'plain' },   // centered crest over the back
+  { x: 6.0, y: 0.8, z: -0.8, seg: 'plain' },   // right corner, then home
 ];
 
 export const UPGRADES = {
@@ -90,11 +90,12 @@ export const UPGRADES = {
   balloons: { name: 'Balloon Cart', desc: '+8% of riders buy a $6 balloon', icon: '🎈', base: 220, growth: 2.35, level: 0, max: 8, cat: 'queue' },
   express: { name: 'Express Lane', desc: '+$5 bonus per rider', icon: '🌟', base: 1500, growth: 2.6, level: 0, max: 18, cat: 'marketing' },
   ticket: { name: 'Ticket Price', desc: '+$1 per rider', icon: '🎟️', base: 85, growth: 1.92, level: 0, max: 30, cat: 'marketing' },
-  market: { name: 'Marketing', desc: 'More guests · excitement pays', icon: '📣', base: 260, growth: 2.3, level: 0, max: 18, cat: 'marketing' },
+  // the flat 'market' upgrade was retired in M5 — guest demand is now driven by
+  // the Marketing Department (hire Marketers, fund campaigns, build Demand)
   hype: { name: 'Theming & Hype', desc: '×1.12 to all earnings', icon: '🎪', base: 260, growth: 2.35, level: 0, max: 24, cat: 'marketing' },
 };
 
-export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'canopy', 'comfort', 'turnstiles', 'hats', 'balloons', 'ticket', 'market', 'hype', 'express'];
+export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'canopy', 'comfort', 'turnstiles', 'hats', 'balloons', 'ticket', 'hype', 'express'];
 
 export const CATS = [
   { id: 'ride', icon: '🎢', name: 'Ride' },
@@ -155,8 +156,16 @@ export const STAFF = {
     hireBase: 900, hireGrowth: 2.45, hireMax: 8,
     trainBase: 1600, trainGrowth: 2.85, trainMax: 8,
   },
+  marketers: {
+    name: 'Marketers', icon: '📣',
+    desc: 'Run the Marketing HQ and turn budget into guest demand.',
+    hireDesc: 'first hire unlocks Marketing · each hire adds +6% budget capacity',
+    trainDesc: 'training improves campaign efficiency',
+    hireBase: 700, hireGrowth: 2.3, hireMax: 8,
+    trainBase: 1400, trainGrowth: 3.4, trainMax: 6,
+  },
 };
-export const STAFF_ORDER = ['operators', 'entertainers', 'mechanics', 'janitors', 'photographers', 'scientists'];
+export const STAFF_ORDER = ['operators', 'entertainers', 'mechanics', 'janitors', 'photographers', 'scientists', 'marketers'];
 
 export const RESEARCH = {
   brakes: { path: 'track', name: 'Block Brakes', desc: 'Unlock 🛑 brake track', icon: '🛑', cost: 600 },
@@ -185,11 +194,27 @@ export const RESEARCH = {
   merchExit: { path: 'revenue', name: 'Merch Exit Shop', desc: 'Exit shop adds +6% of every train\'s ride income', icon: '🛍️', cost: 180000 },
   realityLicensing: { path: 'revenue', name: 'Reality Licensing', desc: 'Impossible rides generate royalty income', icon: '🌌', cost: 7000000 },
 
-  flyers: { path: 'marketing', name: 'Flyer Campaigns', desc: 'Increase baseline guest arrivals', icon: '📰', cost: 1200 },
-  radio: { path: 'marketing', name: 'Local Radio', desc: 'Increase sustained demand and marketing value', icon: '📻', cost: 14000 },
-  viral: { path: 'marketing', name: 'Viral Moment Engine', desc: 'High excitement and long rides create demand spikes', icon: '📈', cost: 420000 },
-  mythicReputation: { path: 'marketing', name: 'Mythic Reputation', desc: 'Legendary rides draw crowds from everywhere', icon: '🏆', cost: 9000000 },
+  // marketing research unlocks campaign *channels* in the Marketing HQ — each
+  // one boosts a different income line (see CHANNELS in systems/marketing.js)
+  flyers: { path: 'marketing', name: 'Flyer Campaigns', desc: 'Unlocks 🎈 Family Package: guests spend more on snacks & souvenirs', icon: '📰', cost: 1200 },
+  radio: { path: 'marketing', name: 'Local Radio', desc: 'Unlocks 📺 Broadcast: a deep, slow-fading arrival campaign (up to ×6)', icon: '📻', cost: 14000 },
+  viral: { path: 'marketing', name: 'Viral Moment Engine', desc: 'Unlocks 🎢 Ride Spotlight: ticket premium scaling with excitement', icon: '📈', cost: 420000 },
+  mythicReputation: { path: 'marketing', name: 'Mythic Reputation', desc: 'Unlocks 🏛️ Heritage Tours: monuments earn double while tours run', icon: '🏆', cost: 9000000 },
+
+  // Structures: taller supports let late-game coasters sustain sky-high hills
+  steelSupports: { path: 'structure', name: 'Steel Supports', desc: 'Build track up to 34m tall', icon: '🏗️', cost: 9000 },
+  hydraulicTowers: { path: 'structure', name: 'Hydraulic Towers', desc: 'Build track up to 60m tall', icon: '🗼', cost: 120000 },
+  megaStructure: { path: 'structure', name: 'Mega-Structures', desc: 'Build track up to 120m tall', icon: '🏙️', cost: 2000000 },
+  skyStructure: { path: 'structure', name: 'Sky Structures', desc: 'Build track up to 240m tall', icon: '🌌', cost: 40000000 },
 };
+
+// MAX_TRACK_HEIGHT tiers unlocked by the Structures research path.
+export const HEIGHT_TIERS = [
+  { research: 'skyStructure', height: 240 },
+  { research: 'megaStructure', height: 120 },
+  { research: 'hydraulicTowers', height: 60 },
+  { research: 'steelSupports', height: 34 },
+];
 
 export const RESEARCH_PATHS = {
   track: {
@@ -203,6 +228,12 @@ export const RESEARCH_PATHS = {
     icon: '🚆',
     desc: 'Dispatch, stations, trains, and throughput automation.',
     projects: ['launch', 'train3', 'stationCrew', 'dualBerth', 'movingPlatform', 'predictiveDispatch'],
+  },
+  structure: {
+    name: 'Structures',
+    icon: '🏗️',
+    desc: 'Taller supports for ever more towering coasters.',
+    projects: ['steelSupports', 'hydraulicTowers', 'megaStructure', 'skyStructure'],
   },
   guest: {
     name: 'Guest Flow',
@@ -241,11 +272,40 @@ export const STN = {
 export const BLOCK_GAP = 2.4;
 
 // ── decorations (bought from the Decor tab, placed on owned land) ────────────
+// Decor themes the ride: pieces placed near the track add excitement
+// (diminishing returns — see themingBonus in systems/decorations.js).
+// Pieces overlap and stack freely (scroll raises the ghost, R rotates), so
+// structural pieces double as a Planet Coaster-style construction kit.
 export const DECOR = {
-  flowers:  { name: 'Flower Bed', icon: '🌸', desc: 'A cheerful patch of colour', cost: 40 },
-  lamp:     { name: 'Lamp Post',  icon: '💡', desc: 'Warm light along the paths', cost: 60 },
-  topiary:  { name: 'Topiary',    icon: '🌳', desc: 'A neatly sculpted garden tree', cost: 90 },
-  statue:   { name: 'Statue',     icon: '🗿', desc: 'A grand park centrepiece', cost: 220 },
-  fountain: { name: 'Fountain',   icon: '⛲', desc: 'A splashy showpiece guests love', cost: 400 },
+  // garden classics
+  flowers:  { name: 'Flower Bed', icon: '🌸', desc: 'Themes nearby track (+EXC)', cost: 40, scale: 1.6 },
+  lamp:     { name: 'Lamp Post',  icon: '💡', desc: 'Warm light · themes nearby track', cost: 60, scale: 1.6 },
+  topiary:  { name: 'Topiary',    icon: '🌳', desc: 'Sculpted tree · strong theming', cost: 90, scale: 1.6 },
+  statue:   { name: 'Statue',     icon: '🗿', desc: 'A centrepiece · big theming', cost: 220, scale: 1.6 },
+  fountain: { name: 'Fountain',   icon: '⛲', desc: 'Showpiece · biggest theming', cost: 400, scale: 1.6 },
+  // nature
+  rock:     { name: 'Boulder',    icon: '🪨', desc: 'Rugged scenery · stack for cliffs', cost: 35, scale: 1.25 },
+  pine:     { name: 'Pine Tree',  icon: '🌲', desc: 'A tall evergreen', cost: 70, scale: 1.25 },
+  // construction kit
+  wall:     { name: 'Stone Wall', icon: '🧱', desc: 'Wall panel · clips together', cost: 55, scale: 1.25 },
+  pillar:   { name: 'Pillar',     icon: '🏛️', desc: 'Column · stack for towers', cost: 45, scale: 1.25 },
+  deck:     { name: 'Wood Deck',  icon: '🟫', desc: 'Floor slab · raise for platforms', cost: 50, scale: 1.25 },
+  roof:     { name: 'Peaked Roof', icon: '🛖', desc: 'Cap walls and towers', cost: 85, scale: 1.25 },
+  arch:     { name: 'Stone Arch', icon: '⛩️', desc: 'Gateway · frame the track', cost: 180, scale: 1.25 },
+  fence:    { name: 'Fence',      icon: '🚧', desc: 'A short cream rail section', cost: 25, scale: 1.25 },
+  // flair
+  torch:    { name: 'Torch',      icon: '🔥', desc: 'Flickering flame · themes nicely', cost: 65, scale: 1.25 },
+  banner:   { name: 'Banner Pole', icon: '🚩', desc: 'A tall pennant · themes nicely', cost: 75, scale: 1.25 },
+  // biome signature props — theme extra in their home biome (biome field)
+  cactus:      { name: 'Saguaro',      icon: '🌵', desc: 'Desert cactus · themes big in the Desert', cost: 80, scale: 1.25, biome: 'desert' },
+  iceSpire:    { name: 'Ice Spire',    icon: '🧊', desc: 'Frozen shard · themes big on the Glacier', cost: 80, scale: 1.25, biome: 'ice' },
+  lavaRock:    { name: 'Lava Rock',    icon: '🌋', desc: 'Glowing basalt · themes big in the Volcano', cost: 80, scale: 1.25, biome: 'volcano' },
+  moonCrystal: { name: 'Moon Crystal', icon: '💎', desc: 'Alien geode · themes big on the Moon', cost: 120, scale: 1.25, biome: 'moon' },
 };
-export const DECOR_ORDER = ['flowers', 'lamp', 'topiary', 'statue', 'fountain'];
+export const DECOR_ORDER = [
+  'flowers', 'lamp', 'topiary', 'statue', 'fountain',
+  'rock', 'pine',
+  'wall', 'pillar', 'deck', 'roof', 'arch', 'fence',
+  'torch', 'banner',
+  'cactus', 'iceSpire', 'lavaRock', 'moonCrystal',
+];

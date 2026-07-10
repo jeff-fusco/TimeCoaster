@@ -4,7 +4,13 @@ export function createBalancePanel({
   derived,
   getState,
   getResearch,
+  getMeasuredRate = () => null,   // rolling actual $/min from the income tracker
   canSpendResearch = () => true,
+  getMarketing = () => null,
+  getMarketingFundingPct = marketing => marketing?.fundingPct || 0,
+  canSpendMarketing = () => false,
+  getMarketingFx = () => ({ arrivalMult: 1, ticketMult: 1, vendorMult: 1, legacyMult: 1 }),
+  getPayroll = () => 0,
   researchPaths = {},
   projects = {},
   pathProjectState = () => null,
@@ -25,7 +31,7 @@ export function createBalancePanel({
     const options = [
       { key: 'Seats', value: d.seatsCap, hint: 'add cars or seats' },
       { key: 'Queue', value: d.queueCap, hint: 'expand queue capacity' },
-      { key: 'Guests', value: arrivalBoard, hint: 'boost marketing or excitement' },
+      { key: 'Guests', value: arrivalBoard, hint: 'build Demand or excitement' },
     ].sort((a, b) => a.value - b.value);
     const limited = options[0];
     return `${limited.key} - ${limited.hint}`;
@@ -47,7 +53,14 @@ export function createBalancePanel({
     const activeResearch = pathProjectState(research, researchPaths, projects);
     const researchActive = !!activeResearch?.project && !activeResearch.complete && canSpendResearch();
     const researchSpend = researchActive ? Math.max(0, d.ratePerMin) * (research.fundingPct || 0) / 100 : 0;
-    const netPerMin = d.ratePerMin - researchSpend;
+    const marketing = getMarketing();
+    const marketingActive = !!marketing && canSpendMarketing();
+    const marketingPct = marketingActive ? Math.max(0, getMarketingFundingPct(marketing)) : 0;
+    const marketingSpend = marketingActive ? Math.max(0, d.ratePerMin) * marketingPct / 100 : 0;
+    const mfx = getMarketingFx();
+    const marketingMult = mfx.arrivalMult || 1;
+    const payroll = Math.max(0, getPayroll());
+    const netPerMin = d.ratePerMin - researchSpend - marketingSpend - payroll;
     const arrivalBoard = d.arrivalRate * d.cycle / Math.max(1, d.trains);
     const estBoard = Math.min(d.seatsCap, d.queueCap, arrivalBoard);
     const trainsPerMin = 60 / d.cycle * d.trains;
@@ -61,14 +74,20 @@ export function createBalancePanel({
     const estPhotoDispatch = estBoard > 0.5 ? Math.round(d.photoPerRide) : 0;
     const estMerchDispatch = Math.round(estBoard * d.perRider * d.merchRate);
 
+    const measured = getMeasuredRate();
     const renderKey = JSON.stringify({
       funds: Math.floor(state.money),
+      measured: measured === null ? null : Math.floor(measured),
       gross: Math.floor(d.ratePerMin),
       net: Math.floor(netPerMin),
       ride: Math.floor(d.ridePerMin),
       snack: Math.floor(d.snackPerMin),
       royalty: Math.floor(d.royaltyPerMin),
       spend: Math.floor(researchSpend),
+      payroll: Math.floor(payroll),
+      marketingSpend: Math.floor(marketingSpend),
+      marketingPct,
+      marketingFx: [mfx.arrivalMult, mfx.ticketMult, mfx.vendorMult, mfx.legacyMult].map(v => Math.floor((v || 1) * 1000)),
       pct: research.fundingPct || 0,
       board: Math.floor(estBoard * 10),
       cycle: Math.floor(d.cycle * 10),
@@ -103,14 +122,21 @@ export function createBalancePanel({
         row('Ride dispatches', money(d.ridePerMin), `${trainsPerMin.toFixed(2)} dispatches/min`),
         row('Snack stands', money(d.snackPerMin), `${Math.round(d.snackCap)} guest snack cap`),
         row('Royalties', money(d.royaltyPerMin), d.royaltyPerMin ? 'Reality Licensing' : 'locked by research'),
-        row('Gross income', `${money(d.ratePerMin)}/min`),
+        row('Projected gross', `${money(d.ratePerMin)}/min`, 'model estimate'),
+        row('Measured income', measured === null ? 'warming up…' : `${money(measured)}/min`, 'actually banked, last 60s'),
         row('R&D funding', `-${money(researchSpend)}/min`, researchActive ? `${research.fundingPct || 0}% of income` : 'no active project'),
+        row('Marketing', `-${money(marketingSpend)}/min`, marketingActive ? `${marketingPct}% across campaign channels` : 'hire marketers'),
+        row('Payroll', `-${money(payroll)}/min`, payroll > 0 ? 'staff wages' : 'no staff on payroll'),
         row('Net income', `${signedMoney(netPerMin)}/min`),
       ]) +
       section('Throughput', [
         row('Train cycle', `${d.cycle.toFixed(1)}s`, `${d.trains} train${d.trains === 1 ? '' : 's'}`),
         row('Boarded/dispatch', estBoard.toFixed(1), `seats ${d.seatsCap}, queue ${d.queueCap}`),
         row('Guest arrivals', `${d.arrivalRate.toFixed(1)}/sec`, `${arrivalBoard.toFixed(1)} guests per train cycle`),
+        row('Campaign arrivals', mult(marketingMult), 'Street Team x Broadcast demand'),
+        ...(mfx.ticketMult > 1.001 ? [row('Ride Spotlight', mult(mfx.ticketMult), 'ticket premium')] : []),
+        ...(mfx.vendorMult > 1.001 ? [row('Family Package', mult(mfx.vendorMult), 'guest spending')] : []),
+        ...(mfx.legacyMult > 1.001 ? [row('Heritage Tours', mult(mfx.legacyMult), 'monument income')] : []),
         row('Limited by', bottleneckLabel(d, arrivalBoard)),
       ]);
   }

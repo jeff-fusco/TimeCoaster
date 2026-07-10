@@ -1,4 +1,4 @@
-import { STAFF_FX } from './economy.js?v=20260703-12';
+import { STAFF_FX } from './economy.js?v=20260703-13';
 
 export const INSTALL_TIMES = {
   car: 8,

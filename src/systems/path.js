@@ -108,7 +108,7 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       const m0 = startDir.multiplyScalar(dist * 0.75);
       const m1 = stationDir.clone().multiplyScalar(dist * 0.75);
       for (let k = 0; k < samples.segment; k++) {
-        out.push({ pos: hermite(Vector3, p1, m0, preStation, m1, k / samples.segment), kind: seg });
+        out.push({ pos: hermite(Vector3, p1, m0, preStation, m1, k / samples.segment), kind: seg, bank: node.bank });
       }
       pushLine(preStation, stationA, runwaySamples, 'station');
     } else if (i === 1) {
@@ -118,7 +118,7 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       const m0 = stationDir.clone().multiplyScalar(dist * 0.75);
       const m1 = endDir.multiplyScalar(dist * 0.75);
       for (let k = 0; k < samples.segment; k++) {
-        out.push({ pos: hermite(Vector3, postStation, m0, p2, m1, k / samples.segment), kind: seg });
+        out.push({ pos: hermite(Vector3, postStation, m0, p2, m1, k / samples.segment), kind: seg, bank: node.bank });
       }
     } else if (seg === 'loop' || seg === 'giantLoop') {
       const fwd = horiz(Vector3, new Vector3().subVectors(p1, p0));
@@ -206,7 +206,7 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       }
     } else {
       for (let k = 0; k < samples.segment; k++) {
-        out.push({ pos: catmull(Vector3, p0, p1, p2, p3, k / samples.segment), kind: seg });
+        out.push({ pos: catmull(Vector3, p0, p1, p2, p3, k / samples.segment), kind: seg, bank: node.bank });
       }
     }
   }
@@ -311,6 +311,8 @@ export function buildPath({
   const pos = raw.map(r => r.pos);
   const kind = raw.map(r => r.kind);
   const featUp = raw.map(r => r.featureUp || null);
+  // manual bank override per sample, as a fraction of maxBank in [-1, 1]
+  const manualBank = raw.map(r => (Number.isFinite(r.bank) ? Math.max(-1, Math.min(1, r.bank)) : null));
 
   const tan = [];
   for (let i = 0; i < N; i++) {
@@ -330,28 +332,65 @@ export function buildPath({
 
   const height = pos.map(p => p.y);
   const speedMult = Math.pow(1.08, upgrades.speed.level + (researchDone.launch ? 1 : 0));
+  const g = physics.g;
   const launchSpeed = (physics.launchSpeed || physics.vMin * 3) * speedMult;
-  const startHeight = height[0] || station.y;
-  const E = physics.g * startHeight + 0.5 * launchSpeed * launchSpeed;
+  const liftSpeed = (physics.liftSpeed || 3.6) * speedMult;
+  const brakeSpeed = (physics.brakeSpeed || 3) * speedMult;
+  const stationSpeed = physics.stationSpeed || 2.6;
   const rollbackSpeed = physics.rollbackSpeed || Math.max(1, physics.vMin * 0.55);
-  const speed = new Array(N);
+  const launchEnergy = g * (height[0] || station.y) + 0.5 * launchSpeed * launchSpeed;
+  const ke = v => 0.5 * v * v;   // specific kinetic energy (per unit mass)
 
-  function gravitySpeedAt(i) {
-    const frictionLoss = 1 - Math.min(0.6, Math.max(0, physics.friction));
-    const v2 = 2 * (E - physics.g * height[i]) * frictionLoss;
-    if (v2 > 0.01) return Math.sqrt(v2);
-    const uphillAhead = height[(i + 1) % N] > height[i] + 0.02;
-    return uphillAhead ? -rollbackSpeed : rollbackSpeed;
+  // ── forward energy sweep ──────────────────────────────────────────────────
+  // The train launches leaving the station, then energy is conserved except:
+  //   · a chain LIFT hauls the train up and tops its energy off to the crest —
+  //     THIS is how a coaster gains height it couldn't reach on launch energy;
+  //   · a BRAKE bleeds energy down to a slow crawl;
+  //   · rolling friction drains a little energy with distance.
+  // Energy is carried around the loop so tall lift hills power the whole circuit.
+  const energy = new Array(N);
+  const frictionK = Math.min(0.6, Math.max(0, physics.friction));
+  let rollback = false;
+  let E = launchEnergy;
+  for (let step = 0; step < N; step++) {
+    const i = step;
+    const k = kind[i];
+    const potential = g * height[i];
+    const prevK = kind[(i - 1 + N) % N];
+    if (k === 'station') {
+      E = potential + ke(stationSpeed);                    // crawl through the platform
+    } else {
+      if (prevK === 'station') {
+        E = Math.max(E, launchEnergy);                     // launch! inject launch energy
+      } else {
+        const ds = pos[i].distanceTo(pos[(i - 1 + N) % N]);
+        E -= frictionK * g * ds * 0.5;                     // rolling resistance
+      }
+      if (k === 'lift') E = Math.max(E, potential + ke(liftSpeed));    // chain haul to this height
+      else if (k === 'brake') E = Math.min(E, potential + ke(brakeSpeed));
+      if (E < potential + 0.02) {                          // too tall to reach unassisted
+        rollback = true;
+        E = potential + ke(rollbackSpeed);                 // stylized: crawl over, never fully stuck
+      }
+    }
+    energy[i] = E;
   }
 
+  const speed = new Array(N);
   for (let i = 0; i < N; i++) {
     const k = kind[i];
-    const gravitySpeed = gravitySpeedAt(i);
-    if (k === 'lift') speed[i] = Math.max(gravitySpeed, physics.liftSpeed * speedMult);
-    else if (k === 'brake') speed[i] = gravitySpeed < 0 ? gravitySpeed : Math.min(gravitySpeed, physics.brakeSpeed * speedMult);
-    else if (k === 'teleporter') speed[i] = Math.max(Math.abs(gravitySpeed), launchSpeed * 1.45);
-    else if (k === 'station') speed[i] = physics.stationSpeed;
-    else speed[i] = gravitySpeed;
+    const v = Math.sqrt(Math.max(0.25, 2 * (energy[i] - g * height[i])));
+    if (k === 'station') speed[i] = stationSpeed;
+    else if (k === 'lift') {
+      // Chain drags the train up at chain speed ONLY while climbing. Once the
+      // segment tips downhill (the drop off a lift-painted crest) the chain
+      // releases and gravity takes over — otherwise the coaster crawls downhill.
+      const climbing = height[(i + 1) % N] >= height[i] - 0.05;
+      speed[i] = climbing ? liftSpeed : Math.max(liftSpeed, v);
+    }
+    else if (k === 'brake') speed[i] = Math.min(v, brakeSpeed);
+    else if (k === 'teleporter') speed[i] = Math.max(v, launchSpeed * 1.45);
+    else speed[i] = v;
   }
 
   const localDs = i => {
@@ -366,7 +405,11 @@ export function buildPath({
   const right = new Array(N);
   const baseUp = new Array(N);
   const desiredBank = new Array(N).fill(0);
-  const lockedBank = featUp.map((feature, i) => feature || kind[i] === 'station');
+  // flatLock: features/station stay level (preferStableBank zeroes these).
+  // lockedBank additionally pins manual banks so the player's tilt is preserved
+  // exactly while neighbouring auto-banked samples ramp smoothly toward it.
+  const flatLock = featUp.map((feature, i) => feature || kind[i] === 'station');
+  const lockedBank = flatLock.map((flat, i) => flat || manualBank[i] != null);
   const seed = worldUp.clone().addScaledVector(tan[0], -tan[0].y);
   if (seed.lengthSq() < 1e-9) seed.set(1, 0, 0);
   seed.normalize();
@@ -385,7 +428,10 @@ export function buildPath({
     }
     baseUp[i] = bUp.clone();
 
-    if (!featUp[i] && kind[i] !== 'station') {
+    if (manualBank[i] != null) {
+      // player-set tilt (fraction of maxBank), overriding the physics estimate
+      desiredBank[i] = manualBank[i] * physics.maxBank;
+    } else if (!featUp[i] && kind[i] !== 'station') {
       const kv = curvature(i);
       const rTmp = new Vector3().crossVectors(bUp, tan[i]).normalize();
       const aLat = speed[i] * speed[i] * kv.dot(rTmp);
@@ -394,7 +440,7 @@ export function buildPath({
   }
 
   const bank = limitScalarSteps(
-    smoothScalarLoop(preferStableBank(desiredBank, lockedBank), lockedBank, 6),
+    smoothScalarLoop(preferStableBank(desiredBank, flatLock), lockedBank, 6),
     lockedBank,
     physics.bankStep || 0.045,
   );
@@ -417,14 +463,13 @@ export function buildPath({
   let prevLatSign = 0;
   let maxDrop = 0;
   let runDrop = 0;
-  let rollback = false;
+  let airtime = 0;   // ejector-airtime score: how far below 0.3g, summed
 
   for (let i = 0; i < N; i++) {
     const ds = cum[i + 1] - cum[i] || 0.001;
     const absSpeed = Math.abs(speed[i]);
     lapTime += ds / Math.max(absSpeed, 0.5);
     maxSpeed = Math.max(maxSpeed, absSpeed);
-    rollback ||= speed[i] < 0;
 
     const dh = height[(i + 1) % N] - height[i];
     if (dh < 0) {
@@ -444,6 +489,7 @@ export function buildPath({
     minVertG = Math.min(minVertG, gV);
     maxLatG = Math.max(maxLatG, Math.abs(gL));
     if (gV < 0.2) airCount++;
+    if (gV < 0.3) airtime += (0.3 - gV) * ds;   // weight true airtime by hang-time & distance
     if (Math.abs(gL) > 0.4) {
       const sgn = Math.sign(gL);
       if (prevLatSign !== 0 && sgn !== prevLatSign) dirChanges++;
@@ -452,14 +498,18 @@ export function buildPath({
   }
 
   dirChanges = Math.min(dirChanges, 20);
-  const airBonus = Math.min(airCount, Math.round(N * 0.25));
+  // airtime score, capped so a single long floaty stretch can't dominate
+  const airScore = Math.min(airtime * 0.9, 60);
   const inversions = ctrlPts.filter(p => p.seg === 'loop' || p.seg === 'corkscrew' || p.seg === 'giantLoop' || p.seg === 'spiral').length;
   const featureCounts = ctrlPts.reduce((out, p) => {
     out[p.seg || 'plain'] = (out[p.seg || 'plain'] || 0) + 1;
     return out;
   }, {});
+  // Height and airtime drive excitement; length pays sublinearly so a tall,
+  // varied coaster beats a giant flat oval (M4 rework).
   let excitement =
-    2 + maxDrop * 2.2 + maxSpeed * 0.5 + inversions * 7 + airBonus * 0.12 + len * 0.13 + Math.min(maxVertG, 4) * 1.1 +
+    4 + maxDrop * 2.7 + maxSpeed * 0.55 + inversions * 7 + airScore + Math.pow(Math.max(0, len), 0.72) * 0.55 +
+    Math.min(maxVertG, 4) * 1.2 +
     (featureCounts.spiral || 0) * 10 +
     (featureCounts.giantLoop || 0) * 18 +
     (featureCounts.vertical || 0) * 9 +

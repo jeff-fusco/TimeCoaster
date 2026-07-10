@@ -55,16 +55,50 @@ export function buildTrackGeometry({
     trackGrp.add(tie);
   }
 
+  // ── chain-lift dressing: a ratchet chain runs up the centre of lift segments
+  //    with chunky drive housings top and bottom, so lift hills read at a glance ──
+  const chainMat = new THREE.MeshStandardMaterial({ color: 0x3a3f47, metalness: 0.7, roughness: 0.5 });
+  const dogGeo = new THREE.BoxGeometry(0.1, 0.14, 0.22);
+  const housingGeo = new THREE.BoxGeometry(gauge + 0.2, 0.34, 0.5);
+  const housingMat = new THREE.MeshStandardMaterial({ color: colors.tieLift, roughness: 0.6 });
+  for (let i = 0; i < N; i++) {
+    if (kind[i] !== 'lift') continue;
+    // chain dog every few samples
+    if (i % 2 === 0) {
+      const dog = new THREE.Mesh(dogGeo, chainMat);
+      dog.position.copy(pos[i]).addScaledVector(up[i], -0.12);
+      dog.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right[i], up[i], tan[i]));
+      trackGrp.add(dog);
+    }
+    // drive housing at each end of a lift run
+    const prevLift = kind[(i - 1 + N) % N] === 'lift';
+    const nextLift = kind[(i + 1) % N] === 'lift';
+    if (!prevLift || !nextLift) {
+      const housing = new THREE.Mesh(housingGeo, housingMat);
+      housing.position.copy(pos[i]).addScaledVector(up[i], -0.18);
+      housing.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right[i], up[i], tan[i]));
+      housing.castShadow = true;
+      trackGrp.add(housing);
+    }
+  }
+
   for (let i = 0; i < N; i += 10) {
     if (kind[i] === 'loop' || kind[i] === 'corkscrew' || kind[i] === 'spiral' || kind[i] === 'giantLoop' || kind[i] === 'teleporter') continue;
     if (kind[i] === 'tunnel') continue;
     if (up[i].y < 0.45) continue;
     const h = pos[i].y;
     if (h < 0.9) continue;
-    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, h, 8), supMat);
+    // taller track gets sturdier columns (and cross-braces) so towers read solid
+    const r = 0.16 + Math.min(0.5, h * 0.012);
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.25, h, 8), supMat);
     col.position.set(pos[i].x, h / 2 - 0.4, pos[i].z);
     col.castShadow = true;
     trackGrp.add(col);
+    if (h > 8) {   // a mid-height cross-brace band on tall supports
+      const brace = new THREE.Mesh(new THREE.BoxGeometry(r * 3, 0.16, r * 1.6), supMat);
+      brace.position.set(pos[i].x, h * 0.5, pos[i].z);
+      trackGrp.add(brace);
+    }
   }
 
   const seenMarkers = new Set();

@@ -195,7 +195,19 @@ const station = {
   assert.ok(researched.loadTime < baseline.loadTime, 'operations research speeds station loading');
   assert.ok(researched.dispatchDelay < baseline.dispatchDelay, 'predictive dispatch tightens launch delay');
   assert.ok(researched.queueCap > baseline.queueCap + 700, 'guest research adds major queue capacity');
-  assert.ok(researched.arrivalRate > baseline.arrivalRate * 2, 'marketing research increases demand');
+  // marketing research no longer adds flat arrivals — it raises the Marketing
+  // Department's campaign reach; Demand arrives via the demandMult param
+  const demanded = deriveEconomy({ upgrades, pathStats, simQueue: 20, researchDone: {}, station, fallbackMaxSpeed: 4, demandMult: 3 });
+  assert.ok(Math.abs(demanded.arrivalRate - baseline.arrivalRate * 3) < 1e-9, 'demand multiplies guest arrivals');
+  assert.ok(demanded.ratingMult > baseline.ratingMult, 'demand also lifts the reputation coupling');
+  // channel campaigns hit their own income lines: Ride Spotlight raises the
+  // ticket price, Family Package raises vendor + snack spend per guest
+  const spotlit = deriveEconomy({ upgrades, pathStats, simQueue: 20, researchDone: {}, station, fallbackMaxSpeed: 4, ticketMult: 1.4 });
+  assert.ok(Math.abs(spotlit.ticket - baseline.ticket * 1.4) < 1e-9, 'Ride Spotlight adds a ticket premium');
+  assert.equal(spotlit.arrivalRate, baseline.arrivalRate, 'ticket premium does not touch arrivals');
+  const bundled = deriveEconomy({ upgrades, pathStats, simQueue: 20, researchDone: {}, station, fallbackMaxSpeed: 4, vendorMult: 1.5 });
+  assert.ok(Math.abs(bundled.vendorPerRider - baseline.vendorPerRider * 1.5) < 1e-9, 'Family Package lifts vendor spend');
+  assert.ok(Math.abs(bundled.snackPerMin - baseline.snackPerMin * 1.5) < 1e-6, 'Family Package lifts snack spend');
   assert.ok(researched.perRider > baseline.perRider, 'premium tickets increase rider value');
   assert.ok(researched.merchPerTrain > 0, 'merch exit adds per-train revenue');
   assert.ok(researched.royaltyPerMin > 0, 'reality licensing adds impossible-ride royalties');
@@ -275,6 +287,10 @@ const station = {
   const withTurnstiles = deriveEconomy({ ...args, upgrades: { ...base, turnstiles: { level: 3 } } });
   assert.ok(withTurnstiles.loadTime < plain.loadTime, 'turnstiles speed boarding');
   assert.ok(Math.abs(plain.loadTime / withTurnstiles.loadTime - 1.18) < 1e-9, '6% per level, multiplicative');
+
+  // Desert biome multiplies snack income
+  const desert = deriveEconomy({ ...args, upgrades: base, snackMult: 1.5 });
+  assert.ok(Math.abs(desert.snackPerMin - plain.snackPerMin * 1.5) < 1e-6, 'Desert snack income ×1.5');
 }
 
 // Vendor carts: a level-scaled fraction of riders buy hats/balloons.

@@ -82,11 +82,12 @@ export function stepResearch({
   staff,
   spend,
   fundingPct,
+  effMult = 1,   // specialist-scientist bend (staffPeople's researchEffMult)
 }) {
   normalizeResearchState(research, researchPaths);
   if (!hasScientist(staff) || spend <= 0) return [];
   const unlocked = [];
-  let progressGain = spend * scientistMultiplier(staff) * fundingEfficiency(fundingPct, staff);
+  let progressGain = spend * scientistMultiplier(staff) * fundingEfficiency(fundingPct, staff) * Math.max(0, effMult);
   while (progressGain > 0) {
     const state = pathProjectState(research, researchPaths, projects);
     if (!state || state.complete || !state.project) break;

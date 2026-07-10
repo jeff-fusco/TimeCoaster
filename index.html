@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260703-12" />
+<link rel="stylesheet" href="styles.css?v=20260703-13" />
 </head>
 <body>
 <div id="scene"></div>
@@ -38,6 +38,7 @@
       <div class="chip"><div class="v" id="trackLen">0m</div><div class="k">Length</div></div>
       <div class="chip"><div class="v" id="laptime">0s</div><div class="k">Lap</div></div>
       <div class="chip"><div class="v" id="work">Idle</div><div class="k">Work</div></div>
+      <div class="chip biome-chip"><div class="v" id="biomeChip">🌳</div><div class="k" id="biomeGen">Gen 1</div></div>
     </div>
 
     <div class="mode-badge" id="modeBadge"><span>🔧</span><span>Build Mode</span></div>
@@ -50,6 +51,8 @@
       <button class="ctrl" id="buildToggle" title="Toggle build mode (B)">🔧 Build</button>
       <button class="ctrl" id="staffToggle" title="Staff management">👥 Staff</button>
       <button class="ctrl" id="researchToggle" title="Research and development">🔬 R&D</button>
+      <button class="ctrl" id="legacyToggle" title="Hall of Fame — retire & prestige">🏆 Legacy</button>
+      <button class="ctrl" id="marketingToggle" title="Marketing campaigns">Marketing</button>
     </div>
   </div>
 </div>
@@ -58,6 +61,8 @@
   <div class="bp-row">
     <button class="bp-btn primary" id="addBtn">＋ Add Point</button>
     <button class="bp-btn danger"  id="delBtn" disabled>🗑 Delete</button>
+    <button class="bp-btn"         id="undoBtn" title="Undo (Ctrl+Z)" disabled>↶</button>
+    <button class="bp-btn"         id="redoBtn" title="Redo (Ctrl+Y)" disabled>↷</button>
     <button class="bp-btn"         id="snapBtn">Grid Off</button>
     <div class="bp-row" id="heightRow" style="display:none">
       <span class="bp-label">Height</span>
@@ -65,6 +70,20 @@
       <span class="height-val" id="heightVal">0.0</span>
       <button class="bp-btn" id="hUp">▲</button>
     </div>
+    <div class="bp-row" id="bankRow" style="display:none">
+      <span class="bp-label">Bank</span>
+      <button class="bp-btn" id="bankL" title="Lean left">↺</button>
+      <span class="height-val" id="bankVal">Auto</span>
+      <button class="bp-btn" id="bankR" title="Lean right">↻</button>
+      <button class="bp-btn" id="bankAuto" title="Back to automatic banking">Auto</button>
+    </div>
+  </div>
+  <div class="bp-row" id="prefabRow">
+    <span class="bp-label">Prefab</span>
+    <button class="bp-btn" data-prefab="liftHill">⛓ Lift Hill<span class="fcost"></span></button>
+    <button class="bp-btn" data-prefab="camelback">🐫 Camelback<span class="fcost"></span></button>
+    <button class="bp-btn" data-prefab="airtimeHills">〰️ Airtime<span class="fcost"></span></button>
+    <button class="bp-btn" data-prefab="helix">🌀 Helix<span class="fcost"></span></button>
   </div>
   <div class="sep"></div>
   <div class="bp-row" id="featRow" style="display:none">
@@ -96,7 +115,7 @@
 
 <div class="staff-panel" id="staffPanel" hidden>
   <div class="staff-backdrop" id="staffBackdrop"></div>
-  <div class="staff-card">
+  <div class="staff-card staff-roster-card">
     <div class="staff-title">👥 Staff Management</div>
     <div class="staff-sub">Hire staff and train them to run the park for you.</div>
     <div class="staff-list" id="staffList"></div>
@@ -114,6 +133,16 @@
   </div>
 </div>
 
+<div class="staff-panel" id="legacyPanel" hidden>
+  <div class="staff-backdrop" id="legacyBackdrop"></div>
+  <div class="staff-card legacy-card">
+    <div class="staff-title">🏆 Hall of Fame</div>
+    <div class="staff-sub">Retire a great coaster for Fame, then build the next generation.</div>
+    <div class="legacy-body" id="legacyBody"></div>
+    <button class="bp-btn primary" id="legacyClose">Close</button>
+  </div>
+</div>
+
 <div class="staff-panel" id="researchPanel" hidden>
   <div class="staff-backdrop" id="researchBackdrop"></div>
   <div class="staff-card research-card">
@@ -121,6 +150,16 @@
     <div class="staff-sub">Fund research from park income and unlock new ride systems.</div>
     <div class="research-list" id="researchList"></div>
     <button class="bp-btn primary" id="researchClose">Close</button>
+  </div>
+</div>
+
+<div class="staff-panel" id="marketingPanel" hidden>
+  <div class="staff-backdrop" id="marketingBackdrop"></div>
+  <div class="staff-card marketing-card">
+    <div class="staff-title">Marketing HQ</div>
+    <div class="staff-sub">Fund campaigns, build Demand, and keep trains full.</div>
+    <div class="marketing-body" id="marketingBody"></div>
+    <button class="bp-btn primary" id="marketingClose">Close</button>
   </div>
 </div>
 
@@ -141,7 +180,14 @@
   <div class="staff-backdrop" id="escapeBackdrop"></div>
   <div class="staff-card escape-card">
     <div class="staff-title">Game Menu</div>
-    <div class="staff-sub">Manage this park session.</div>
+    <div class="staff-sub" id="escapeSub">Manage this park session.</div>
+    <div class="settings-block">
+      <div class="settings-title">🔊 Sound</div>
+      <label class="settings-row"><span>Master</span><input type="range" id="volMaster" min="0" max="100" value="80"></label>
+      <label class="settings-row"><span>Music</span><input type="range" id="volMusic" min="0" max="100" value="35"></label>
+      <label class="settings-row"><span>Effects</span><input type="range" id="volSfx" min="0" max="100" value="70"></label>
+      <button class="menu-btn" id="muteToggle">Mute</button>
+    </div>
     <div class="escape-actions">
       <button class="menu-btn primary" id="escapeResume">Resume</button>
       <button class="menu-btn" id="escapeSave">Save Now</button>
@@ -154,6 +200,26 @@
 <div class="toast" id="toast"></div>
 <div class="title">Time Coaster 3D</div>
 
+<div class="splash" id="splash">
+  <div class="splash-card">
+    <div class="splash-logo">🎢</div>
+    <h1 class="splash-title">Time Coaster 3D</h1>
+    <div class="splash-tag">Build the coaster. Watch the number climb.</div>
+    <div class="splash-welcome" id="splashWelcome" hidden></div>
+    <button class="splash-play" id="splashPlay">Play</button>
+    <div class="splash-hint">Right-drag to orbit · WASD to pan · scroll to zoom</div>
+  </div>
+</div>
+
+<div class="splash" id="ceremonyPanel" hidden>
+  <div class="splash-card ceremony-card">
+    <div class="splash-logo">🏆</div>
+    <h1 class="splash-title" id="ceremonyTitle">Coaster Retired!</h1>
+    <div class="ceremony-body" id="ceremonyBody"></div>
+    <button class="splash-play" id="ceremonyClose">Onward!</button>
+  </div>
+</div>
+
 <script type="importmap">
 {
   "imports": {
@@ -162,7 +228,7 @@
 }
 </script>
 <script>
-window.__TC3D_VERSION = '20260703-12';
+window.__TC3D_VERSION = '20260703-13';
 window.__TC3D_BOOTED = false;
 window.addEventListener('error', event => {
   window.__TC3D_BOOT_ERROR = event.message || 'Load error';
@@ -185,6 +251,6 @@ setTimeout(() => {
   document.body.appendChild(el);
 }, 8000);
 </script>
-<script type="module" src="src/main.js?v=20260703-12"></script>
+<script type="module" src="src/main.js?v=20260703-13"></script>
 </body>
 </html>

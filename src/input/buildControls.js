@@ -34,8 +34,10 @@ export function initBuildControls({
   fmt,
   isBuildPointAllowed = () => true,
   onPlayClick = () => false,
+  onPlayWheel = () => false,   // play-mode scroll hook (e.g. raising a decor ghost)
+  getMaxHeight = () => 18,     // tallest buildable track (grows with Structures research)
 }) {
-  const { COST_PER_M, FEATURE_COST, FEATURE_REFUND, STATION_Y, MAX_TRACK_HEIGHT = 18 } = constants;
+  const { COST_PER_M, FEATURE_COST, FEATURE_REFUND, STATION_Y, MAX_BANK_DEG = 35 } = constants;
   const raycaster = new THREE.Raycaster();
   const mouseNDC = new THREE.Vector2();
   const controls = {
@@ -71,6 +73,67 @@ export function initBuildControls({
   costLabel.className = 'build-delta hidden';
   document.body.appendChild(costLabel);
   const labelWorld = new THREE.Vector3();
+
+  // ── undo / redo: each committed track edit snapshots the coaster (points,
+  //    paid length, money) so it can be stepped back and forth. ────────────────
+  const undoStack = [];
+  const redoStack = [];
+  const snapshot = () => ({
+    ctrlPts: getCtrlPts().map(p => ({ ...p })),
+    paidLength: getPaidLength(),
+    money: state.money,
+  });
+  function updateUndoButtons() {
+    const u = $('undoBtn');
+    const r = $('redoBtn');
+    if (u) u.disabled = undoStack.length === 0;
+    if (r) r.disabled = redoStack.length === 0;
+  }
+  function recordHistory(before) {
+    undoStack.push(before);
+    if (undoStack.length > 60) undoStack.shift();
+    redoStack.length = 0;
+    updateUndoButtons();
+  }
+  function applyHistorySnapshot(s) {
+    setCtrlPts(s.ctrlPts.map(p => ({ ...p })));
+    setPaidLength(s.paidLength);
+    state.money = s.money;
+    rebuildAll(true);
+    createHandles();
+    selectHandle(-1);
+    refreshHUD();
+    updateBuildCost();
+    saveGame();
+  }
+  function undo() {
+    if (!undoStack.length) return;
+    redoStack.push(snapshot());
+    applyHistorySnapshot(undoStack.pop());
+    updateUndoButtons();
+  }
+  function redo() {
+    if (!redoStack.length) return;
+    undoStack.push(snapshot());
+    applyHistorySnapshot(redoStack.pop());
+    updateUndoButtons();
+  }
+  function resetHistory() {
+    undoStack.length = 0;
+    redoStack.length = 0;
+    controls.selectedIdx = -1;
+    controls.hoveredIdx = -1;
+    controls.dragging = false;
+    controls.dragSnapshot = null;
+    controls.needsRebuild = false;
+    stopPlacing();
+    hideDragFeedback();
+    updateUndoButtons();
+    if (controls.active) {
+      createHandles();
+      selectHandle(-1);
+    }
+  }
 
   function setMouseNDC(e) {
     const r = renderer.domElement.getBoundingClientRect();
@@ -117,7 +180,30 @@ export function initBuildControls({
   }
 
   const snapVal = v => (controls.snapGrid ? Math.round(v * 2) / 2 : v);
-  const clampHeight = y => Math.max(0.2, Math.min(MAX_TRACK_HEIGHT, Math.round(y * 10) / 10));
+  const clampHeight = y => Math.max(0.2, Math.min(getMaxHeight(), Math.round(y * 10) / 10));
+
+  // Index at which to splice a new point so it lands in the nearest stretch of
+  // track to the click (playtest feedback: adding was end-only, so reworking the
+  // middle of a coaster meant shuffling every later pin). Segment 0→1 is the
+  // station interior and is skipped; the wrap segment (last→station) maps to an
+  // append, which matches the old behaviour when clicking past the end.
+  function nearestInsertIndex(ctrlPts, x, z) {
+    let best = ctrlPts.length;
+    let bestD = Infinity;
+    for (let i = 1; i < ctrlPts.length; i++) {
+      const a = ctrlPts[i];
+      const b = ctrlPts[(i + 1) % ctrlPts.length];
+      const abx = b.x - a.x;
+      const abz = b.z - a.z;
+      const len2 = abx * abx + abz * abz || 1;
+      const t = Math.max(0, Math.min(1, ((x - a.x) * abx + (z - a.z) * abz) / len2));
+      const dx = x - (a.x + abx * t);
+      const dz = z - (a.z + abz * t);
+      const d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; best = i + 1; }
+    }
+    return best;
+  }
 
   function hideCostLabel() {
     costLabel.classList.add('hidden');
@@ -190,17 +276,65 @@ export function initBuildControls({
     const isStn = idx >= 0 && !!ctrlPts[idx]?.station;
     const canDel = idx >= 0 && !isStn && ctrlPts.filter(p => !p.station).length > 2;
     $('delBtn').disabled = !canDel;
-    $('heightRow').style.display = idx >= 0 && !isStn ? 'flex' : 'none';
+    const showEdit = idx >= 0 && !isStn;
+    $('heightRow').style.display = showEdit ? 'flex' : 'none';
+    if ($('bankRow')) $('bankRow').style.display = showEdit ? 'flex' : 'none';
     if (idx >= 0) {
       $('heightVal').textContent = ctrlPts[idx].y.toFixed(1);
       $('pointInfo').textContent = isStn
         ? 'Station end - fixed; always flat and the length of the platform'
-        : `Point ${idx + 1}/${ctrlPts.length} - drag to move; scroll for height; pick a segment type below`;
+        : `Point ${idx + 1}/${ctrlPts.length} - drag to move; scroll for height; bank it; pick a segment below`;
     } else {
       $('pointInfo').textContent = 'Click a handle to select; drag to move; scroll to change height';
     }
     updateHandleColors();
     updateFeatureButtons();
+    updateBankUI();
+  }
+
+  // Bank is stored on a control point as a fraction of maxBank in [-1, 1];
+  // absent = automatic (physics-estimated) banking for that segment.
+  function updateBankUI() {
+    const el = $('bankVal');
+    if (!el) return;
+    const idx = controls.selectedIdx;
+    const b = idx >= 0 ? getCtrlPts()[idx]?.bank : null;
+    if (Number.isFinite(b)) {
+      const deg = Math.round(b * MAX_BANK_DEG);
+      el.textContent = deg === 0 ? '0°' : `${deg > 0 ? '+' : ''}${deg}°`;
+    } else {
+      el.textContent = 'Auto';
+    }
+  }
+
+  function adjustBank(delta) {
+    const ctrlPts = getCtrlPts();
+    const idx = controls.selectedIdx;
+    if (idx < 0 || ctrlPts[idx]?.station) return;
+    const before = snapshot();
+    const cur = Number.isFinite(ctrlPts[idx].bank) ? ctrlPts[idx].bank : 0;
+    const next = Math.round(Math.max(-1, Math.min(1, cur + delta)) * 5) / 5;   // 0.2 (≈7°) steps
+    if (Math.abs(next) < 1e-6) delete ctrlPts[idx].bank;
+    else ctrlPts[idx].bank = next;
+    // banking doesn't change track length, so it's free — just rebuild + record
+    buildPath();
+    buildTrackGeometry();
+    recordHistory(before);
+    updateBankUI();
+    saveGame();
+  }
+
+  function resetBank() {
+    const ctrlPts = getCtrlPts();
+    const idx = controls.selectedIdx;
+    if (idx < 0 || ctrlPts[idx]?.station || !Number.isFinite(ctrlPts[idx].bank)) return;
+    const before = snapshot();
+    delete ctrlPts[idx].bank;
+    buildPath();
+    buildTrackGeometry();
+    recordHistory(before);
+    updateBankUI();
+    saveGame();
   }
 
   function raycastHandles() {
@@ -252,7 +386,8 @@ export function initBuildControls({
     dragX = e.clientX;
     dragY = e.clientY;
     if (dragMode === 'rotate') {
-      setAzimuth(getAzimuth() - dx * 0.01);
+      // drag right → orbit right (playtest feedback: the old direction felt inverted)
+      setAzimuth(getAzimuth() + dx * 0.01);
       setCamHeight(getCamHeight() - dy * 0.4); // setter clamps (zoom-aware angle floor)
     } else {
       const scale = getFrustum() / host.clientHeight;
@@ -277,7 +412,10 @@ export function initBuildControls({
         showToast('Buy neighboring land before building there');
         return;
       }
-      const insertIdx = controls.selectedIdx >= 0 ? controls.selectedIdx + 1 : ctrlPts.length;
+      const insertIdx = controls.selectedIdx >= 0
+        ? controls.selectedIdx + 1
+        : nearestInsertIndex(ctrlPts, pos.x, pos.z);
+      const beforeState = snapshot();
       const lenBefore = getPath().len;
       ctrlPts.splice(insertIdx, 0, { x: snapVal(pos.x), y: 1.5, z: snapVal(pos.z), seg: 'plain' });
       buildPath();
@@ -291,6 +429,7 @@ export function initBuildControls({
       }
       state.money -= addCost;
       setPaidLength(getPath().len);
+      recordHistory(beforeState);
       spawnCoinScreen(e.clientX, e.clientY, addCost, true);
       buildTrackGeometry();
       createHandles();
@@ -364,6 +503,9 @@ export function initBuildControls({
   }
 
   function commitTrackEdit(snapshot) {
+    // snapshot = the pre-edit control points; capture the full pre-edit state
+    // (money + paid length are still the old values here) for undo.
+    const beforeState = { ctrlPts: snapshot.map(p => ({ ...p })), paidLength: getPaidLength(), money: state.money };
     const delta = getPath().len - getPaidLength();
     if (delta > 0.05) {
       const cost = Math.ceil(delta * COST_PER_M);
@@ -386,6 +528,7 @@ export function initBuildControls({
       setPaidLength(getPath().len);
       if (refund > 0) showToast(`Track -${(-delta).toFixed(1)}m - +$${fmt(refund)} refunded`);
     }
+    recordHistory(beforeState);
     refreshHUD();
     updateBuildCost();
     return true;
@@ -393,6 +536,7 @@ export function initBuildControls({
 
   function onWheel(e) {
     e.preventDefault();
+    if (!controls.active && onPlayWheel(e.deltaY)) return;
     const ctrlPts = getCtrlPts();
     if (controls.active && controls.selectedIdx >= 0 && !ctrlPts[controls.selectedIdx]?.station) {
       const snap = ctrlPts.map(p => ({ ...p }));
@@ -422,7 +566,7 @@ export function initBuildControls({
     if (controls.placingMode) {
       button.textContent = 'Cancel';
       button.classList.add('placing');
-      $('pointInfo').textContent = 'Click the ground to place a new point (charged per metre added)';
+      $('pointInfo').textContent = 'Click the ground — the point joins the nearest stretch of track (charged per metre)';
     } else {
       stopPlacing();
     }
@@ -432,6 +576,7 @@ export function initBuildControls({
     const ctrlPts = getCtrlPts();
     const idx = controls.selectedIdx;
     if (idx < 0 || ctrlPts[idx]?.station || ctrlPts.filter(p => !p.station).length <= 2) return;
+    const beforeState = snapshot();
     const wasFeat = ctrlPts[idx].seg;
     ctrlPts.splice(idx, 1);
     buildPath();
@@ -439,6 +584,7 @@ export function initBuildControls({
     const delta = getPath().len - getPaidLength();
     if (delta < 0) state.money += Math.floor(-delta * COST_PER_M * FEATURE_REFUND);
     setPaidLength(getPath().len);
+    recordHistory(beforeState);
     rebuildAll(false);
     createHandles();
     selectHandle(-1);
@@ -486,16 +632,96 @@ export function initBuildControls({
       showToast(`Need $${fmt(net)} for ${next}`);
       return;
     }
+    const beforeState = snapshot();
     ctrlPts[idx].seg = next;
     state.money -= net;
     rebuildAll(false);
     setPaidLength(getPath().len);
+    recordHistory(beforeState);
     createHandles();
     selectHandle(idx);
     refreshHUD();
     updateBuildCost();
     saveGame();
     showToast(net >= 0 ? `${next} added - $${fmt(net)}` : `${next} - +$${fmt(-net)} refunded`);
+  }
+
+  // ── prefab track elements: curated point patterns inserted at the selection,
+  //    charged per metre added. Each generator returns points as (f)orward /
+  //    (l)ateral offsets from the anchor plus an absolute height and segment. ──
+  const PREFABS = {
+    liftHill: (y, maxH) => {
+      const top = Math.min(maxH - 1, Math.max(y + 14, 18));
+      return [
+        { f: 4, l: 0, y: y + (top - y) * 0.45, seg: 'lift' },
+        { f: 8, l: 0, y: top, seg: 'lift' },
+        { f: 16, l: 0, y: 1.5, seg: 'plain' },
+      ];
+    },
+    camelback: y => [
+      { f: 4, l: 0, y: y + 9, seg: 'plain' },
+      { f: 9, l: 0, y: 1.5, seg: 'plain' },
+    ],
+    airtimeHills: y => [
+      { f: 3, l: 0, y: y + 4 }, { f: 6, l: 0, y: 1 },
+      { f: 9, l: 0, y: y + 4 }, { f: 12, l: 0, y: 1 },
+      { f: 15, l: 0, y: y + 3.5 },
+    ],
+    helix: y => {
+      const R = 5;
+      const out = [];
+      for (let i = 1; i <= 4; i++) {
+        const a = (i / 4) * Math.PI;   // a descending half-turn
+        out.push({ f: Math.sin(a) * R, l: (1 - Math.cos(a)) * R, y: Math.max(1.2, y - i * 0.9), seg: 'plain' });
+      }
+      return out;
+    },
+  };
+  const PREFAB_NAMES = { liftHill: 'Lift Hill', camelback: 'Camelback', airtimeHills: 'Airtime Hills', helix: 'Helix' };
+
+  function insertPrefab(key) {
+    if (!controls.active || !PREFABS[key]) return;
+    const ctrlPts = getCtrlPts();
+    let anchorIdx = controls.selectedIdx;
+    if (anchorIdx < 0 || ctrlPts[anchorIdx]?.station) anchorIdx = ctrlPts.length - 1;
+    const a = ctrlPts[anchorIdx];
+    const nxt = ctrlPts[(anchorIdx + 1) % ctrlPts.length];
+    let fx = nxt.x - a.x;
+    let fz = nxt.z - a.z;
+    const fl = Math.hypot(fx, fz) || 1;
+    fx /= fl; fz /= fl;
+    const lx = -fz, lz = fx;    // left-perpendicular in the ground plane
+    const maxH = getMaxHeight();
+    const pts = PREFABS[key](a.y, maxH).map(s => ({
+      x: snapVal(a.x + fx * s.f + lx * (s.l || 0)),
+      z: snapVal(a.z + fz * s.f + lz * (s.l || 0)),
+      y: Math.max(0.4, Math.min(maxH, s.y)),
+      seg: s.seg || 'plain',
+    }));
+    if (!pts.every(p => isBuildPointAllowed(p.x, p.z))) {
+      showToast('Prefab needs more owned land ahead of the anchor');
+      return;
+    }
+    const beforeState = snapshot();
+    const lenBefore = getPath().len;
+    ctrlPts.splice(anchorIdx + 1, 0, ...pts);
+    buildPath();
+    const cost = Math.ceil((getPath().len - lenBefore) * COST_PER_M);
+    if (cost > state.money) {
+      ctrlPts.splice(anchorIdx + 1, pts.length);
+      rebuildAll(false);
+      showToast(`Need $${fmt(cost)} for the ${PREFAB_NAMES[key]}`);
+      return;
+    }
+    state.money -= cost;
+    setPaidLength(getPath().len);
+    recordHistory(beforeState);
+    buildTrackGeometry();
+    createHandles();
+    selectHandle(anchorIdx + pts.length);
+    refreshHUD();
+    saveGame();
+    showToast(`${PREFAB_NAMES[key]} added — $${fmt(cost)}`);
   }
 
   function updateBuildCost() {
@@ -569,33 +795,46 @@ export function initBuildControls({
     setAzimuth(getAzimuth() + dir * Math.PI / 4);
   }
 
+  // keyboard pan, view-relative (px: +right/−left, py: +up/−down on screen)
+  function panView(px, py) {
+    const step = getFrustum() * 0.055;
+    const azimuth = getAzimuth();
+    const sr = new THREE.Vector3(Math.sin(azimuth), 0, -Math.cos(azimuth));
+    const su = new THREE.Vector3(-Math.cos(azimuth), 0, -Math.sin(azimuth));
+    camTarget.addScaledVector(sr, px * step).addScaledVector(su, py * step);
+    const panLimit = getPanLimit();
+    camTarget.x = Math.max(-panLimit, Math.min(panLimit, camTarget.x));
+    camTarget.z = Math.max(-panLimit, Math.min(panLimit, camTarget.z));
+  }
+
   function onKeyDown(e) {
     if (e.target.tagName === 'INPUT') return;
     const k = e.key.toLowerCase();
-    if (k === 'q' || k === 'a' || e.key === 'ArrowLeft') rotateView(+1);
-    if (k === 'e' || k === 'd' || e.key === 'ArrowRight') rotateView(-1);
+    // undo / redo (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z) while building
+    if ((e.ctrlKey || e.metaKey) && controls.active) {
+      if (k === 'z' && !e.shiftKey) { undo(); e.preventDefault(); return; }
+      if (k === 'y' || (k === 'z' && e.shiftKey)) { redo(); e.preventDefault(); return; }
+    }
+    // with a track point selected, arrows adjust its height instead of panning
+    if (controls.active && controls.selectedIdx >= 0) {
+      if (e.key === 'ArrowUp') { adjustHeight(0.5); e.preventDefault(); return; }
+      if (e.key === 'ArrowDown') { adjustHeight(-0.5); e.preventDefault(); return; }
+      if (e.key === 'Delete' || e.key === 'Backspace') { $('delBtn').click(); e.preventDefault(); return; }
+    }
+    if (k === 'q') rotateView(+1);
+    if (k === 'e') rotateView(-1);
+    if (k === 'w' || e.key === 'ArrowUp') panView(0, 1);
+    if (k === 's' || e.key === 'ArrowDown') panView(0, -1);
+    if (k === 'a' || e.key === 'ArrowLeft') panView(-1, 0);
+    if (k === 'd' || e.key === 'ArrowRight') panView(1, 0);
     if (e.key === '=' || e.key === '+') zoomBy(0.8);
     if (e.key === '-') zoomBy(1.25);
-    if (e.key === 'b' || e.key === 'B') controls.active ? exitBuildMode() : enterBuildMode();
+    if (k === 'b') controls.active ? exitBuildMode() : enterBuildMode();
     if (e.key === 'Escape' && controls.active) {
       if (controls.placingMode) stopPlacing();
       else if (controls.selectedIdx >= 0) selectHandle(-1);
       else exitBuildMode();
       e.preventDefault();
-    }
-    if (controls.active && controls.selectedIdx >= 0) {
-      if (e.key === 'ArrowUp') {
-        adjustHeight(0.5);
-        e.preventDefault();
-      }
-      if (e.key === 'ArrowDown') {
-        adjustHeight(-0.5);
-        e.preventDefault();
-      }
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        $('delBtn').click();
-        e.preventDefault();
-      }
     }
   }
 
@@ -615,17 +854,31 @@ export function initBuildControls({
   $('snapBtn').addEventListener('click', onSnapClick);
   $('hUp').addEventListener('click', () => adjustHeight(0.5));
   $('hDown').addEventListener('click', () => adjustHeight(-0.5));
+  $('bankL')?.addEventListener('click', () => adjustBank(-0.2));
+  $('bankR')?.addEventListener('click', () => adjustBank(0.2));
+  $('bankAuto')?.addEventListener('click', resetBank);
   $('featRow').addEventListener('click', onFeatureClick);
   $('buildToggle').addEventListener('click', () => (controls.active ? exitBuildMode() : enterBuildMode()));
+  $('undoBtn')?.addEventListener('click', undo);
+  $('redoBtn')?.addEventListener('click', redo);
+  $('prefabRow')?.addEventListener('click', e => {
+    const btn = e.target.closest('[data-prefab]');
+    if (btn) insertPrefab(btn.dataset.prefab);
+  });
   $('rotL')?.addEventListener('click', () => rotateView(+1));
   $('rotR')?.addEventListener('click', () => rotateView(-1));
   $('zoomIn')?.addEventListener('click', () => zoomBy(0.8));
   $('zoomOut')?.addEventListener('click', () => zoomBy(1.25));
+  updateUndoButtons();
 
   return {
     state: controls,
     enterBuildMode,
     exitBuildMode,
     updateBuildCost,
+    undo,
+    redo,
+    resetHistory,
+    selectHandle,   // exposed for tests/tooling to drive the point selection
   };
 }

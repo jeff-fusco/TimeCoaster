@@ -199,11 +199,15 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
 }
 
 {
+  // a hill taller than the launch energy, with no lift, flags a rollback and
+  // leaves the train crawling (not reversing — trains always complete the loop)
   const ctrlPts = makeCtrlPts();
   ctrlPts[3].y = 12;
   const path = makePath(ctrlPts);
-  assert.equal(path.stats.rollback, true, 'a hill beyond available energy can roll the train backward');
-  assert.ok(path.speed.some(speed => speed < 0));
+  assert.equal(path.stats.rollback, true, 'an under-powered tall hill flags a rollback');
+  const minSpeed = Math.min(...path.speed);
+  assert.ok(minSpeed > 0, 'the train crawls rather than reversing');
+  assert.ok(minSpeed <= PHYS.rollbackSpeed + 0.6, 'it barely creeps over the too-tall hill');
 }
 
 {
@@ -213,7 +217,56 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
   const path = makePath(ctrlPts);
   const liftSpeeds = path.speed.filter((speed, i) => path.kind[i] === 'lift');
   assert.ok(liftSpeeds.length > 0);
-  assert.ok(liftSpeeds.every(speed => speed >= PHYS.liftSpeed), 'chain lift keeps the incline moving forward');
+  assert.ok(liftSpeeds.every(speed => speed >= PHYS.liftSpeed - 1e-9), 'chain lift drags the train up at chain speed');
+}
+
+{
+  // regression: a lift-painted segment that tips downhill (the drop off a
+  // lift-marked crest) must release the chain and accelerate under gravity
+  const ctrlPts = makeCtrlPts();
+  ctrlPts[2].seg = 'lift'; ctrlPts[2].y = 4;
+  ctrlPts[3].seg = 'lift'; ctrlPts[3].y = 20;   // crest is also painted lift
+  ctrlPts[4].y = 2;                              // then a big drop
+  const path = makePath(ctrlPts);
+  // find the crest, then confirm speed grows over the next descending samples
+  let crest = 0, crestH = 0;
+  path.kind.forEach((k, i) => { if (k === 'lift' && path.height[i] > crestH) { crestH = path.height[i]; crest = i; } });
+  const near = path.speed[(crest + 2) % path.N];
+  const far = path.speed[(crest + 8) % path.N];
+  assert.ok(far > near + 3, `descent off a lift crest accelerates (got ${near.toFixed(1)} -> ${far.toFixed(1)})`);
+  assert.ok(path.stats.maxSpeed > 20, 'the drop reaches real speed');
+}
+
+{
+  // the chain-lift overhaul: a lift to a tall crest supplies the energy to run
+  // the whole circuit — no rollback, a big drop, and real speed off the top
+  const ctrlPts = makeCtrlPts();
+  ctrlPts[2].seg = 'lift';   // segment point 2 → point 3 is the chain lift
+  ctrlPts[3].y = 14;         // top of the lift hill
+  const path = makePath(ctrlPts);
+  assert.equal(path.stats.rollback, false, 'the lift powers the tall circuit');
+  assert.ok(path.stats.maxDrop > 10, `expected a tall drop, got ${path.stats.maxDrop}`);
+  assert.ok(path.stats.maxSpeed > 20, `expected real speed off the lift, got ${path.stats.maxSpeed}`);
+  const baseline = makePath();
+  assert.ok(path.stats.excitement > baseline.stats.excitement + 15, 'a tall lift hill is far more exciting');
+}
+
+{
+  // manual banking: a per-point bank fraction overrides the auto-bank. Point 7
+  // normally banks gently (auto max there is well under maxBank), so a full
+  // manual +1 lean is clearly the player's doing.
+  const auto = makePath(makeCtrlPts());
+  assert.ok(Math.max(...auto.bank) < PHYS.maxBank - 0.2, 'the default coaster does not naturally reach full +lean');
+
+  const ctrlPts = makeCtrlPts();
+  ctrlPts[7].bank = 1;   // full manual lean on point 7's plain segment
+  const banked = makePath(ctrlPts);
+  assert.ok(Math.abs(Math.max(...banked.bank) - PHYS.maxBank) < 0.02, 'manual +1 bank reaches the full tilt (maxBank)');
+  assert.ok(banked.bank.filter(b => Math.abs(b - PHYS.maxBank) < 0.02).length > 5, 'the whole segment holds the manual lean');
+
+  ctrlPts[7].bank = -0.5;   // a gentle opposite lean
+  const gentle = makePath(ctrlPts);
+  assert.ok(Math.min(...gentle.bank) < -0.5 * PHYS.maxBank + 0.03, 'negative fractional bank leans the other way to the requested amount');
 }
 
 console.log('path tests passed');

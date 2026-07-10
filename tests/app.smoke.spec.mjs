@@ -18,7 +18,7 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   await page.goto('/index.html');
 
   await expect(page.locator('#scene canvas')).toBeVisible();
-  const cssResponse = await page.request.get('/styles.css?v=20260703-12');
+  const cssResponse = await page.request.get('/styles.css?v=20260703-13');
   await expect(cssResponse).toBeOK();
   expect(cssResponse.headers()['cache-control']).toContain('no-store');
   const threeResponse = await page.request.get('/vendor/three.module.js');
@@ -26,7 +26,7 @@ test('loads the coaster scene and core controls', async ({ page }) => {
   expect(threeResponse.headers()['cache-control']).toContain('no-store');
   await expect(page.locator('.money #money')).toHaveText('0');
   await expect(page.locator('#shopToggle')).toBeVisible();
-  await expect(page.locator('.bottom .ctrl')).toHaveText(['🎟 Shop', '🔧 Build', '👥 Staff', '🔬 R&D']);
+  await expect(page.locator('.bottom .ctrl')).toHaveText(['🎟 Shop', '🔧 Build', '👥 Staff', '🔬 R&D', '🏆 Legacy', 'Marketing']);
   await expect(page.locator('#shopPanel')).toBeHidden();
   await page.locator('#shopToggle').click();
   await expect(page.locator('#shopPanel')).toBeVisible();
@@ -102,7 +102,7 @@ test('staff panel opens and closes from the bottom controls', async ({ page }) =
   await expect(page.locator('#researchToggle')).toBeHidden();
   await page.locator('#staffToggle').click();
   await expect(page.locator('#staffPanel')).toBeVisible();
-  await expect(page.locator('#staffList .staff-row')).toHaveCount(6);
+  await expect(page.locator('#staffList .staff-row')).toHaveCount(7);
   await expect(page.locator('#staffList .staff-row .s-status').first()).toContainText(/dispatch trains yourself/i);
   const scientists = page.locator('#staffList .staff-row').filter({ hasText: 'Scientists' });
   await expect(scientists.locator('[data-act="hire"]')).toBeDisabled();
@@ -119,7 +119,8 @@ test('hiring a scientist unlocks the research lab', async ({ page }) => {
   await page.addInitScript(() => {
     window.__TIME_COASTER_TEST__ = true;
     localStorage.clear();
-    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 1000, rides: 0, queue: 8 }));
+    // enough to afford any generated applicant (signing fees are per-person now)
+    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 4000, rides: 0, queue: 8 }));
   });
   await page.goto('/index.html');
 
@@ -127,14 +128,11 @@ test('hiring a scientist unlocks the research lab', async ({ page }) => {
   await page.locator('#staffToggle').click();
   const scientists = page.locator('#staffList .staff-row').filter({ hasText: 'Scientists' });
   await scientists.locator('[data-act="hire"]').click();
+  // a scientist was hired: money dropped (a real signing fee was paid)
   await expect.poll(async () => {
     const raw = await page.locator('#money').textContent();
     return Number((raw || '').replace(/,/g, ''));
-  }).toBeLessThanOrEqual(100);
-  await expect.poll(async () => {
-    const raw = await page.locator('#money').textContent();
-    return Number((raw || '').replace(/,/g, ''));
-  }).toBeGreaterThan(90);
+  }).toBeLessThan(4000);
   await page.locator('#staffClose').click();
   await expect(page.locator('#staffPanel')).toBeHidden();
   await expect(page.locator('#researchToggle')).toBeVisible();
@@ -142,6 +140,134 @@ test('hiring a scientist unlocks the research lab', async ({ page }) => {
   await expect(page.locator('#researchPanel')).toBeVisible();
   await expect(page.locator('#rdPct')).toHaveText('7%');
   await expect(page.locator('#rdSlider')).toHaveAttribute('max', '7');
+  expect(pageErrors).toEqual([]);
+});
+
+test('hiring a marketer unlocks Marketing HQ', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    // enough to afford any generated applicant (signing fees are per-person now)
+    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 4000, rides: 0, queue: 8 }));
+  });
+  await page.goto('/index.html');
+
+  await expect(page.locator('#marketingToggle')).toBeHidden();
+  await page.locator('#staffToggle').click();
+  const marketers = page.locator('#staffList .staff-row').filter({ hasText: 'Marketers' });
+  await marketers.locator('[data-act="hire"]').click();
+  await page.locator('#staffClose').click();
+
+  await expect(page.locator('#marketingToggle')).toBeVisible();
+  await page.locator('#marketingToggle').click();
+  await expect(page.locator('#marketingPanel')).toBeVisible();
+  await expect(page.locator('#mkPct')).toHaveText('6%');
+  await expect(page.locator('#mkSlider')).toHaveAttribute('max', '6');
+  await expect(page.locator('#marketingBody')).toContainText('Demand');
+  expect(pageErrors).toEqual([]);
+});
+
+test('staff roster panel hires, trains, fires, and rerolls individuals', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 12000, rides: 0, queue: 8 }));
+  });
+  await page.goto('/index.html');
+
+  await page.locator('#staffToggle').click();
+  const operators = page.locator('#staffList .staff-row').filter({ hasText: 'Ride Operators' });
+  await expect(operators.locator('.applicant-card')).toHaveCount(3);
+  await expect(operators.locator('.person-avatar').first()).toBeVisible();
+  await expect(operators.locator('.trait-chip').first()).toBeVisible();
+
+  const firstApplicantName = await operators.locator('.applicant-card .person-name').first().textContent();
+  await operators.locator('[data-act="hire-person"]').first().click();
+  await expect(operators.locator('.member-card')).toHaveCount(1);
+  await expect(operators.locator('.member-card .person-name')).toContainText((firstApplicantName || '').split(/\s+/).slice(0, 2).join(' '));
+  await expect(operators.locator('.lead-strip')).toContainText('Crew Lead');
+
+  await operators.locator('[data-act="train-person"]').first().click();
+  await expect(operators.locator('.member-card .person-meta')).toContainText(/Level [1-8]\//);
+
+  await operators.locator('[data-act="fire-person"]').first().click();
+  await expect(operators.locator('.member-card')).toHaveCount(0);
+
+  await operators.locator('[data-act="reroll"]').click();
+  await expect(operators.locator('.applicant-card')).toHaveCount(3);
+  await expect(operators.locator('.s-feedback')).toContainText(/Rerolled -\$/);
+  expect(pageErrors).toEqual([]);
+});
+
+test('marketing HQ splits the budget across campaign channels', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v5', JSON.stringify({
+      money: 5000, rides: 0, queue: 8,
+      research: { done: { radio: true } },
+    }));
+  });
+  await page.goto('/index.html');
+
+  await page.locator('#staffToggle').click();
+  const marketers = page.locator('#staffList .staff-row').filter({ hasText: 'Marketers' });
+  await marketers.locator('[data-act="hire"]').click();
+  await page.locator('#staffClose').click();
+
+  await page.locator('#marketingToggle').click();
+  await expect(page.locator('#marketingBody')).toContainText('Street Team');
+  await expect(page.locator('#marketingBody')).toContainText('Broadcast');
+  // unresearched channels render as locked rows with their unlock hint
+  const spotlight = page.locator('.marketing-channel').filter({ hasText: 'Ride Spotlight' });
+  await expect(spotlight).toHaveClass(/locked/);
+  await expect(spotlight).toContainText('research');
+
+  // the sliders split one budget: raising a channel pulls the others down
+  await page.locator('#mkW-streetTeam').focus();
+  await page.keyboard.press('ArrowRight');
+  const mk = await page.evaluate(() => window.__TC3D_DEBUG__.marketing());
+  expect(mk.channels.streetTeam.weight).toBe(55);
+  expect(mk.channels.broadcast.weight).toBe(45);
+  expect(mk.channels.streetTeam.unlocked).toBe(true);
+  expect(mk.channels.broadcast.unlocked).toBe(true);
+  expect(mk.channels.spotlight.unlocked).toBe(false);
+  // running more than one channel earns the Full Coverage synergy readout
+  await expect(page.locator('#mkCoverage')).toContainText('Full Coverage');
+  expect(pageErrors).toEqual([]);
+});
+
+test('hired staff walk into the park as world actors', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v5', JSON.stringify({
+      money: 20000, rides: 0, queue: 8,
+      staff: { operators: { hired: 2, trained: 0 }, janitors: { hired: 1, trained: 0 } },
+    }));
+  });
+  await page.goto('/index.html');
+
+  // the migrated roster (2 operators + 1 janitor) stands in the park on boot
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.staffActorCount())).toBe(3);
+
+  // a fresh hire walks in immediately
+  await page.locator('#staffToggle').click();
+  const mechanics = page.locator('#staffList .staff-row').filter({ hasText: 'Mechanics' });
+  await mechanics.locator('[data-act="hire"]').click();
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.staffActorCount())).toBe(4);
   expect(pageErrors).toEqual([]);
 });
 
@@ -550,5 +676,197 @@ test('exiting build mode keeps train position and state', async ({ page }) => {
   expect(afterExit.train.s / afterExit.pathLen).toBeCloseTo(beforeExit.train.s / beforeExit.pathLen, 5);
   expect(afterExit.train.mode).toBe(beforeExit.train.mode);
   expect(afterExit.train.phase).toBe(beforeExit.train.phase);
+  expect(pageErrors).toEqual([]);
+});
+
+// M4: height research raises the build cap; prefabs add track; undo/redo step it.
+test('build tools: height research, prefab insertion, and undo/redo', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v6', JSON.stringify({
+      version: 6, savedAt: Date.now(), lastRate: 0,
+      active: {
+        biome: 'meadow', money: 5_000_000, rides: 0, queue: 8,
+        research: { fundingPct: 0, activePath: 'track', progress: {}, done: { steelSupports: true } },
+      },
+    }));
+  });
+  await page.goto('/index.html');
+
+  // Steel Supports research raised the height cap from 18m to 34m
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__?.maxHeight?.() ?? 0)).toBe(34);
+
+  await page.locator('#buildToggle').click();
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.buildActive())).toBe(true);
+  const lenBefore = await page.evaluate(() => window.__TC3D_DEBUG__.pathLen());
+
+  // insert a Camelback prefab → track gets longer
+  await page.locator('#prefabRow [data-prefab="camelback"]').click();
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.pathLen())).toBeGreaterThan(lenBefore + 5);
+  const lenAfter = await page.evaluate(() => window.__TC3D_DEBUG__.pathLen());
+
+  // undo removes it, redo restores it (keyboard: the mobile HUD occludes the
+  // toolbar buttons, but the Ctrl+Z/Y shortcuts run through the window handler)
+  await expect(page.locator('#undoBtn')).toBeEnabled();
+  await page.keyboard.press('Control+z');
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.pathLen())).toBeCloseTo(lenBefore, 0);
+  await page.keyboard.press('Control+y');
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.pathLen())).toBeCloseTo(lenAfter, 0);
+  expect(pageErrors).toEqual([]);
+});
+
+// M4: manual banking — the Bank controls set a per-point tilt override.
+test('build tools: manual banking sets a per-point tilt', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    localStorage.setItem('tc3d_v6', JSON.stringify({ version: 6, active: { biome: 'meadow', money: 1000, rides: 0, queue: 8 } }));
+  });
+  await page.goto('/index.html');
+
+  await page.locator('#buildToggle').click();
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.buildActive())).toBe(true);
+
+  // select a plain point → the Bank row appears, starting on Auto
+  await page.evaluate(() => window.__TC3D_DEBUG__.selectBuildPoint(4));
+  await expect(page.locator('#bankRow')).toBeVisible();
+  await expect(page.locator('#bankVal')).toHaveText('Auto');
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.pointBank(4))).toBeNull();
+
+  // lean right twice → +0.4 fraction stored on the point, label shows degrees
+  // (dispatchEvent bypasses the mobile HUD that overlaps the build toolbar)
+  await page.locator('#bankR').dispatchEvent('click');
+  await page.locator('#bankR').dispatchEvent('click');
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.pointBank(4))).toBeCloseTo(0.4, 5);
+  await expect(page.locator('#bankVal')).not.toHaveText('Auto');
+
+  // Auto button clears the override
+  await page.locator('#bankAuto').dispatchEvent('click');
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.pointBank(4))).toBeNull();
+  await expect(page.locator('#bankVal')).toHaveText('Auto');
+  expect(pageErrors).toEqual([]);
+});
+
+// Without the test flag the title splash gates the game until Play is clicked.
+test('title splash starts the game on Play', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => localStorage.clear());
+  await page.goto('/index.html');
+
+  await expect(page.locator('#splash')).toBeVisible();
+  await expect(page.locator('#splash .splash-title')).toHaveText('Time Coaster 3D');
+  await expect(page.locator('#splashPlay')).toHaveText('Play'); // no save → "Play"
+  await expect(page.locator('#splashWelcome')).toBeHidden();     // no offline earnings
+
+  await page.locator('#splashPlay').click();
+  await expect(page.locator('#splash')).toBeHidden();
+  await expect.poll(() => page.evaluate(() => window.__TC3D_BOOTED === true)).toBe(true);
+  expect(pageErrors).toEqual([]);
+});
+
+// Legacy: a well-themed coaster can be certified and retired into a monument.
+test('retiring a coaster banks fame and starts a new generation', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    // a real lift/drop supplies craft; fountains add enough theming to clear EXC
+    localStorage.setItem('tc3d_v5', JSON.stringify({
+      version: 5, money: 5000, rides: 3, queue: 8,
+      ctrlPts: [
+        { x: 2.85, y: 0.7, z: 9.0, station: true, seg: 'station' },
+        { x: -2.85, y: 0.7, z: 9.0, station: true, seg: 'plain' },
+        { x: -7.5, y: 0.9, z: 5.5, seg: 'lift' },
+        { x: -9.8, y: 14, z: 0.0, seg: 'plain' },
+        { x: -7.5, y: 1.0, z: -5.5, seg: 'plain' },
+        { x: 0.0, y: 4.0, z: -9.3, seg: 'plain' },
+        { x: 7.5, y: 0.9, z: -5.5, seg: 'plain' },
+        { x: 9.8, y: 1.1, z: 0.0, seg: 'plain' },
+        { x: 7.5, y: 0.9, z: 5.5, seg: 'plain' },
+      ],
+      decorations: [
+        { type: 'fountain', x: 0, z: -6 }, { type: 'fountain', x: 5, z: -5 },
+        { type: 'fountain', x: -5, z: -5 }, { type: 'statue', x: 8, z: 2 },
+        { type: 'statue', x: -8, z: 2 }, { type: 'fountain', x: 3, z: 6 },
+      ],
+      property: { owned: ['0,0', '1,0', '-1,0', '0,-1'] },
+    }));
+  });
+  await page.goto('/index.html');
+
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.ownedLand())).toBe(4);
+  await page.evaluate(() => {
+    window.__TC3D_DEBUG__.setFrustum(120);
+    window.__TC3D_DEBUG__.setCamHeight(90);
+  });
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__?.legacy?.().generation ?? 0)).toBe(1);
+  // effective excitement (with theming) should clear the gen-1 certification bar (40)
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.legacy().excitement)).toBeGreaterThan(40);
+
+  await page.locator('#legacyToggle').click();
+  await expect(page.locator('#legacyPanel')).toBeVisible();
+  await page.locator('#lgName').fill('The Beast');
+  const retire = page.locator('#lgRetire');
+  await expect(retire).toBeEnabled();
+  await retire.click();
+
+  // retiring opens the biome picker; Moon is locked, Ice is available
+  await expect(page.locator('#ceremonyPanel')).toBeVisible();
+  await expect(page.locator('.biome-card[data-biome="moon"]')).toBeDisabled();
+  await page.locator('.biome-card[data-biome="ice"]').click();
+
+  // generation advanced, one monument banked, now building fresh on the Ice plot
+  await expect.poll(() => page.evaluate(() => window.__TC3D_DEBUG__.legacy().generation)).toBe(2);
+  const after = await page.evaluate(() => window.__TC3D_DEBUG__.legacy());
+  expect(after.monuments).toBe(1);
+  expect(after.fame).toBeGreaterThan(0);
+  expect(after.biome).toBe('ice');
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.ownedLand())).toBe(1);
+  const cam = await page.evaluate(() => window.__TC3D_CAM__());
+  expect(cam.frustum).toBeCloseTo(30, 1);
+  expect(cam.target.x).toBeCloseTo(0, 1);
+  expect(cam.target.z).toBeCloseTo(0, 1);
+  await page.locator('#ceremonyClose').click();
+  await expect(page.locator('#ceremonyPanel')).toBeHidden();
+  expect(pageErrors).toEqual([]);
+});
+
+// A save written in the past shows a welcome-back credit and pays it out on Play.
+test('offline progress credits money on return', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    localStorage.clear();
+    // saved 1 hour ago, earning $600/min → 1h × 600 × 0.5 efficiency = $18,000
+    localStorage.setItem('tc3d_v5', JSON.stringify({
+      version: 5, savedAt: Date.now() - 3600 * 1000, lastRate: 600,
+      money: 0, rides: 0, queue: 8,
+    }));
+  });
+  await page.goto('/index.html');
+
+  await expect(page.locator('#splashWelcome')).toBeVisible();
+  await expect(page.locator('#splashWelcome')).toContainText('While you were away');
+  await expect(page.locator('#splashPlay')).toHaveText('Continue'); // has a save
+
+  await page.locator('#splashPlay').click();
+  await expect(page.locator('#splash')).toBeHidden();
+  // money jumped from the offline credit (~$18k)
+  await expect.poll(async () => page.evaluate(() => {
+    const t = document.getElementById('money').textContent;
+    return t.includes('k') ? Math.round(parseFloat(t) * 1000) : parseInt(t.replace(/,/g, ''), 10) || 0;
+  })).toBeGreaterThan(15000);
   expect(pageErrors).toEqual([]);
 });
