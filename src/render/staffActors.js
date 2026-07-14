@@ -16,121 +16,9 @@
 // All positions are read live from stationRefs.walkerGeom each frame, so
 // station rebuilds (queue upgrades, biome swaps) need no special handling.
 
+import { buildStaffFigure } from './staffFigure.js?v=20260703-13';
+
 const ROLE_ORDER = ['operators', 'entertainers', 'mechanics', 'janitors', 'photographers', 'scientists', 'marketers'];
-
-function lambert(THREE, color) {
-  return new THREE.MeshLambertMaterial({ color });
-}
-
-// One staff figure: uniform body, seeded head/hair/accessory, role prop.
-function buildFigure(THREE, person) {
-  const { look } = person;
-  const g = new THREE.Group();
-  const slim = look.build === 0;
-  const body = new THREE.Mesh(
-    new THREE.CylinderGeometry(slim ? 0.115 : 0.135, slim ? 0.155 : 0.175, 0.46, 6),
-    lambert(THREE, look.uniform),
-  );
-  body.position.y = 0.23;
-  body.castShadow = true;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6), lambert(THREE, look.skin));
-  head.position.y = 0.55;
-  g.add(body, head);
-
-  // hair styles: tiny shapes that read at park zoom
-  const hairMat = lambert(THREE, look.hair);
-  switch (look.hairStyle) {
-    case 'short': {
-      const h = new THREE.Mesh(new THREE.SphereGeometry(0.115, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat);
-      h.position.y = 0.60; g.add(h); break;
-    }
-    case 'buzz': {
-      const h = new THREE.Mesh(new THREE.SphereGeometry(0.105, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.4), hairMat);
-      h.position.y = 0.615; g.add(h); break;
-    }
-    case 'bun': {
-      const h = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat);
-      h.position.y = 0.60;
-      const bun = new THREE.Mesh(new THREE.SphereGeometry(0.055, 6, 5), hairMat);
-      bun.position.set(0, 0.66, 0.09);
-      g.add(h, bun); break;
-    }
-    case 'ponytail': {
-      const h = new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 5, 0, Math.PI * 2, 0, Math.PI * 0.55), hairMat);
-      h.position.y = 0.60;
-      const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.045, 0.16, 5), hairMat);
-      tail.position.set(0, 0.52, 0.13); tail.rotation.x = 0.5;
-      g.add(h, tail); break;
-    }
-    case 'curly': {
-      const h = new THREE.Mesh(new THREE.SphereGeometry(0.135, 7, 5, 0, Math.PI * 2, 0, Math.PI * 0.6), hairMat);
-      h.position.y = 0.60; g.add(h); break;
-    }
-    case 'cap': {
-      const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.03, 8), lambert(THREE, look.uniform));
-      brim.position.y = 0.635;
-      const peak = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.1), lambert(THREE, look.uniform));
-      peak.position.set(0, 0.625, -0.14);
-      g.add(brim, peak); break;
-    }
-    // 'bald': nothing
-  }
-
-  if (look.accessory === 'glasses') {
-    const gl = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.02), lambert(THREE, 0x1c2533));
-    gl.position.set(0, 0.56, -0.115);
-    g.add(gl);
-  } else if (look.accessory === 'earring') {
-    const e = new THREE.Mesh(new THREE.SphereGeometry(0.02, 5, 4), lambert(THREE, 0xf2b134));
-    e.position.set(0.125, 0.53, 0);
-    g.add(e);
-  } else if (look.accessory === 'headphones') {
-    const band = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.018, 5, 8, Math.PI), lambert(THREE, 0x1c2533));
-    band.position.y = 0.56; band.rotation.z = Math.PI;
-    g.add(band);
-  }
-
-  // role prop, held slightly to the side
-  const prop = ({
-    mechanics: () => {   // wrench
-      const p = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.22, 0.05), lambert(THREE, 0x8b93a1));
-      p.position.set(0.2, 0.3, 0); return p;
-    },
-    janitors: () => {    // broom
-      const stick = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.5, 5), lambert(THREE, 0x8a5a2b));
-      stick.position.set(0.19, 0.3, 0);
-      const brush = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.06, 0.05), lambert(THREE, 0xc98a3a));
-      brush.position.set(0.19, 0.06, 0);
-      const p = new THREE.Group(); p.add(stick, brush); return p;
-    },
-    photographers: () => { // camera
-      const p = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.07, 0.07), lambert(THREE, 0x1c2533));
-      p.position.set(0, 0.47, -0.16); return p;
-    },
-    scientists: () => {  // clipboard
-      const p = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.15, 0.015), lambert(THREE, 0xf5efdf));
-      p.position.set(0.17, 0.35, -0.05); p.rotation.y = 0.3; return p;
-    },
-    marketers: () => {   // flyer stack
-      const p = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.02, 0.09), lambert(THREE, 0xfff6e8));
-      p.position.set(0.18, 0.34, 0); return p;
-    },
-  })[person.role];
-  if (prop) g.add(prop());
-
-  // photographers: a hidden flash bulb that pops on launches
-  if (person.role === 'photographers') {
-    const flash = new THREE.Mesh(
-      new THREE.SphereGeometry(0.09, 6, 5),
-      new THREE.MeshBasicMaterial({ color: 0xfff8d0, transparent: true, opacity: 0.95 }),
-    );
-    flash.position.set(0, 0.62, -0.2);
-    flash.visible = false;
-    flash.name = 'flash';
-    g.add(flash);
-  }
-  return g;
-}
 
 // Deterministic per-person phase in [0,1) so crowds don't move in lockstep.
 const phaseOf = person => ((person.seed % 997) / 997);
@@ -183,7 +71,7 @@ export function createStaffActors({ THREE, scene, disposeGroup }) {
     for (const role of ROLE_ORDER) {
       const people = staffAgg[role]?.people || [];
       people.forEach((person, idx) => {
-        const mesh = buildFigure(THREE, person);
+        const mesh = buildStaffFigure(THREE, person);
         grp.add(mesh);
         actors.push({ person, mesh, role, idx, roleCount: people.length });
       });

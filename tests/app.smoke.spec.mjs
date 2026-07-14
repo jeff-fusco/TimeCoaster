@@ -764,7 +764,7 @@ test('title splash starts the game on Play', async ({ page }) => {
 
   await expect(page.locator('#splash')).toBeVisible();
   await expect(page.locator('#splash .splash-title')).toHaveText('Time Coaster 3D');
-  await expect(page.locator('#splashPlay')).toHaveText('Play'); // no save → "Play"
+  await expect(page.locator('#splashPlay')).toHaveText('▶ Play'); // no save → "Play"
   await expect(page.locator('#splashWelcome')).toBeHidden();     // no offline earnings
 
   await page.locator('#splashPlay').click();
@@ -859,7 +859,7 @@ test('offline progress credits money on return', async ({ page }) => {
 
   await expect(page.locator('#splashWelcome')).toBeVisible();
   await expect(page.locator('#splashWelcome')).toContainText('While you were away');
-  await expect(page.locator('#splashPlay')).toHaveText('Continue'); // has a save
+  await expect(page.locator('#splashPlay')).toHaveText('▶ Continue'); // has a save
 
   await page.locator('#splashPlay').click();
   await expect(page.locator('#splash')).toBeHidden();

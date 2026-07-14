@@ -9,6 +9,7 @@ import {
   maxTrackHeight,
   upgradeCost,
 } from './systems/economy.js?v=20260703-13';
+import { drainSales, pickConcessionSale } from './systems/concessions.js?v=20260703-13';
 import {
   createResearchState,
   clampResearchFundingPct,
@@ -125,6 +126,7 @@ import {
 } from './systems/staffPeople.js?v=20260703-13';
 import { buildChunkScenery, createClouds } from './render/scenery.js?v=20260703-13';
 import { createStaffActors } from './render/staffActors.js?v=20260703-13';
+import { createStaffPortraitStudio } from './render/staffPortrait.js?v=20260703-13';
 import {
   canPlaceDecoration,
   createDecorationsState,
@@ -511,6 +513,7 @@ const sceneryGrp=new THREE.Group(); scene.add(sceneryGrp);
 const trackGrp=new THREE.Group(); scene.add(trackGrp);
 const stationGrp=new THREE.Group(); scene.add(stationGrp);
 staffActors=createStaffActors({ THREE, scene, disposeGroup });
+const portraitStudio=createStaffPortraitStudio({ THREE });   // bakes 3D busts for the roster panel
 staffActors.rebuild(staff);
 
 function buildPropertyGeometry(){
@@ -799,6 +802,7 @@ if(window.__TIME_COASTER_TEST__){
 //  GAME LOOP
 // =========================================================================
 let coinThrottle=0, hudAccum=0, dispatchHinted=false;
+let concAcc=0;   // concessions point-of-sale accumulator (fractional sales)
 const stationBusy=()=>trains.some(t=>t.mode==='dwell');
 // measured income: every credited dollar is recorded so the HUD can show what
 // the park actually earns (projected rate overstates it when trains back up)
@@ -1103,7 +1107,25 @@ function stepSim(dt){
   // snack income scales with guests waiting (capped per stand, raised by
   // Shade Canopies), boosted by Janitors, tickets and theming
   let passive=0;
-  if(UPGRADES.snacks.level>0) passive += d.snackPerMin/60*dt;
+  // Concessions: the whole waiting crowd buys snacks/hats/balloons at the point
+  // of sale — credited here (not at dispatch) with coin pops over the queue.
+  const conc=d.concessions;
+  if(conc && conc.perMin>0){
+    const drained=drainSales(concAcc, conc.salesPerMin, dt, 2);
+    concAcc=drained.acc;
+    if(drained.sales>0){
+      const avg=conc.salesPerMin>0 ? conc.perMin/conc.salesPerMin : 0;
+      let earned=0;
+      for(let k=0;k<drained.popped;k++){
+        const sale=pickConcessionSale(conc.items, Math.random());
+        const price=sale?sale.price:avg;
+        earned+=price;
+        if(sale && coinThrottle<=0){ spawnConcessionPop(sale, price); coinThrottle=0.12; }
+      }
+      earned += (drained.sales - drained.popped) * avg;   // overflow, no pop
+      passive += earned;
+    }
+  }
   // Reality Licensing royalties trickle in passively from impossible rides
   if(d.royaltyPerMin>0) passive += d.royaltyPerMin/60*dt;
   // retired coasters keep drawing tourists ("visit the classics") — Heritage
@@ -1471,6 +1493,7 @@ const staffUI=createStaffPanel({
   staffOrder: STAFF_ORDER,
   getStaff: () => staff,
   getRoster: () => roster,
+  getPortrait: person => portraitStudio.portraitFor(person),
   getApplicants: role => ensureBoard(role).applicants,
   getBoardRefreshSeconds: role => Math.max(0, (ensureBoard(role).refreshAt-Date.now())/1000),
   getState: () => state,
@@ -1630,6 +1653,23 @@ function spawnCoin(worldPos,amount){
   _v.copy(worldPos).project(camera);
   spawnCoinScreen((_v.x*.5+.5)*host.clientWidth,(-_v.y*.5+.5)*host.clientHeight,amount,false);
 }
+// A concession sale: an item icon + price floating over a random queue guest.
+function spawnConcessionPop(item, price){
+  const g=stationRefs.frameGroup, coords=stationRefs.queueSlotCoords;
+  if(!g || !coords || !coords.length) return;
+  const c=coords[(Math.random()*coords.length)|0];
+  _v.set(c.x, (stationRefs.walkerGeom?.plazaTop ?? 0.5)+0.95, c.z);
+  g.localToWorld(_v);
+  _v.project(camera);
+  if(_v.z>1) return;   // behind the camera
+  const el=document.createElement('div');
+  el.className='pop concession';
+  el.textContent=`${item.icon} +$${fmt(price)}`;
+  el.style.left=(_v.x*.5+.5)*host.clientWidth+'px';
+  el.style.top=(-_v.y*.5+.5)*host.clientHeight+'px';
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),1000);
+}
 function spawnCoinScreen(x,y,amount,spend){
   const el=document.createElement('div');el.className='pop'+(spend?' spend':'');
   el.textContent=(spend?'-$':'+$')+fmt(amount);el.style.left=x+'px';el.style.top=y+'px';
@@ -1706,6 +1746,7 @@ function armOrResetPark(){
   resetSaveAndReload();
 }
 $('escapeResume').addEventListener('click', ()=>setEscapeMenu(false));
+$('escapeCloseX')?.addEventListener('click', ()=>setEscapeMenu(false));
 $('escapeBackdrop').addEventListener('click', ()=>setEscapeMenu(false));
 $('escapeSave').addEventListener('click', ()=>{
   showToast(saveGame() ? 'Game saved' : 'Save failed');
@@ -1883,6 +1924,30 @@ window.__TC3D_BOOTED = true;
   muteBtn?.addEventListener('click',()=>{ audio.set('muted',!audio.isMuted()); syncMute(); });
 })();
 
+// ── graphics settings (escape menu toggles) ─────────────────────────────────
+// Real, persisted toggles so a slow machine has an escape hatch. Shadows and
+// pixel-ratio are the two cheapest big wins.
+(function wireGraphicsSettings(){
+  let gfx={ shadows:true, detail:true };
+  try{ const raw=localStorage.getItem('tc3d_gfx'); if(raw) gfx={ ...gfx, ...JSON.parse(raw) }; }catch(_){}
+  const save=()=>{ try{ localStorage.setItem('tc3d_gfx', JSON.stringify(gfx)); }catch(_){} };
+  function applyShadows(){
+    renderer.shadowMap.enabled=gfx.shadows;
+    // already-compiled materials need a recompile to pick up the change
+    scene.traverse(o=>{ if(o.material){ const m=Array.isArray(o.material)?o.material:[o.material]; m.forEach(mat=>{mat.needsUpdate=true;}); } });
+  }
+  function applyDetail(){ renderer.setPixelRatio(gfx.detail?Math.min(devicePixelRatio,2):1); resize(); }
+  const bind=(id,key,apply)=>{
+    const btn=$(id); if(!btn) return;
+    const sync=()=>btn.setAttribute('aria-checked', gfx[key]?'true':'false');
+    sync();
+    btn.addEventListener('click',()=>{ gfx[key]=!gfx[key]; sync(); apply(); save(); audio.play('ui'); });
+  };
+  applyShadows(); applyDetail();
+  bind('gfxShadows','shadows',applyShadows);
+  bind('gfxDetail','detail',applyDetail);
+})();
+
 // ── offline progress + title splash ─────────────────────────────────────────
 // Compute what the park earned while away, then hold behind the splash. The
 // Play click is also the user gesture that unlocks WebAudio.
@@ -1924,9 +1989,11 @@ function showSplash(){
   }
   const playBtn=$('splashPlay');
   if(playBtn){
-    playBtn.textContent=restoredSavedAt>0?'Continue':'Play';
+    playBtn.textContent=restoredSavedAt>0?'▶ Continue':'▶ Play';
     playBtn.addEventListener('click', startGame, { once:true });
   }
+  const ver=$('splashVersion');
+  if(ver) ver.textContent=`v${window.__TC3D_VERSION||''}`;
 }
 
 if(TEST){

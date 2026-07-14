@@ -1,3 +1,5 @@
+import { concessionsRate } from './concessions.js?v=20260703-13';
+
 export function hasResearchKey(done, key) {
   return !!done?.[key];
 }
@@ -135,12 +137,13 @@ export function deriveEconomy({
     (hasResearchKey(researchDone, 'stationCrew') ? 1.25 : 1) *
     (hasResearchKey(researchDone, 'movingPlatform') ? 1.45 : 1);
   // queue-tab upgrades (older saves/fixtures may not carry the newer keys)
-  const canopyLvl = U.canopy?.level || 0;
   const comfortLvl = U.comfort?.level || 0;
   const turnstileLvl = U.turnstiles?.level || 0;
+  // Visual only: what fraction of the crowd wears a hat / carries a balloon
+  // (drives the accessories on the rendered guests). Income no longer comes
+  // from these — see the Concessions point-of-sale stream below.
   const hatFrac = Math.min(VENDOR.hatFracMax, VENDOR.hatFracPerLevel * (U.hats?.level || 0));
   const balloonFrac = Math.min(VENDOR.balloonFracMax, VENDOR.balloonFracPerLevel * (U.balloons?.level || 0));
-  const vendorPerRider = (hatFrac * VENDOR.hatPrice + balloonFrac * VENDOR.balloonPrice) * Math.max(0, vendorMult);
   const loadDiv = (1 + FX.operatorBoard * op.hired * sk(op)) * stationResearchDiv * (1 + 0.06 * turnstileLvl);
   const unloadTime = station.baseUnload / loadDiv;
   const loadTime = station.baseLoad / loadDiv;
@@ -186,18 +189,19 @@ export function deriveEconomy({
   // boosters only pay off when arrivals are the true bottleneck.
   const estBoard =
     Math.min(seatsCap, queueCap, arrivalRate * cycle / Math.max(1, trains));
-  const snackCap = station.snackCap + canopyLvl * 15;
-  // snack spend per guest rises with ticket prestige and theming, so stands
-  // stay a relevant income line beyond the early game
-  const snackPerGuest = station.snackPerGuest + 0.4 * U.ticket.level;
-  const snackPerMin =
-    Math.min(Math.round(simQueue), snackCap) *
-    U.snacks.level *
-    snackPerGuest *
-    janitorMult *
-    hype *
-    Math.max(0, snackMult) *
-    Math.max(0, vendorMult);
+  // Concessions: the whole waiting crowd buys snacks/hats/balloons at the point
+  // of sale (credited by the sim's POS tick, not here and not at dispatch).
+  // `perMin` is the honest expected rate for the balance sheet + offline.
+  const concessions = concessionsRate({
+    crowd: simQueue,
+    upgrades: U,
+    station,
+    ticketLevel: U.ticket.level,
+    janitorMult,
+    hype,
+    vendorMult,
+    snackMult,
+  });
   const trainCyclesPerMin = (60 / cycle) * trains;
   const photoPerMin = estBoard > 0.5 ? photoPerRide * trainCyclesPerMin : 0;
   // Merch Exit Shop skims a share of every trainload's ride take (credited at
@@ -207,8 +211,8 @@ export function deriveEconomy({
   const royaltyPerMin = hasResearchKey(researchDone, 'realityLicensing')
     ? Math.max(0, st.excitement - 75) * Math.max(1, st.length / 100) * 6 * hype
     : 0;
-  const ridePerMin = Math.round(estBoard * (perRider + vendorPerRider) * trainCyclesPerMin + photoPerMin + merchPerTrain * trainCyclesPerMin + royaltyPerMin);
-  const ratePerMin = ridePerMin + snackPerMin;
+  const ridePerMin = Math.round(estBoard * perRider * trainCyclesPerMin + photoPerMin + merchPerTrain * trainCyclesPerMin + royaltyPerMin);
+  const ratePerMin = ridePerMin + concessions.perMin;
 
   return {
     cars,
@@ -237,9 +241,7 @@ export function deriveEconomy({
     royaltyPerMin,
     hatFrac,
     balloonFrac,
-    vendorPerRider,
-    snackCap,
-    snackPerMin,
+    concessions,
     janitorMult,
     ridePerMin,
     ratingMult,

@@ -8,6 +8,7 @@ export function createStaffPanel({
   getStaff,
   getState,
   getRoster = () => ({}),
+  getPortrait = () => null,
   getApplicants = () => [],
   getBoardRefreshSeconds = () => 0,
   costs,        // { hire, train, reroll, canHire, canTrain }
@@ -45,8 +46,17 @@ export function createStaffPanel({
 
   function avatar(person, extra = '') {
     const look = person.look || {};
+    const style = `--skin:${hex(look.skin)};--hair:${hex(look.hair)};--uniform:${hex(look.uniform)}`;
+    // Preferred: the person's actual 3D figure baked to a bust image, so the
+    // roster and the walking world actor are the same character.
+    const portrait = getPortrait(person);
+    if (portrait) {
+      return `<div class="person-avatar rendered ${extra}" style="${style}">` +
+        `<img class="pa-render" src="${portrait}" alt="" draggable="false"></div>`;
+    }
+    // Fallback: CSS-drawn face (no WebGL / render failed).
     const cls = `person-avatar ${extra} hair-${esc(look.hairStyle || 'short')} acc-${esc(look.accessory || 'none')}`;
-    return `<div class="${cls}" style="--skin:${hex(look.skin)};--hair:${hex(look.hair)};--uniform:${hex(look.uniform)}">` +
+    return `<div class="${cls}" style="${style}">` +
       `<span class="pa-body"></span><span class="pa-head"></span><span class="pa-hair"></span>` +
       `<span class="pa-face"></span><span class="pa-acc"></span>` +
       `</div>`;

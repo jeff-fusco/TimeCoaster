@@ -40,14 +40,14 @@ function allowedAdvance(tr, trains, L, carLen, blockGap) {
 }
 
 // Credit a ready train's ride and send it back out. Returns true if it launched.
-// Photographers add a flat photo-sales bonus per dispatched (non-empty) train;
-// vendor carts (hats/balloons) add per-rider merch bought while queueing.
+// Photographers add a flat photo-sales bonus per dispatched (non-empty) train,
+// and the Exit Shop skims a merch share. Hats/balloons are NO LONGER credited
+// here — guests buy those at the point of sale (see the Concessions stream).
 export function dispatchTrain(tr, { economy, state, onDeposit = () => {} }) {
   if (tr.mode !== 'dwell' || tr.phase !== 'ready') return false;
   const photos = tr.cycleBoard > 0 ? Math.round(economy.photoPerRide || 0) : 0;
-  const vendors = Math.round(tr.cycleBoard * (economy.vendorPerRider || 0));
   const merch = Math.round(tr.cycleBoard * economy.perRider * (economy.merchRate || 0));
-  const income = Math.round(tr.cycleBoard * economy.perRider) + photos + vendors + merch;
+  const income = Math.round(tr.cycleBoard * economy.perRider) + photos + merch;
   if (income > 0) {
     state.money += income;
     state.rides += 1;

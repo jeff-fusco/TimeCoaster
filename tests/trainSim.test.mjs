@@ -119,13 +119,14 @@ function run(args) {
   assert.equal(state.money, 4 * ECONOMY.perRider + 12, 'no photos sold on an empty train');
 }
 
-// Vendor carts (hats/balloons) add per-rider merch income at dispatch.
+// Hats/balloons no longer pay out at dispatch — they sell at the point of sale
+// (concessions), so a plain dispatch is just the ride take (+ photos/merch).
 {
   const state = { money: 0, rides: 0 };
-  const economy = { ...ECONOMY, vendorPerRider: 2.5 };
+  const economy = { ...ECONOMY };   // no vendor income folded into dispatch
   const full = makeTrain({ mode: 'dwell', phase: 'ready', cycleBoard: 4, boarded: 4 });
   dispatchTrain(full, { economy, state });
-  assert.equal(state.money, 4 * ECONOMY.perRider + Math.round(4 * 2.5), 'ride income + vendor sales');
+  assert.equal(state.money, 4 * ECONOMY.perRider, 'dispatch income is ride take only');
 }
 
 // Merch Exit Shop research skims a share of each trainload's ride income.

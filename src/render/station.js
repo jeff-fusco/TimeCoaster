@@ -29,6 +29,13 @@ function guest(THREE, grp, x, gndY, z, colorIndex, headColors, guestColors, opts
     new THREE.MeshLambertMaterial({ color: headColors[colorIndex % headColors.length] }),
   );
   head.position.y = 0.5;
+  // simple toy eyes on the front (-z) of the head so the crowd has faces
+  const eyeMat = new THREE.MeshLambertMaterial({ color: 0x24303f });
+  const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 5), eyeMat);
+  const eyeR = new THREE.Mesh(new THREE.SphereGeometry(0.026, 6, 5), eyeMat);
+  eyeL.position.set(-0.05, 0.02, -0.108);
+  eyeR.position.set(0.05, 0.02, -0.108);
+  head.add(eyeL, eyeR);
   if (opts.hat) addHat(THREE, head, opts.hat);
   if (opts.balloon) addBalloon(THREE, head, opts.balloon);
   group.add(body, head);
