@@ -28,6 +28,8 @@ export function createStaffPanel({
   let lastRenderKey = '';
   let feedback = null;
   let suppressClickUntil = 0;
+  let deferredRenderDepth = 0;
+  let renderQueued = false;
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -124,7 +126,25 @@ export function createStaffPanel({
       `</div>`;
   }
 
+  function queueRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : cb => setTimeout(cb, 0);
+    raf(() => {
+      renderQueued = false;
+      renderNow();
+    });
+  }
+
   function render() {
+    if (deferredRenderDepth > 0) {
+      queueRender();
+      return;
+    }
+    renderNow();
+  }
+
+  function renderNow() {
     if (!list) return;
     const staff = getStaff();
     const roster = getRoster();
@@ -202,18 +222,23 @@ export function createStaffPanel({
     return `Hired -$${fmt(spent)}`;
   }
 
-  function activateButton(btn, point = null) {
+  function activateButton(btn, point = null, deferRender = false) {
     if (!btn || btn.disabled) return;
     const { act, role } = btn.dataset;
     const index = Number(btn.dataset.index);
     let spent = 0;
     let changed = false;
-    if (act === 'hire') { spent = onHire(role); changed = spent > 0; }
-    else if (act === 'train') { spent = onTrain(role); changed = spent > 0; }
-    else if (act === 'hire-person') { spent = onHire(role, index); changed = spent > 0; }
-    else if (act === 'train-person') { spent = onTrain(role, index); changed = spent > 0; }
-    else if (act === 'reroll') { spent = onReroll(role); changed = spent > 0; }
-    else if (act === 'fire-person') { changed = onFire(role, index); }
+    if (deferRender) deferredRenderDepth += 1;
+    try {
+      if (act === 'hire') { spent = onHire(role); changed = spent > 0; }
+      else if (act === 'train') { spent = onTrain(role); changed = spent > 0; }
+      else if (act === 'hire-person') { spent = onHire(role, index); changed = spent > 0; }
+      else if (act === 'train-person') { spent = onTrain(role, index); changed = spent > 0; }
+      else if (act === 'reroll') { spent = onReroll(role); changed = spent > 0; }
+      else if (act === 'fire-person') { changed = onFire(role, index); }
+    } finally {
+      if (deferRender) deferredRenderDepth -= 1;
+    }
 
     if (changed) {
       const rect = btn.getBoundingClientRect();
@@ -223,7 +248,8 @@ export function createStaffPanel({
       if (spent > 0) onSpendFeedback(spent, x, y, { act, role, index });
       lastRenderKey = '';
     }
-    render();
+    if (deferRender && changed) queueRender();
+    else render();
   }
 
   if (list) {
@@ -233,7 +259,7 @@ export function createStaffPanel({
       e.preventDefault();
       suppressClickUntil = performance.now() + 350;
       btn.dataset.pointerHandled = '1';
-      activateButton(btn, { x: e.clientX, y: e.clientY });
+      activateButton(btn, { x: e.clientX, y: e.clientY }, true);
       setTimeout(() => { delete btn.dataset.pointerHandled; }, 0);
     });
 

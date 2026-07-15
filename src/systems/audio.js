@@ -1,13 +1,13 @@
-// Audio: fully procedural WebAudio — no asset files to ship, no licensing, works
-// offline. SFX are short synth blips in the game's friendly register; music is a
-// slow ambient pad that drifts through a warm chord. Everything is null-safe and
-// silent until unlock() runs from a real user gesture (browsers require it), so
-// calling play() before that (or in tests, where there is no AudioContext) is a
-// harmless no-op.
+// Audio: SFX are short procedural WebAudio blips in the game's friendly register;
+// background music is a looping media asset. Everything is null-safe and silent
+// until unlock() runs from a real user gesture (browsers require it), so calling
+// play() before that (or in tests, where there is no AudioContext) is a harmless
+// no-op.
 //
 // Volumes live in their own persisted settings blob, separate from the save.
 
 const SETTINGS_KEY = 'tc3d_audio';
+const MUSIC_SRC = 'Music/Carousel%20Save%20File.mp3';
 const DEFAULTS = { master: 0.8, music: 0.35, sfx: 0.7, muted: false };
 const clamp01 = v => Math.max(0, Math.min(1, Number.isFinite(v) ? v : 0));
 
@@ -46,37 +46,48 @@ const SFX = {
   fanfare:  [{ type: 'triangle', freq: semis(0), dur: 0.5, gain: 0.3 }, { type: 'triangle', freq: semis(7), dur: 0.5, gain: 0.26, delay: 0.12 }, { type: 'triangle', freq: semis(12), dur: 0.6, gain: 0.24, delay: 0.24 }],
 };
 
-// slow ambient pad: a lazy arpeggio over a warm major-9 chord
-const MUSIC_CHORD = [semis(-12), semis(-5), semis(0), semis(4), semis(7), semis(11)];
-const MUSIC_STEP = 3.4; // seconds between pad notes
-
 export function createAudio(storage = (typeof localStorage !== 'undefined' ? localStorage : null)) {
   let settings = loadAudioSettings(storage);
   let ctx = null;
   let masterGain = null;
-  let musicGain = null;
   let sfxGain = null;
-  let musicTimer = null;
-  let musicIdx = 0;
+  let musicEl = null;
+
+  function applyMusicVolume() {
+    if (!musicEl) return;
+    musicEl.volume = settings.muted ? 0 : clamp01(settings.master * settings.music);
+  }
 
   function applyGains() {
+    applyMusicVolume();
     if (!ctx) return;
     const m = settings.muted ? 0 : settings.master;
     masterGain.gain.setTargetAtTime(m, ctx.currentTime, 0.02);
-    musicGain.gain.setTargetAtTime(settings.music, ctx.currentTime, 0.02);
     sfxGain.gain.setTargetAtTime(settings.sfx, ctx.currentTime, 0.02);
   }
 
+  function ensureMusicElement() {
+    if (musicEl || typeof Audio === 'undefined') return musicEl;
+    musicEl = new Audio(MUSIC_SRC);
+    musicEl.loop = true;
+    musicEl.preload = 'auto';
+    applyMusicVolume();
+    return musicEl;
+  }
+
   function unlock() {
-    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    ensureMusicElement();
+    if (ctx) {
+      if (ctx.state === 'suspended') ctx.resume()?.catch?.(() => {});
+      return;
+    }
+    if (typeof window === 'undefined') return;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     try {
       ctx = new AC();
       masterGain = ctx.createGain();
-      musicGain = ctx.createGain();
       sfxGain = ctx.createGain();
-      musicGain.connect(masterGain);
       sfxGain.connect(masterGain);
       masterGain.connect(ctx.destination);
       applyGains();
@@ -106,37 +117,16 @@ export function createAudio(storage = (typeof localStorage !== 'undefined' ? loc
     }
   }
 
-  function padNote() {
-    if (!ctx || settings.muted || settings.music <= 0) return;
-    const freq = MUSIC_CHORD[musicIdx % MUSIC_CHORD.length];
-    musicIdx = (musicIdx + 1 + Math.floor(Math.random() * 2)) % MUSIC_CHORD.length;
-    const now = ctx.currentTime;
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    const filt = ctx.createBiquadFilter();
-    filt.type = 'lowpass';
-    filt.frequency.value = 900;
-    osc.type = 'sine';
-    osc.frequency.value = freq;
-    const dur = MUSIC_STEP * 1.6;
-    g.gain.setValueAtTime(0.0001, now);
-    g.gain.exponentialRampToValueAtTime(0.14, now + 0.8);
-    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
-    osc.connect(filt);
-    filt.connect(g);
-    g.connect(musicGain);
-    osc.start(now);
-    osc.stop(now + dur + 0.05);
-  }
-
   function startMusic() {
-    if (!ctx || musicTimer) return;
-    padNote();
-    musicTimer = setInterval(padNote, MUSIC_STEP * 1000);
+    if (settings.muted || settings.master <= 0 || settings.music <= 0) return;
+    const el = ensureMusicElement();
+    if (!el) return;
+    applyMusicVolume();
+    el.play()?.catch?.(() => {});
   }
 
   function stopMusic() {
-    if (musicTimer) { clearInterval(musicTimer); musicTimer = null; }
+    if (musicEl) musicEl.pause();
   }
 
   function set(key, value) {
@@ -144,9 +134,9 @@ export function createAudio(storage = (typeof localStorage !== 'undefined' ? loc
     else if (key in settings) settings[key] = clamp01(value);
     saveAudioSettings(storage, settings);
     applyGains();
-    if (key === 'music' || key === 'muted') {
-      if (settings.muted || settings.music <= 0) stopMusic();
-      else if (ctx) startMusic();
+    if (key === 'master' || key === 'music' || key === 'muted') {
+      if (settings.muted || settings.master <= 0 || settings.music <= 0) stopMusic();
+      else startMusic();
     }
   }
 
