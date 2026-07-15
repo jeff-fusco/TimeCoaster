@@ -91,7 +91,7 @@ export function createStaffPanel({
     return { ...lead, label: departmentHead ? 'Department Head' : 'Crew Lead' };
   }
 
-  function renderApplicant(role, person, index, money) {
+  function renderApplicant(role, person, index, money, atCap = false) {
     const fee = costs.hirePerson ? costs.hirePerson(role, index, person) : costs.hire(role);
     const veteran = (person.traits || []).includes('veteran');
     return `<div class="applicant-card">` +
@@ -102,7 +102,7 @@ export function createStaffPanel({
       `<div class="person-skills">${skillBars(person)}</div>` +
       `<div class="trait-list">${traitChips(person)}</div>` +
       `</div>` +
-      `<button class="staff-btn" data-act="hire-person" data-role="${role}" data-index="${index}" ${money < fee ? 'disabled' : ''}>Hire $${fmt(fee)}</button>` +
+      `<button class="staff-btn" data-act="hire-person" data-role="${role}" data-index="${index}" ${atCap || money < fee ? 'disabled' : ''}>${atCap ? 'Roster Full' : `Hire $${fmt(fee)}`}</button>` +
       `</div>`;
   }
 
@@ -156,6 +156,8 @@ export function createStaffPanel({
       const people = s.people || [];
       const applicants = getApplicants(role);
       const hireable = costs.canHire(role, staff);
+      const atCap = costs.atCap ? costs.atCap(role) : false;
+      const cap = costs.cap ? costs.cap(role) : Infinity;
       const trainable = costs.canTrain(role, staff);
       const hCost = costs.hire(role, staff);
       const tCost = costs.train(role, staff);
@@ -175,7 +177,7 @@ export function createStaffPanel({
         `<div class="s-status">${esc(describe(role, s))}</div>` +
         `</div>` +
         `<div class="s-acts">` +
-        `<button class="staff-btn" data-act="hire" data-role="${role}" ${!hireable || money < hCost ? 'disabled' : ''}>${hireable ? `Hire $${fmt(hCost)}` : 'No applicants'}</button>` +
+        `<button class="staff-btn" data-act="hire" data-role="${role}" ${!hireable || money < hCost ? 'disabled' : ''}>${hireable ? `Hire $${fmt(hCost)}` : (atCap ? 'Roster Full' : 'No applicants')}</button>` +
         `<button class="staff-btn train" data-act="train" data-role="${role}" ${!trainable || money < tCost ? 'disabled' : ''}>${trainable ? `Train $${fmt(tCost)}` : 'Train Max'}</button>` +
         `</div>` +
         `${isFeedback ? `<div class="s-feedback">${esc(feedback.text)}</div>` : ''}` +
@@ -186,8 +188,8 @@ export function createStaffPanel({
           : `<div><b>No crew yet</b><span>Choose from the job board below.</span></div>`) +
         `</div>` +
         `<div class="board-head"><b>Job Board</b><span>Refresh ${mmss(getBoardRefreshSeconds(role))}</span><button class="staff-btn reroll" data-act="reroll" data-role="${role}" ${money < rCost ? 'disabled' : ''}>Reroll $${fmt(rCost)}</button></div>` +
-        `<div class="applicant-grid">${applicants.map((p, i) => renderApplicant(role, p, i, money)).join('') || '<div class="empty-note">No applicants. Reroll the board.</div>'}</div>` +
-        `<div class="roster-head"><b>Roster</b><span>Payroll $${fmt(s.salaryPerMin || 0)}/min</span></div>` +
+        `<div class="applicant-grid">${applicants.map((p, i) => renderApplicant(role, p, i, money, atCap)).join('') || '<div class="empty-note">No applicants. Reroll the board.</div>'}</div>` +
+        `<div class="roster-head"><b>Roster ${people.length}/${cap === Infinity ? '∞' : cap}</b><span>Payroll $${fmt(s.salaryPerMin || 0)}/min</span></div>` +
         `<div class="member-grid">${people.map((p, i) => renderMember(role, p, i, money)).join('') || '<div class="empty-note">Nobody hired yet.</div>'}</div>`;
       list.appendChild(row);
     });

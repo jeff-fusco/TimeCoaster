@@ -178,7 +178,7 @@ export const RESEARCH = {
   teleporters: { path: 'track', name: 'Teleporter Track', desc: 'Unlock portal-linked accelerator segments', icon: '🌀', cost: 18000000 },
 
   launch: { path: 'operations', name: 'Launch System', desc: 'Raise launch energy like +1 Faster Track level', icon: '🚀', cost: 1800 },
-  train3: { path: 'operations', name: 'Block Sections', desc: 'Raise train cap to 9 trains', icon: '🚆', cost: 12000 },
+  train3: { path: 'operations', name: 'Block Sections', desc: 'Raise train cap to 8 trains', icon: '🚆', cost: 12000 },
   stationCrew: { path: 'operations', name: 'Station Crew Systems', desc: 'Load and unload guests 25% faster', icon: '⏱️', cost: 65000 },
   dualBerth: { path: 'operations', name: 'Dual-Berth Station', desc: 'Rear berth unloads while the front berth loads — two trains work the station at once', icon: '🚉', cost: 180000 },
   movingPlatform: { path: 'operations', name: 'Moving Platform Station', desc: 'Cut station dwell time again with moving platforms', icon: '🛤️', cost: 450000 },

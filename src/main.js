@@ -240,7 +240,13 @@ function paidRerollBoard(role){
   return cost;
 }
 
+// A role is full once its roster hits the config's hireMax (Staff v2 dropped
+// this cap in the rewrite — re-enforce it so hiring stays a bounded choice).
+function rosterFull(role){
+  return roster[role].length >= (STAFF[role]?.hireMax ?? Infinity);
+}
 function hirePerson(role, index){
+  if(rosterFull(role)) return 0;
   const b = ensureBoard(role);
   const person = b.applicants[index];
   if(!person) return 0;
@@ -1510,8 +1516,10 @@ const staffUI=createStaffPanel({
       return m ? trainingFee(generatePerson(role,m.seed), m.level) : 0;
     },
     reroll: role => rerollCost(role),
-    canHire: role => cheapestApplicantIndex(role) >= 0,
+    canHire: role => cheapestApplicantIndex(role) >= 0 && !rosterFull(role),
     canTrain: role => lowestTrainableIndex(role) >= 0,
+    atCap: role => rosterFull(role),
+    cap: role => STAFF[role]?.hireMax ?? Infinity,
   },
   describe: (role, entry) => staffStatus(role, { hired: entry.hired, trained: Math.round(entry.trained||0) }),
   traits: TRAITS,

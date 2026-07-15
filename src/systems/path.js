@@ -127,7 +127,14 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       const count = seg === 'giantLoop' ? samples.giantLoop : samples.loop;
       for (let k = 0; k < count; k++) {
         const th = (k / count) * Math.PI * 2;
-        const pos = C.clone().addScaledVector(fwd, Math.sin(th) * R).addScaledVector(worldUp, -Math.cos(th) * R);
+        // teardrop/clothoid profile: the horizontal spread narrows toward the
+        // top (tight rounded apex) and splays at the base — taller than wide,
+        // like a real coaster loop instead of a cartoon circle. Peak height
+        // stays 2R so the energy sweep is unchanged.
+        const widthK = 0.7 + 0.35 * Math.cos(th);
+        const pos = C.clone()
+          .addScaledVector(fwd, Math.sin(th) * R * widthK)
+          .addScaledVector(worldUp, -Math.cos(th) * R);
         const up = new Vector3().subVectors(C, pos).normalize();
         out.push({ pos, kind: seg, featureUp: up });
       }
