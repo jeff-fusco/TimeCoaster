@@ -211,7 +211,11 @@ export function deriveEconomy({
   const royaltyPerMin = hasResearchKey(researchDone, 'realityLicensing')
     ? Math.max(0, st.excitement - 75) * Math.max(1, st.length / 100) * 6 * hype
     : 0;
-  const ridePerMin = Math.round(estBoard * perRider * trainCyclesPerMin + photoPerMin + merchPerTrain * trainCyclesPerMin + royaltyPerMin);
+  // income broken out by source so the balance sheet + balance tool can show
+  // where the money really comes from (tickets dominate; support stays linear).
+  const ticketPerMin = estBoard * perRider * trainCyclesPerMin;
+  const merchPerMin = merchPerTrain * trainCyclesPerMin;
+  const ridePerMin = Math.round(ticketPerMin + photoPerMin + merchPerMin + royaltyPerMin);
   const ratePerMin = ridePerMin + concessions.perMin;
 
   return {
@@ -243,6 +247,9 @@ export function deriveEconomy({
     balloonFrac,
     concessions,
     janitorMult,
+    ticketPerMin,
+    photoPerMin,
+    merchPerMin,
     ridePerMin,
     ratingMult,
     researchMult,

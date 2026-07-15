@@ -7,6 +7,7 @@ import { deriveEconomy, upgradeCost, applyResearchEffects } from '../src/systems
 import { hireCost, trainCost } from '../src/systems/staff.js';
 import { RESEARCH, RESEARCH_PATHS, STAFF, STN, UPGRADES } from '../src/config/gameData.js';
 import { buyLand, chunkKey, createPropertyState, expansionCandidates } from '../src/systems/property.js';
+import { personSalary, _makeTestPerson } from '../src/systems/staffPeople.js';
 
 const clone = obj => JSON.parse(JSON.stringify(obj));
 
@@ -71,7 +72,7 @@ const STAGES = {
   },
 };
 
-function rateFor(stage, { upgrades, staff, research }) {
+function econFor(stage, { upgrades, staff, research }) {
   const up = makeUpgrades(upgrades);
   applyResearchEffects(up, research);
   const d = deriveEconomy({
@@ -83,7 +84,7 @@ function rateFor(stage, { upgrades, staff, research }) {
     station: STN,
   });
   // clamp simQueue to the real cap for snack income
-  const d2 = deriveEconomy({
+  return deriveEconomy({
     upgrades: up,
     pathStats: stage.stats,
     simQueue: d.queueCap,
@@ -91,11 +92,45 @@ function rateFor(stage, { upgrades, staff, research }) {
     staff: makeStaff(staff),
     station: STN,
   });
-  return d2.ratePerMin;
+}
+
+function rateFor(stage, base) {
+  return econFor(stage, base).ratePerMin;
+}
+
+// payroll estimate for a stage: median-competence, trait-free person per role,
+// paid at the stage's trained level, times the headcount. (Real rosters vary by
+// trait/tenure; this is the honest ballpark for "how big is the wage drain".)
+function payrollFor(staffCounts) {
+  return Object.keys(STAFF).reduce((sum, role) => {
+    const [hired, trained] = staffCounts[role] || [0, 0];
+    if (!hired) return sum;
+    return sum + hired * personSalary(_makeTestPerson(role), trained);
+  }, 0);
 }
 
 const fmtMin = m => (m === Infinity ? '  ∞' : m >= 100 ? `${Math.round(m)}m` : `${m.toFixed(1)}m`);
 const fmtMoney = v => v >= 1e6 ? `$${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `$${(v / 1e3).toFixed(1)}k` : `$${Math.round(v)}`;
+const pct = (part, whole) => whole > 0 ? `${Math.round(100 * part / whole)}%` : '—';
+
+// ── Income mix: where the money comes from at each stage. This is the "support
+//    systems get buried" picture — ride tickets scale multiplicatively while
+//    concessions/photos stay linear and crowd-capped.
+console.log('INCOME MIX BY SOURCE  (gross $/min; % of gross in parens)');
+console.log('stage      tickets          photos        merch+royalty   concessions      | payroll     net/min');
+for (const [name, stage] of Object.entries(STAGES)) {
+  const d = econFor(stage, { upgrades: stage.upgrades, staff: stage.staff, research: stage.research });
+  const ticket = d.ticketPerMin;
+  const photo = d.photoPerMin;
+  const merchRoy = d.merchPerMin + d.royaltyPerMin;
+  const conc = d.concessions.perMin;
+  const gross = ticket + photo + merchRoy + conc;
+  const pay = payrollFor(stage.staff);
+  const cell = v => `${fmtMoney(v)} (${pct(v, gross)})`.padEnd(15);
+  console.log(
+    `${name.padEnd(9)}  ${cell(ticket)}  ${cell(photo)}  ${cell(merchRoy)}  ${cell(conc)}  | ${fmtMoney(pay).padStart(8)}   ${fmtMoney(gross - pay).padStart(8)}`
+  );
+}
 
 for (const [name, stage] of Object.entries(STAGES)) {
   const base = { upgrades: stage.upgrades, staff: stage.staff, research: stage.research };
