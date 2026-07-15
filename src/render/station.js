@@ -66,6 +66,36 @@ function makeBoardTexture(THREE, text, bg, fg) {
   return tex;
 }
 
+// The coaster's name marquee over the entrance arch. Tiers up with Park Hype:
+// 0 = plain painted board, 1 = colored sign, 2 = gold marquee with bulbs.
+function makeNameSign(THREE, name, tier = 0) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 320; canvas.height = 88;
+  const g = canvas.getContext('2d');
+  const styles = [
+    { bg: '#fbf3e2', fg: '#1c2533', border: '#1c2533', bulbs: false },
+    { bg: '#e8533f', fg: '#fff7e6', border: '#1c2533', bulbs: false },
+    { bg: '#f5a623', fg: '#3a2410', border: '#7a4a0a', bulbs: true },
+  ];
+  const s = styles[Math.max(0, Math.min(2, tier))];
+  g.fillStyle = s.bg; g.fillRect(0, 0, 320, 88);
+  g.strokeStyle = s.border; g.lineWidth = 9; g.strokeRect(5, 5, 310, 78);
+  if (s.bulbs) {   // marquee bulbs around the frame
+    g.fillStyle = '#fff7d0';
+    for (let x = 18; x <= 302; x += 26) {
+      g.beginPath(); g.arc(x, 14, 4, 0, 7); g.fill();
+      g.beginPath(); g.arc(x, 74, 4, 0, 7); g.fill();
+    }
+  }
+  g.fillStyle = s.fg; g.textAlign = 'center'; g.textBaseline = 'middle';
+  let fs = 46; g.font = `900 ${fs}px Fredoka, Arial, sans-serif`;
+  while (g.measureText(name).width > 282 && fs > 15) { fs -= 2; g.font = `900 ${fs}px Fredoka, Arial, sans-serif`; }
+  g.fillText(name || 'Coaster', 160, 48);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.anisotropy = 4;
+  return tex;
+}
+
 // Southward switchback queue on its own plaza pier: guests enter under the
 // arch at the far end and snake lane by lane toward the boarding gate beside
 // the platform. Guest slot 0 is at the gate, so the visible line grows
@@ -85,6 +115,8 @@ function buildQueue({
   colors,
   headColors,
   guestColors,
+  coasterName = 'Coaster',
+  hypeLevel = 0,
 }) {
   const laneLen = Math.max(platLen, 8);
   const laneGap = 1.15;
@@ -203,19 +235,18 @@ function buildQueue({
     p.castShadow = true;
     grp.add(p);
   }
-  const boardTex = makeBoardTexture(THREE, 'ENTRANCE', '#e8533f', '#fbf3e2');
+  // the coaster's name marquee crowns the entrance arch, facing the queue;
+  // its style tiers up with Park Hype
+  const signTier = hypeLevel >= 8 ? 2 : hypeLevel >= 3 ? 1 : 0;
+  const boardTex = makeNameSign(THREE, coasterName, signTier);
+  const edgeMat = new THREE.MeshLambertMaterial({ color: 0x1c2533 });
   const board = new THREE.Mesh(
-    new THREE.BoxGeometry(2.3, 0.62, 0.12),
-    [
-      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
-      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
-      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
-      new THREE.MeshLambertMaterial({ color: 0x1c2533 }),
+    new THREE.BoxGeometry(2.9, 0.8, 0.12),
+    [edgeMat, edgeMat, edgeMat, edgeMat,
       new THREE.MeshLambertMaterial({ map: boardTex }),
-      new THREE.MeshLambertMaterial({ map: boardTex }),
-    ],
+      new THREE.MeshLambertMaterial({ map: boardTex })],
   );
-  board.position.set(archX, plazaTop + archH - 0.1, archZ);
+  board.position.set(archX, plazaTop + archH + 0.05, archZ);
   board.castShadow = true;
   grp.add(board);
 
@@ -418,6 +449,8 @@ export function buildStationAndQueue({
   guestColors,
   worldUp,
   disposeGroup,
+  coasterName = 'Coaster',
+  hypeLevel = 0,
 }) {
   // canvas board textures are not freed by material.dispose(); do it explicitly.
   // InstancedMesh also needs its own dispose() to release instance buffers.
@@ -502,6 +535,8 @@ export function buildStationAndQueue({
     colors,
     headColors,
     guestColors,
+    coasterName,
+    hypeLevel,
   });
   stationRefs.queueCapacity = queueCap;
   stationRefs.queueVisualCapacity = queueInfo.visualCapacity;

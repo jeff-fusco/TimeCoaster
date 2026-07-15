@@ -303,7 +303,9 @@ const property = createPropertyState();
 const decorations = createDecorationsState(); // placed decor pieces [{type,x,z}]
 const marketing = createMarketingState(); // campaign budget + channel portfolio
 const legacy = createLegacyState();  // fame, generation, perks, retired-coaster monuments
-let coasterName = '';         // player-chosen name for the active coaster (Legacy panel)
+let coasterName = '';         // player-chosen name for the active coaster (set at birth)
+const escHtml = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const escAttr = escHtml;
 let monumentExtent = 0;       // how far the hall-of-fame row reaches (for camera limits)
 let activeBiome = 'meadow';   // biome of the current coaster (chosen at retirement)
 let biomeCol = { ...COL };    // palette for scene geometry, repainted per biome
@@ -600,7 +602,8 @@ function applyBiome(rebuild=false){
 
 function queueSignature(d = derived()){
   const station = `${ctrlPts[0]?.x},${ctrlPts[0]?.z},${ctrlPts[1]?.x},${ctrlPts[1]?.z}`;
-  return `${d.queueCap}|${UPGRADES.snacks.level}|${UPGRADES.canopy.level}|${UPGRADES.hats.level}|${UPGRADES.balloons.level}|${d.berths}|${station}`;
+  // coaster name + hype drive the entrance name marquee (name text + tier)
+  return `${d.queueCap}|${UPGRADES.snacks.level}|${UPGRADES.canopy.level}|${UPGRADES.hats.level}|${UPGRADES.balloons.level}|${UPGRADES.hype.level}|${coasterName.trim()}|${d.berths}|${station}`;
 }
 
 function refreshDecorBlockers(){
@@ -626,6 +629,8 @@ function buildStationAndQueue(){
     guestColors: GUEST_COLS,
     worldUp: WORLD_UP,
     disposeGroup,
+    coasterName: coasterName.trim() || `Coaster ${legacy.generation}`,
+    hypeLevel: UPGRADES.hype.level,
   });
   queueVisualSignature = queueSignature(d);
   refreshDecorBlockers();
@@ -1275,7 +1280,8 @@ function openBiomePicker(){
   if(!canRetire(path.stats, excitementBonus(), legacy.generation)) return false;
   if(legacyUI.isOpen()) legacyUI.close();
   const gained=fameFor(path.stats, excitementBonus());
-  const name=(coasterName.trim() || `Coaster ${legacy.generation}`).slice(0,40);
+  const oldName=(coasterName.trim() || `Coaster ${legacy.generation}`).slice(0,40);
+  const defaultNewName=`Coaster ${legacy.generation + 1}`;
   const title=$('ceremonyTitle'); if(title) title.textContent='Where Next?';
   const cards=BIOME_ORDER.map(key=>{
     const b=BIOMES[key];
@@ -1286,12 +1292,16 @@ function openBiomePicker(){
   }).join('');
   const body=$('ceremonyBody');
   if(body) body.innerHTML=
-    `<div class="cer-name">Retire “${name}”</div>`+
+    `<div class="cer-name">Retire “${escHtml(oldName)}”</div>`+
     `<div class="cer-fame">+${fmt(gained)} <span>Fame</span></div>`+
-    `<div class="cer-sub">Choose where your next coaster rises:</div>`+
+    `<div class="cer-sub">Name your next coaster, then choose where it rises:</div>`+
+    `<input id="newCoasterName" class="lg-name" maxlength="40" value="${escAttr(defaultNewName)}" placeholder="Name your coaster">`+
     `<div class="biome-grid">${cards}</div>`;
   body?.querySelectorAll('.biome-card').forEach(btn=>{
-    btn.addEventListener('click', ()=>doRetire(btn.dataset.biome, name, gained));
+    btn.addEventListener('click', ()=>{
+      const newName=($('newCoasterName')?.value || '').trim().slice(0,40) || defaultNewName;
+      doRetire(btn.dataset.biome, oldName, gained, newName);
+    });
   });
   const panel=$('ceremonyPanel'); if(panel) panel.hidden=false;
   return true;
@@ -1313,7 +1323,7 @@ function spawnRetirementBurst(){
   }
 }
 
-function doRetire(nextBiome, name, gained){
+function doRetire(nextBiome, name, gained, newName=''){
   if(!path || !canRetire(path.stats, excitementBonus(), legacy.generation)) return false;
   const retiredStats={ ...path.stats };
   const retiredBonus=excitementBonus();
@@ -1326,7 +1336,7 @@ function doRetire(nextBiome, name, gained){
   legacy.monuments.push(monument);
   legacy.fame+=gained;
   legacy.generation+=1;
-  coasterName='';
+  coasterName=(newName||'').trim().slice(0,40);   // named at birth, in the biome picker
   activeBiome=normalizeBiome(nextBiome);
 
   // reset the active coaster; research, staff and Fame persist
@@ -1979,6 +1989,9 @@ function applyOffline(){
 }
 
 function startGame(){
+  // name at birth: a fresh game names its first coaster right on the splash
+  const nm=$('splashName');
+  if(nm && nm.value.trim()) coasterName=nm.value.trim().slice(0,40);
   const splash=$('splash');
   if(splash){ splash.classList.add('hiding'); setTimeout(()=>{ splash.hidden=true; }, 520); }
   audio.unlock();
@@ -2000,6 +2013,8 @@ function showSplash(){
     playBtn.textContent=restoredSavedAt>0?'▶ Continue':'▶ Play';
     playBtn.addEventListener('click', startGame, { once:true });
   }
+  // a fresh game (no save) names its first coaster before building
+  if(restoredSavedAt===0) $('splashNameWrap')?.removeAttribute('hidden');
   const ver=$('splashVersion');
   if(ver) ver.textContent=`v${window.__TC3D_VERSION||''}`;
 }
