@@ -277,8 +277,11 @@ export function initBuildControls({
     const canDel = idx >= 0 && !isStn && ctrlPts.filter(p => !p.station).length > 2;
     $('delBtn').disabled = !canDel;
     const showEdit = idx >= 0 && !isStn;
+    const selSeg = idx >= 0 ? ctrlPts[idx]?.seg : null;
+    const isLoop = selSeg === 'loop' || selSeg === 'giantLoop';
     $('heightRow').style.display = showEdit ? 'flex' : 'none';
     if ($('bankRow')) $('bankRow').style.display = showEdit ? 'flex' : 'none';
+    if ($('loopRow')) $('loopRow').style.display = (showEdit && isLoop) ? 'flex' : 'none';
     if (idx >= 0) {
       $('heightVal').textContent = ctrlPts[idx].y.toFixed(1);
       $('pointInfo').textContent = isStn
@@ -290,6 +293,55 @@ export function initBuildControls({
     updateHandleColors();
     updateFeatureButtons();
     updateBankUI();
+    updateLoopUI();
+  }
+
+  // Loop size is stored on the loop control point as node.loopR (metres);
+  // absent = the feature default (2.3m loop / 5.2m giant loop). A bigger loop
+  // is longer track, so it flows through the normal per-metre build charge.
+  const LOOP_BASE = seg => (seg === 'giantLoop' ? 5.2 : 2.3);
+
+  function updateLoopUI() {
+    const el = $('loopVal');
+    if (!el) return;
+    const idx = controls.selectedIdx;
+    const p = idx >= 0 ? getCtrlPts()[idx] : null;
+    const seg = p?.seg;
+    if (seg !== 'loop' && seg !== 'giantLoop') return;
+    const r = Number.isFinite(p.loopR) ? p.loopR : LOOP_BASE(seg);
+    el.textContent = `${r.toFixed(1)}m`;
+  }
+
+  function adjustLoopSize(delta) {
+    const ctrlPts = getCtrlPts();
+    const idx = controls.selectedIdx;
+    if (idx < 0) return;
+    const seg = ctrlPts[idx]?.seg;
+    if (seg !== 'loop' && seg !== 'giantLoop') return;
+    const snap = ctrlPts.map(p => ({ ...p }));
+    const base = LOOP_BASE(seg);
+    const cur = Number.isFinite(ctrlPts[idx].loopR) ? ctrlPts[idx].loopR : base;
+    const next = Math.round(Math.max(1.2, Math.min(12, cur + delta)) * 10) / 10;
+    if (Math.abs(next - base) < 1e-6) delete ctrlPts[idx].loopR;
+    else ctrlPts[idx].loopR = next;
+    buildPath();
+    buildTrackGeometry();
+    commitTrackEdit(snap);   // charges/refunds the length change; reverts if broke
+    updateLoopUI();
+  }
+
+  function resetLoopSize() {
+    const ctrlPts = getCtrlPts();
+    const idx = controls.selectedIdx;
+    if (idx < 0) return;
+    const seg = ctrlPts[idx]?.seg;
+    if ((seg !== 'loop' && seg !== 'giantLoop') || !Number.isFinite(ctrlPts[idx].loopR)) return;
+    const snap = ctrlPts.map(p => ({ ...p }));
+    delete ctrlPts[idx].loopR;
+    buildPath();
+    buildTrackGeometry();
+    commitTrackEdit(snap);
+    updateLoopUI();
   }
 
   // Bank is stored on a control point as a fraction of maxBank in [-1, 1];
@@ -857,6 +909,9 @@ export function initBuildControls({
   $('bankL')?.addEventListener('click', () => adjustBank(-0.2));
   $('bankR')?.addEventListener('click', () => adjustBank(0.2));
   $('bankAuto')?.addEventListener('click', resetBank);
+  $('loopUp')?.addEventListener('click', () => adjustLoopSize(0.5));
+  $('loopDown')?.addEventListener('click', () => adjustLoopSize(-0.5));
+  $('loopAuto')?.addEventListener('click', resetLoopSize);
   $('featRow').addEventListener('click', onFeatureClick);
   $('buildToggle').addEventListener('click', () => (controls.active ? exitBuildMode() : enterBuildMode()));
   $('undoBtn')?.addEventListener('click', undo);

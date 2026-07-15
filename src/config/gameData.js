@@ -44,7 +44,7 @@ export const PHYS = {
   brakeSpeed: 3.0,
   stationSpeed: 2.6,
   friction: 0.012,
-  maxBank: 0.62,
+  maxBank: 0.9,   // ≈52° max roll — expressive banking without going fully inverted
 };
 
 export const MPH = 2.7;

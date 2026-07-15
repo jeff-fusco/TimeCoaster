@@ -122,7 +122,9 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       }
     } else if (seg === 'loop' || seg === 'giantLoop') {
       const fwd = horiz(Vector3, new Vector3().subVectors(p1, p0));
-      const R = seg === 'giantLoop' ? 5.2 : 2.3;
+      // per-loop size (node.loopR), clamped; falls back to the feature default
+      const baseR = seg === 'giantLoop' ? 5.2 : 2.3;
+      const R = Number.isFinite(node.loopR) ? Math.max(1.2, Math.min(12, node.loopR)) : baseR;
       const C = p1.clone().addScaledVector(worldUp, R);
       const count = seg === 'giantLoop' ? samples.giantLoop : samples.loop;
       for (let k = 0; k < count; k++) {
