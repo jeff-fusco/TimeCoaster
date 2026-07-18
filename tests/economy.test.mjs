@@ -160,9 +160,11 @@ const station = {
   assert.equal(economy.seatsPerCar, 8);
   assert.equal(economy.seatsCap, 16);
   assert.equal(economy.queueCap, 50);
-  // concessions: 12 in line × snack freq (0.14 × lv1) × ($3 + $0.5 × ticket lv2),
-  // times the dwell multiplier (longer waits → more spend per guest)
-  assert.ok(Math.abs(economy.concessions.perMin - 12 * 0.14 * (3 + 0.5 * 2) * economy.concessions.dwellMult) < 1e-9);
+  // concessions now come from the plaza (arrivals × visit length), not the ride
+  // queue: served guests × snack freq (0.14 × lv1) × ($3 + $0.5 × ticket lv2) ×
+  // dwell multiplier. plazaPop is the whole park population Little's-Law estimate.
+  assert.ok(economy.plazaPop > 0 && Math.abs(economy.plazaPop - economy.arrivalRate * economy.visitMin) < 1e-6, 'plaza = arrivals × visit length');
+  assert.ok(Math.abs(economy.concessions.perMin - economy.concessions.served * 0.14 * (3 + 0.5 * 2) * economy.concessions.dwellMult) < 1e-9);
   assert.ok(economy.concessions.dwellMult >= 1, 'dwell multiplier is at least neutral');
   assert.ok(economy.ratePerMin > economy.ridePerMin, 'concessions add to the projected rate');
   assert.ok(economy.perRideFull > 140);
@@ -279,11 +281,15 @@ const station = {
 {
   const base = makeUpgrades();
   base.snacks.level = 2;
-  const args = { pathStats: null, station, simQueue: 200, researchDone: {} };
+  // a park with real draw → a plaza bigger than the stands can serve, so the
+  // serving cap is the meaningful constraint these upgrades act on
+  const args = { pathStats: { excitement: 150, lapTime: 20, maxSpeed: 20, length: 300 }, station, simQueue: 200, researchDone: {} };
   const plain = deriveEconomy({ ...args, upgrades: base });
   assert.equal(plain.concessions.cap, station.snackCap, 'base concession capacity comes from station config');
-  // 30 served (capped) × snack freq (0.14 × lv2) × $3 (ticket lv0) × dwell mult
-  assert.ok(Math.abs(plain.concessions.perMin - 30 * 0.14 * 2 * 3 * plain.concessions.dwellMult) < 1e-6);
+  // served (plaza capped at the stands) × snack freq (0.14 × lv2) × $3 (ticket
+  // lv0) × dwell mult. The plaza is large here, so the stands' cap binds.
+  assert.equal(plain.concessions.served, station.snackCap, 'a big plaza is capped by the stands');
+  assert.ok(Math.abs(plain.concessions.perMin - plain.concessions.served * 0.14 * 2 * 3 * plain.concessions.dwellMult) < 1e-6);
 
   const withCanopy = deriveEconomy({ ...args, upgrades: { ...base, canopy: { level: 4 } } });
   assert.equal(withCanopy.concessions.cap, station.snackCap + 4 * CONCESSION_CAP_PER_CANOPY, 'each canopy level serves more guests');

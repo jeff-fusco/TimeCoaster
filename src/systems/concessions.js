@@ -21,8 +21,10 @@ export const CONCESSIONS = [
   { key: 'hat',     name: 'Hats',     icon: '🎩', upgrade: 'hats',     basePrice: 14, pricePerTicket: 0.8, freqPerLevel: 0.035 },
 ];
 
-export const CONCESSION_BASE_CAP = 30;        // guests the stands can serve at once
-export const CONCESSION_CAP_PER_CANOPY = 40;  // Shade Canopies raise the servable crowd
+export const CONCESSION_BASE_CAP = 30;         // guests the stands can serve at once
+export const CONCESSION_CAP_PER_CANOPY = 40;   // Shade Canopies raise the servable crowd
+export const CONCESSION_CAP_PER_FOODCOURT = 140; // a Food Court serves a whole plaza
+export const FOODCOURT_SPEND_MULT = 1.25;      // ×spend per Food Court level (compounds)
 
 // Dwell reward — the "destination build" lever. Guests who spend longer in a
 // slow, full queue buy more; a fast-dispatch thrill park clears the line before
@@ -55,11 +57,17 @@ export function concessionsRate({
   snackMult = 1,     // Desert biome: thirsty guests (snacks only)
   avgDwellMin = 0,   // how long the average guest waits in line (queue / throughput)
 }) {
+  // Food Court: the compounding "concessions empire" lever — each level serves a
+  // far bigger crowd and multiplies spend, so a destination park can reach ride-
+  // competitive income from footfall alone.
+  const foodCourt = lvl(upgrades, 'foodCourt');
   const cap = (Number.isFinite(station.snackCap) ? station.snackCap : CONCESSION_BASE_CAP)
-    + lvl(upgrades, 'canopy') * CONCESSION_CAP_PER_CANOPY;
+    + lvl(upgrades, 'canopy') * CONCESSION_CAP_PER_CANOPY
+    + foodCourt * CONCESSION_CAP_PER_FOODCOURT;
   const served = Math.min(Math.max(0, Math.round(crowd)), cap);
   const dwellMult = dwellMultiplier(avgDwellMin);
-  const baseMult = Math.max(0, janitorMult) * Math.max(0, hype) * Math.max(0, vendorMult) * dwellMult;
+  const foodCourtMult = Math.pow(FOODCOURT_SPEND_MULT, foodCourt);
+  const baseMult = Math.max(0, janitorMult) * Math.max(0, hype) * Math.max(0, vendorMult) * dwellMult * foodCourtMult;
 
   const items = [];
   let perMin = 0, salesPerMin = 0;
@@ -73,7 +81,7 @@ export function concessionsRate({
     salesPerMin += sells;
     items.push({ key: c.key, name: c.name, icon: c.icon, level, price, sellsPerMin: sells, perMin: money });
   }
-  return { perMin, salesPerMin, cap, served, dwellMult, avgDwellMin, items };
+  return { perMin, salesPerMin, cap, served, dwellMult, foodCourtMult, avgDwellMin, items };
 }
 
 // Pick which item a sale is for, weighted by each item's share of the sale

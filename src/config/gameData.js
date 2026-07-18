@@ -83,7 +83,8 @@ export const UPGRADES = {
   train: { name: 'Add a Train', desc: 'Another train on track', icon: '🎢', base: 2500, growth: 5.8, level: 0, max: 4, cat: 'ride' },
   queue: { name: 'Bigger Queue', desc: '+10 people can wait in line', icon: '🚧', base: 170, growth: 2.08, level: 0, max: 24, cat: 'queue' },
   snacks: { name: 'Snack Stands', desc: 'Sell to the line · scales with tickets & hype', icon: '🍿', base: 320, growth: 2.0, level: 0, max: 18, cat: 'queue' },
-  canopy: { name: 'Shade Canopies', desc: '+15 waiting guests buy snacks', icon: '⛱️', base: 260, growth: 2.35, level: 0, max: 12, cat: 'queue' },
+  canopy: { name: 'Shade Canopies', desc: 'Serve more of the crowd at once', icon: '⛱️', base: 260, growth: 2.35, level: 0, max: 12, cat: 'queue' },
+  foodCourt: { name: 'Food Court', desc: '×1.25 concession sales · sit-down dining serves far more', icon: '🍔', base: 900, growth: 2.5, level: 0, max: 15, cat: 'queue' },
   comfort: { name: 'Queue Comfort', desc: 'Benches & fans · +8% guest arrivals', icon: '🪑', base: 380, growth: 2.4, level: 0, max: 15, cat: 'queue' },
   turnstiles: { name: 'Smart Turnstiles', desc: 'Guests board 6% faster', icon: '🎫', base: 520, growth: 2.45, level: 0, max: 12, cat: 'queue' },
   hats: { name: 'Hat Cart', desc: '+6% of riders buy a $12 hat', icon: '🎩', base: 300, growth: 2.4, level: 0, max: 8, cat: 'queue' },
@@ -95,7 +96,7 @@ export const UPGRADES = {
   hype: { name: 'Theming & Hype', desc: '×1.12 to all earnings', icon: '🎪', base: 260, growth: 2.35, level: 0, max: 24, cat: 'marketing' },
 };
 
-export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'canopy', 'comfort', 'turnstiles', 'hats', 'balloons', 'ticket', 'hype', 'express'];
+export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'canopy', 'foodCourt', 'comfort', 'turnstiles', 'hats', 'balloons', 'ticket', 'hype', 'express'];
 
 export const CATS = [
   { id: 'ride', icon: '🎢', name: 'Ride' },

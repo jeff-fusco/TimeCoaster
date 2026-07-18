@@ -52,6 +52,18 @@ const upg = (o = {}) => ({
   assert.ok(slow.perMin > fast.perMin * 1.5, 'a long, slow queue outsells a fast one for the same crowd');
 }
 
+// Food Court — the compounding concessions engine: each level serves a far
+// bigger crowd AND multiplies spend, so a destination park earns from footfall.
+{
+  const u = o => ({ ...upg(o), foodCourt: { level: o.foodCourt || 0 } });
+  const plain = concessionsRate({ crowd: 800, upgrades: u({ snacks: 4 }), station });
+  const court = concessionsRate({ crowd: 800, upgrades: u({ snacks: 4, foodCourt: 5 }), station });
+  assert.ok(court.cap > plain.cap, 'a Food Court serves a bigger crowd');
+  assert.ok(Math.abs(court.foodCourtMult - Math.pow(1.25, 5)) < 1e-9, 'spend multiplier compounds per level');
+  // more served × more spend each → far more income (compounds, not adds)
+  assert.ok(court.perMin > plain.perMin * 3, 'the Food Court is a real compounding lever');
+}
+
 // prices scale with ticket prestige — not a frozen flat number
 {
   const cheap = concessionsRate({ crowd: 20, upgrades: upg({ snacks: 2 }), station, ticketLevel: 0 });

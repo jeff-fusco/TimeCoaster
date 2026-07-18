@@ -142,31 +142,46 @@ function deriveAtQueue(stage, { upgrades, staff, research }, simQueue) {
   });
 }
 
-// ── Archetype tradeoff: the same endgame park, dispatched fast (thrill) vs slow
-//    (destination). Fewer trains = lower throughput = the queue backs up to
-//    capacity = long dwell = big concessions, but ride income drops. This is the
-//    "two viable builds" test — neither column should dominate everywhere.
-console.log('\nARCHETYPE TRADEOFF  (endgame park; dispatch throughput set by train count)');
-console.log('trains  throughput  simQueue  dwell    ride $/min    concessions   total $/min   mix');
+// derive with an explicit marketing Demand multiplier (the live game's Marketing
+// Department raises this; the static stages assume ×1). Concessions now come from
+// the plaza (arrivals × visit length), computed analytically inside deriveEconomy.
+function deriveBuild(stage, { upgrades, staff, research, demandMult = 1 }) {
+  const up = makeUpgrades(upgrades);
+  applyResearchEffects(up, research);
+  return deriveEconomy({
+    upgrades: up, pathStats: stage.stats, simQueue: 1e9, demandMult,
+    researchDone: research, staff: makeStaff(staff), station: STN,
+  });
+}
+
+// ── Archetype tradeoff: one endgame budget spent two ways. THRILL pours into
+//    rides + per-rider fares and cycles a modest crowd fast. DESTINATION pours
+//    into marketing (a huge plaza) + the Food Court concession engine and earns
+//    from footfall. The test: neither column should dominate — both viable.
+console.log('\nARCHETYPE TRADEOFF  (one endgame budget, spent two ways)');
+console.log('build         Demand  arrivals  visit   plaza    ride $/min    concessions   total $/min   conc%');
 {
   const stage = STAGES.endgame;
-  for (const trainLvl of [0, 1, 2, 4, 6]) {
-    const cfg = { upgrades: { ...stage.upgrades, train: trainLvl }, staff: stage.staff, research: stage.research };
-    const full = deriveAtQueue(stage, cfg, 1e9);
-    const boardPerMin = full.perRider > 0 ? full.ticketPerMin / full.perRider : 0;
-    // steady state: queue fills to cap if arrivals outpace boarding, else it clears
-    const simQ = full.arrivalRate >= boardPerMin
-      ? full.queueCap
-      : Math.min(full.queueCap, full.arrivalRate * 0.75);
-    const d = deriveAtQueue(stage, cfg, simQ);
+  const builds = {
+    Thrill: {
+      upgrades: { ...stage.upgrades, foodCourt: 0, canopy: 2 },
+      staff: stage.staff, research: stage.research, demandMult: 4,
+    },
+    Destination: {
+      // fewer/smaller trains, all-in on marketing Demand + the concession engine
+      upgrades: { ...stage.upgrades, train: 0, seats: 6, car: 8, speed: 8, foodCourt: 15, canopy: 12, comfort: 15 },
+      staff: stage.staff, research: stage.research, demandMult: 18,
+    },
+  };
+  for (const [name, b] of Object.entries(builds)) {
+    const d = deriveBuild(stage, b);
     const ride = d.ridePerMin;
     const conc = d.concessions.perMin;
     const total = ride + conc;
     console.log(
-      `${String(trainLvl + 1).padStart(4)}   ` +
-      `${boardPerMin.toFixed(0).padStart(8)}/m  ` +
-      `${Math.round(simQ).toString().padStart(7)}   ` +
-      `${d.concessions.avgDwellMin.toFixed(1).padStart(5)}m  ` +
+      `${name.padEnd(12)}  ${String(b.demandMult).padStart(4)}×  ` +
+      `${d.arrivalRate.toFixed(0).padStart(7)}/m  ${d.visitMin.toFixed(0).padStart(4)}m  ` +
+      `${Math.round(d.plazaPop).toString().padStart(6)}  ` +
       `${fmtMoney(ride).padStart(11)}   ${fmtMoney(conc).padStart(11)}   ${fmtMoney(total).padStart(10)}   ${pct(conc, total)}`
     );
   }

@@ -1,4 +1,5 @@
 import { concessionsRate } from './concessions.js?v=20260703-13';
+import { visitLengthMin, plazaPopulation } from './crowd.js?v=20260703-13';
 
 export function hasResearchKey(done, key) {
   return !!done?.[key];
@@ -197,11 +198,24 @@ export function deriveEconomy({
   const avgDwellMin = boardingsPerMin > 0.01
     ? Math.min(30, Math.round(simQueue) / boardingsPerMin)   // clamp: no infinite dwell
     : (Math.round(simQueue) > 0 ? 30 : 0);
-  // Concessions: the whole waiting crowd buys snacks/hats/balloons at the point
-  // of sale (credited by the sim's POS tick, not here and not at dispatch).
-  // `perMin` is the honest expected rate for the balance sheet + offline.
+  // Park population (the plaza): marketing fills the park, and guests linger for
+  // a visit — this is the shopping crowd, decoupled from the ride's throughput.
+  // A destination park draws big crowds that stay long; a thrill park cycles a
+  // smaller crowd through fast. Capacity scales with park size (queue capacity
+  // is a proxy) so it rarely binds — the stands' serve-cap throttles income.
+  const visitMin = visitLengthMin({
+    excitement: st.excitement,
+    cleanMult,
+    comfortLvl,
+    diningLvl: U.foodCourt?.level || 0,
+  });
+  const plazaCapacity = 300 + queueCap * 3;
+  const plazaPop = plazaPopulation({ arrivalRate, visitMin, capacity: plazaCapacity });
+  // Concessions: the whole plaza crowd buys snacks/hats/balloons at the point of
+  // sale (credited by the sim's POS tick, not here and not at dispatch). `perMin`
+  // is the honest expected rate for the balance sheet + offline.
   const concessions = concessionsRate({
-    crowd: simQueue,
+    crowd: plazaPop,
     upgrades: U,
     station,
     ticketLevel: U.ticket.level,
@@ -255,6 +269,8 @@ export function deriveEconomy({
     balloonFrac,
     concessions,
     janitorMult,
+    plazaPop,
+    visitMin,
     ticketPerMin,
     photoPerMin,
     merchPerMin,
