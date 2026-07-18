@@ -10,6 +10,7 @@ import {
   upgradeCost,
 } from './systems/economy.js?v=20260703-13';
 import { drainSales, pickConcessionSale } from './systems/concessions.js?v=20260703-13';
+import { stepCrowdFlows } from './systems/crowd.js?v=20260703-13';
 import {
   createResearchState,
   clampResearchFundingPct,
@@ -196,7 +197,9 @@ function currentMaxHeight(){
 }
 
 const state = { money:0, rides:0 };
-const sim   = { queue:0 };     // live count of guests waiting in line
+// Live guest stocks: `plaza` mills around the forecourt shopping; `queue` waits
+// in line. Guests flow plaza → queue (stepCrowdFlows) → ride → back to plaza.
+const sim   = { queue:0, plaza:0 };
 // Staff v2: `roster` (individuals: {seed, level}) is the source of truth; the
 // economy reads `staff`, the aggregate view, kept in sync via syncStaff().
 let roster = createRoster();
@@ -350,6 +353,7 @@ function derived(){
     // decor and monument near-misses raise effective excitement for the economy
     pathStats: path ? { ...path.stats, excitement: path.stats.excitement + excitementBonus() } : null,
     simQueue: sim.queue,
+    simPlaza: sim.plaza,     // live shopping crowd (null → analytic steady state)
     researchDone: research.done,
     staff,
     station: STN,
@@ -846,8 +850,12 @@ function updateTrains(dt,d){
     const cur=tr.mode==='dwell'?tr.phase:'run';
     if(tr._animPhase!==cur){
       const dual=d.berths>1;
-      if(cur==='unload'&&tr.startBoard>0)
+      if(cur==='unload'&&tr.startBoard>0){
         spawnStationWalkers(stationRefs,'exit',tr.startBoard,d.unloadTime,dual?(tr.berth==='front'?'front':'rear'):'all');
+        // riders walk off into the plaza and keep their visit going (shop,
+        // wander, maybe ride again) — the plaza's departure flow retires them
+        sim.plaza=Math.min(d.plazaCapacity, sim.plaza + tr.startBoard);
+      }
       else if(cur==='load'&&tr.cycleBoard>0)
         spawnStationWalkers(stationRefs,'board',tr.cycleBoard,d.loadTime,dual?'front':'all');
       tr._animPhase=cur;
@@ -1113,8 +1121,21 @@ function updateMaintenance(dt){
 function stepSim(dt){
   updateMaintenance(dt);
   const d=derived();
-  // guests arrive at the queue (capped by capacity)
-  sim.queue=Math.min(d.queueCap, sim.queue + d.arrivalRate*dt);
+  // The guest funnel: arrivals land in the plaza (marketing), mill and shop,
+  // and file into the queue when the ride and the wait look worth it. Boarding
+  // drains the queue in trainSim; riders return to the plaza after unloading.
+  const flows=stepCrowdFlows({
+    plaza: sim.plaza,
+    queue: sim.queue,
+    dt,
+    arrivalPerSec: d.arrivalRate,
+    visitMin: d.visitMin,
+    joinWill: d.joinWill,
+    queueCap: d.queueCap,
+    plazaCap: d.plazaCapacity,
+  });
+  sim.plaza=flows.plaza;
+  sim.queue=flows.queue;
   // snack income scales with guests waiting (capped per stand, raised by
   // Shade Canopies), boosted by Janitors, tickets and theming
   let passive=0;
@@ -1349,7 +1370,7 @@ function doRetire(nextBiome, name, gained, newName=''){
   resetActiveProperty();
   decorations.length=0; themeBonus=0; monumentBonus=0;
   ctrlPts=DEFAULT_CTRL.map(p=>({...p}));
-  paidLength=0; sim.queue=0;
+  paidLength=0; sim.queue=0; sim.plaza=0;
   buildControls.resetHistory?.();
   resetCameraView();
   applyResearchEffects();
@@ -1359,6 +1380,7 @@ function doRetire(nextBiome, name, gained, newName=''){
   rebuildTrains();
   trains.forEach((tr,i)=>{tr.s=(i/trains.length)*path.len;tr.prevS=tr.s;tr.L=path.len;});
   sim.queue=Math.min(derived().queueCap, 8);
+  sim.plaza=12;   // opening-day stragglers milling in the forecourt
   buildMonumentsAll();
   refreshHUD(); saveGame();
   audio.play('fanfare');
@@ -1922,6 +1944,7 @@ if(!paidLength)paidLength=path.len;   // first run: starter track is free
 rebuildTrains();
 trains.forEach((tr,i)=>{tr.s=(i/trains.length)*path.len;tr.prevS=tr.s;tr.L=path.len;});
 if(sim.queue<=0)sim.queue=Math.min(derived().queueCap, 8);   // start with a small crowd
+if(sim.plaza<=0)sim.plaza=12;                                // …and forecourt stragglers
 updateQueueVisuals();
 resize();
 refreshHUD();
@@ -1983,7 +2006,12 @@ const offline=restoredSavedAt>0 ? computeOfflineProgress({
 function applyOffline(){
   if(offline.money>0) state.money+=offline.money;
   if(offline.unlocked?.length){ offline.unlocked.forEach(handleResearchUnlock); }
-  if(offline.seconds>60){ sim.queue=Math.min(derived().queueCap, sim.queue); } // caught up while away
+  if(offline.seconds>60){
+    const dOff=derived();
+    sim.queue=Math.min(dOff.queueCap, sim.queue);          // caught up while away
+    // the plaza settles to its steady state while away (arrivals × visit length)
+    sim.plaza=Math.min(dOff.plazaCapacity, Math.max(sim.plaza, dOff.plazaPop));
+  }
   if(offline.money>0){ spawnBankDelta(offline.money,false); incomeTracker.record(offline.money, nowSec()); }
   refreshHUD();
 }

@@ -18,6 +18,7 @@ function createActiveData({
     money: state.money,
     rides: state.rides,
     queue: sim.queue,
+    plaza: sim.plaza,
     biome: typeof biome === 'string' ? biome : 'meadow',
     upgrades: Object.fromEntries(Object.entries(upgrades).map(([key, value]) => [key, value.level])),
     research: {
@@ -147,6 +148,7 @@ function applyActiveData(data, { state, sim, upgrades, research }) {
   if (finite(data.money)) state.money = data.money;
   if (finite(data.rides)) state.rides = data.rides;
   if (finite(data.queue)) sim.queue = data.queue;
+  if (finite(data.plaza)) sim.plaza = data.plaza;   // absent in older saves → refills live
   if (typeof data.biome === 'string') restored.biome = data.biome;   // active coaster's biome
 
   // Staff v2 folds old counter saves into a roster of generated people. Collect

@@ -163,7 +163,11 @@ const station = {
   // concessions now come from the plaza (arrivals × visit length), not the ride
   // queue: served guests × snack freq (0.14 × lv1) × ($3 + $0.5 × ticket lv2) ×
   // dwell multiplier. plazaPop is the whole park population Little's-Law estimate.
-  assert.ok(economy.plazaPop > 0 && Math.abs(economy.plazaPop - economy.arrivalRate * economy.visitMin) < 1e-6, 'plaza = arrivals × visit length');
+  // arrivalRate is per second; the plaza formula is per-minute Little's Law
+  assert.ok(economy.plazaPop > 0, 'the park holds a crowd');
+  const expectPlaza = Math.min(economy.plazaCapacity, economy.arrivalRate * 60 * economy.visitMin);
+  assert.ok(Math.abs(economy.plazaPop - expectPlaza) < 1e-6, 'plaza = arrivals/min × visit length, capped');
+  assert.ok(economy.joinWill > 0 && economy.joinWill <= 1, 'join willingness is a sane fraction');
   assert.ok(Math.abs(economy.concessions.perMin - economy.concessions.served * 0.14 * (3 + 0.5 * 2) * economy.concessions.dwellMult) < 1e-9);
   assert.ok(economy.concessions.dwellMult >= 1, 'dwell multiplier is at least neutral');
   assert.ok(economy.ratePerMin > economy.ridePerMin, 'concessions add to the projected rate');

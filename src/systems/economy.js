@@ -1,5 +1,5 @@
 import { concessionsRate } from './concessions.js?v=20260703-13';
-import { visitLengthMin, plazaPopulation } from './crowd.js?v=20260703-13';
+import { visitLengthMin, plazaPopulation, joinWillingness } from './crowd.js?v=20260703-13';
 
 export function hasResearchKey(done, key) {
   return !!done?.[key];
@@ -82,6 +82,7 @@ export function deriveEconomy({
   upgrades,
   pathStats,
   simQueue = 0,
+  simPlaza = null,     // live plaza stock; null → analytic steady state (tools/offline)
   researchDone = {},
   staff = {},          // { role: { hired, trained } }
   station,
@@ -202,20 +203,33 @@ export function deriveEconomy({
   // a visit — this is the shopping crowd, decoupled from the ride's throughput.
   // A destination park draws big crowds that stay long; a thrill park cycles a
   // smaller crowd through fast. Capacity scales with park size (queue capacity
-  // is a proxy) so it rarely binds — the stands' serve-cap throttles income.
+  // is a proxy) plus the physical space concession investment adds.
+  // NOTE: arrivalRate is per SECOND everywhere in the engine; the plaza formula
+  // wants per-minute (Little's Law against visit minutes).
   const visitMin = visitLengthMin({
     excitement: st.excitement,
     cleanMult,
     comfortLvl,
     diningLvl: U.foodCourt?.level || 0,
   });
-  const plazaCapacity = 300 + queueCap * 3;
-  const plazaPop = plazaPopulation({ arrivalRate, visitMin, capacity: plazaCapacity });
-  // Concessions: the whole plaza crowd buys snacks/hats/balloons at the point of
-  // sale (credited by the sim's POS tick, not here and not at dispatch). `perMin`
-  // is the honest expected rate for the balance sheet + offline.
+  const plazaCapacity = 300 + queueCap * 3 + (U.foodCourt?.level || 0) * 120 + (U.canopy?.level || 0) * 40;
+  const plazaPop = plazaPopulation({ arrivalPerMin: arrivalRate * 60, visitMin, capacity: plazaCapacity });
+  // How readily a plaza guest joins the ride line: the ride's pull vs. the balk
+  // at the current expected wait. The live sim gates the plaza→queue flow on it.
+  const joinWill = joinWillingness({
+    appeal: 0.35 + st.excitement / 100,
+    waitMin: avgDwellMin,
+  });
+  // Concessions: the whole present crowd (plaza shoppers + the waiting line)
+  // buys snacks/hats/balloons at the point of sale (credited by the sim's POS
+  // tick, not here and not at dispatch). Live play passes the real plaza stock;
+  // tools and offline use the analytic steady state (which already counts the
+  // would-be line as part of "guests present").
+  const shopCrowd = Number.isFinite(simPlaza)
+    ? Math.max(0, simPlaza) + Math.max(0, Math.round(simQueue))
+    : plazaPop;
   const concessions = concessionsRate({
-    crowd: plazaPop,
+    crowd: shopCrowd,
     upgrades: U,
     station,
     ticketLevel: U.ticket.level,
@@ -270,7 +284,9 @@ export function deriveEconomy({
     concessions,
     janitorMult,
     plazaPop,
+    plazaCapacity,
     visitMin,
+    joinWill,
     ticketPerMin,
     photoPerMin,
     merchPerMin,

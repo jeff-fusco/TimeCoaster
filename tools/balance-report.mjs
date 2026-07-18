@@ -180,7 +180,7 @@ console.log('build         Demand  arrivals  visit   plaza    ride $/min    conc
     const total = ride + conc;
     console.log(
       `${name.padEnd(12)}  ${String(b.demandMult).padStart(4)}×  ` +
-      `${d.arrivalRate.toFixed(0).padStart(7)}/m  ${d.visitMin.toFixed(0).padStart(4)}m  ` +
+      `${(d.arrivalRate * 60).toFixed(0).padStart(7)}/m  ${d.visitMin.toFixed(0).padStart(4)}m  ` +
       `${Math.round(d.plazaPop).toString().padStart(6)}  ` +
       `${fmtMoney(ride).padStart(11)}   ${fmtMoney(conc).padStart(11)}   ${fmtMoney(total).padStart(10)}   ${pct(conc, total)}`
     );
