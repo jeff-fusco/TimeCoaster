@@ -22,7 +22,21 @@ export const CONCESSIONS = [
 ];
 
 export const CONCESSION_BASE_CAP = 30;        // guests the stands can serve at once
-export const CONCESSION_CAP_PER_CANOPY = 15;  // Shade Canopies raise the servable crowd
+export const CONCESSION_CAP_PER_CANOPY = 40;  // Shade Canopies raise the servable crowd
+
+// Dwell reward — the "destination build" lever. Guests who spend longer in a
+// slow, full queue buy more; a fast-dispatch thrill park clears the line before
+// anyone gets bored enough to shop. dwellMult saturates so it can't run away:
+//   dwellMult = 1 + GAIN * (1 - e^(-avgDwellMin / REF)),  bounded to [1, 1+GAIN]
+// avgDwellMin = queue length / boardings-per-min (Little's Law). REF is the wait
+// (minutes) at which the bonus reaches ~63% of its max.
+export const DWELL_REF_MIN = 3.5;
+export const DWELL_GAIN = 3.0;
+
+export function dwellMultiplier(avgDwellMin = 0) {
+  const w = Math.max(0, Number.isFinite(avgDwellMin) ? avgDwellMin : 0);
+  return 1 + DWELL_GAIN * (1 - Math.exp(-w / DWELL_REF_MIN));
+}
 
 const lvl = (upgrades, key) => upgrades?.[key]?.level || 0;
 
@@ -39,11 +53,13 @@ export function concessionsRate({
   hype = 1,
   vendorMult = 1,    // Family Package marketing
   snackMult = 1,     // Desert biome: thirsty guests (snacks only)
+  avgDwellMin = 0,   // how long the average guest waits in line (queue / throughput)
 }) {
   const cap = (Number.isFinite(station.snackCap) ? station.snackCap : CONCESSION_BASE_CAP)
     + lvl(upgrades, 'canopy') * CONCESSION_CAP_PER_CANOPY;
   const served = Math.min(Math.max(0, Math.round(crowd)), cap);
-  const baseMult = Math.max(0, janitorMult) * Math.max(0, hype) * Math.max(0, vendorMult);
+  const dwellMult = dwellMultiplier(avgDwellMin);
+  const baseMult = Math.max(0, janitorMult) * Math.max(0, hype) * Math.max(0, vendorMult) * dwellMult;
 
   const items = [];
   let perMin = 0, salesPerMin = 0;
@@ -57,7 +73,7 @@ export function concessionsRate({
     salesPerMin += sells;
     items.push({ key: c.key, name: c.name, icon: c.icon, level, price, sellsPerMin: sells, perMin: money });
   }
-  return { perMin, salesPerMin, cap, served, items };
+  return { perMin, salesPerMin, cap, served, dwellMult, avgDwellMin, items };
 }
 
 // Pick which item a sale is for, weighted by each item's share of the sale

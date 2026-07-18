@@ -189,6 +189,14 @@ export function deriveEconomy({
   // boosters only pay off when arrivals are the true bottleneck.
   const estBoard =
     Math.min(seatsCap, queueCap, arrivalRate * cycle / Math.max(1, trains));
+  const trainCyclesPerMin = (60 / cycle) * trains;
+  // Average time a guest waits in line = queue length / boardings-per-min
+  // (Little's Law). A fast-dispatch thrill park clears the line quickly (low
+  // dwell); a slow, full "destination" queue makes guests wait — and shop.
+  const boardingsPerMin = estBoard * trainCyclesPerMin;
+  const avgDwellMin = boardingsPerMin > 0.01
+    ? Math.min(30, Math.round(simQueue) / boardingsPerMin)   // clamp: no infinite dwell
+    : (Math.round(simQueue) > 0 ? 30 : 0);
   // Concessions: the whole waiting crowd buys snacks/hats/balloons at the point
   // of sale (credited by the sim's POS tick, not here and not at dispatch).
   // `perMin` is the honest expected rate for the balance sheet + offline.
@@ -201,8 +209,8 @@ export function deriveEconomy({
     hype,
     vendorMult,
     snackMult,
+    avgDwellMin,
   });
-  const trainCyclesPerMin = (60 / cycle) * trains;
   const photoPerMin = estBoard > 0.5 ? photoPerRide * trainCyclesPerMin : 0;
   // Merch Exit Shop skims a share of every trainload's ride take (credited at
   // dispatch via merchRate); royalties scale with theming so they stay relevant.

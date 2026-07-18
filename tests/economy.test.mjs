@@ -15,6 +15,7 @@ import {
   stepResearch,
 } from '../src/systems/research.js';
 import { RESEARCH, RESEARCH_PATHS } from '../src/config/gameData.js';
+import { CONCESSION_CAP_PER_CANOPY } from '../src/systems/concessions.js';
 
 function makeUpgrades() {
   return {
@@ -159,8 +160,10 @@ const station = {
   assert.equal(economy.seatsPerCar, 8);
   assert.equal(economy.seatsCap, 16);
   assert.equal(economy.queueCap, 50);
-  // concessions: 12 in line × snack freq (0.14 × lv1) × ($3 + $0.5 × ticket lv2)
-  assert.ok(Math.abs(economy.concessions.perMin - 12 * 0.14 * (3 + 0.5 * 2)) < 1e-9);
+  // concessions: 12 in line × snack freq (0.14 × lv1) × ($3 + $0.5 × ticket lv2),
+  // times the dwell multiplier (longer waits → more spend per guest)
+  assert.ok(Math.abs(economy.concessions.perMin - 12 * 0.14 * (3 + 0.5 * 2) * economy.concessions.dwellMult) < 1e-9);
+  assert.ok(economy.concessions.dwellMult >= 1, 'dwell multiplier is at least neutral');
   assert.ok(economy.ratePerMin > economy.ridePerMin, 'concessions add to the projected rate');
   assert.ok(economy.perRideFull > 140);
 }
@@ -279,11 +282,11 @@ const station = {
   const args = { pathStats: null, station, simQueue: 200, researchDone: {} };
   const plain = deriveEconomy({ ...args, upgrades: base });
   assert.equal(plain.concessions.cap, station.snackCap, 'base concession capacity comes from station config');
-  // 30 served (capped) × snack freq (0.14 × lv2) × $3 (ticket lv0)
-  assert.ok(Math.abs(plain.concessions.perMin - 30 * 0.14 * 2 * 3) < 1e-6);
+  // 30 served (capped) × snack freq (0.14 × lv2) × $3 (ticket lv0) × dwell mult
+  assert.ok(Math.abs(plain.concessions.perMin - 30 * 0.14 * 2 * 3 * plain.concessions.dwellMult) < 1e-6);
 
   const withCanopy = deriveEconomy({ ...args, upgrades: { ...base, canopy: { level: 4 } } });
-  assert.equal(withCanopy.concessions.cap, station.snackCap + 60, 'each canopy level serves +15 guests');
+  assert.equal(withCanopy.concessions.cap, station.snackCap + 4 * CONCESSION_CAP_PER_CANOPY, 'each canopy level serves more guests');
   assert.ok(withCanopy.concessions.perMin > plain.concessions.perMin, 'canopies let more of the crowd buy');
 
   const withComfort = deriveEconomy({ ...args, upgrades: { ...base, comfort: { level: 5 } } });

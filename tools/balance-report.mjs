@@ -132,6 +132,46 @@ for (const [name, stage] of Object.entries(STAGES)) {
   );
 }
 
+// derive at an explicit live-queue length (not just the full-queue assumption)
+function deriveAtQueue(stage, { upgrades, staff, research }, simQueue) {
+  const up = makeUpgrades(upgrades);
+  applyResearchEffects(up, research);
+  return deriveEconomy({
+    upgrades: up, pathStats: stage.stats, simQueue,
+    researchDone: research, staff: makeStaff(staff), station: STN,
+  });
+}
+
+// ── Archetype tradeoff: the same endgame park, dispatched fast (thrill) vs slow
+//    (destination). Fewer trains = lower throughput = the queue backs up to
+//    capacity = long dwell = big concessions, but ride income drops. This is the
+//    "two viable builds" test — neither column should dominate everywhere.
+console.log('\nARCHETYPE TRADEOFF  (endgame park; dispatch throughput set by train count)');
+console.log('trains  throughput  simQueue  dwell    ride $/min    concessions   total $/min   mix');
+{
+  const stage = STAGES.endgame;
+  for (const trainLvl of [0, 1, 2, 4, 6]) {
+    const cfg = { upgrades: { ...stage.upgrades, train: trainLvl }, staff: stage.staff, research: stage.research };
+    const full = deriveAtQueue(stage, cfg, 1e9);
+    const boardPerMin = full.perRider > 0 ? full.ticketPerMin / full.perRider : 0;
+    // steady state: queue fills to cap if arrivals outpace boarding, else it clears
+    const simQ = full.arrivalRate >= boardPerMin
+      ? full.queueCap
+      : Math.min(full.queueCap, full.arrivalRate * 0.75);
+    const d = deriveAtQueue(stage, cfg, simQ);
+    const ride = d.ridePerMin;
+    const conc = d.concessions.perMin;
+    const total = ride + conc;
+    console.log(
+      `${String(trainLvl + 1).padStart(4)}   ` +
+      `${boardPerMin.toFixed(0).padStart(8)}/m  ` +
+      `${Math.round(simQ).toString().padStart(7)}   ` +
+      `${d.concessions.avgDwellMin.toFixed(1).padStart(5)}m  ` +
+      `${fmtMoney(ride).padStart(11)}   ${fmtMoney(conc).padStart(11)}   ${fmtMoney(total).padStart(10)}   ${pct(conc, total)}`
+    );
+  }
+}
+
 for (const [name, stage] of Object.entries(STAGES)) {
   const base = { upgrades: stage.upgrades, staff: stage.staff, research: stage.research };
   const baseRate = rateFor(stage, base);

@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import {
   CONCESSIONS,
   CONCESSION_BASE_CAP,
+  CONCESSION_CAP_PER_CANOPY,
   concessionsRate,
+  dwellMultiplier,
   drainSales,
   pickConcessionSale,
 } from '../src/systems/concessions.js';
@@ -35,8 +37,19 @@ const upg = (o = {}) => ({
   assert.ok(Math.abs(huge.perMin - atCap.perMin) < 1e-9, 'past capacity earns no more');
   // Shade Canopies raise the servable crowd
   const canopied = concessionsRate({ crowd: 500, upgrades: upg({ snacks: 3, canopy: 4 }), station });
-  assert.equal(canopied.cap, 30 + 4 * 15);
+  assert.equal(canopied.cap, 30 + 4 * CONCESSION_CAP_PER_CANOPY);
   assert.ok(canopied.perMin > huge.perMin, 'canopies let more guests buy');
+}
+
+// dwell reward: guests who wait longer in a slow, full queue spend more. The
+// multiplier saturates so it can't run away, and is neutral (×1) at zero wait.
+{
+  assert.ok(Math.abs(dwellMultiplier(0) - 1) < 1e-9, 'no wait → no dwell bonus');
+  assert.ok(dwellMultiplier(4) > dwellMultiplier(1), 'a longer wait spends more');
+  assert.ok(dwellMultiplier(1000) <= 4.0001, 'dwell bonus saturates (bounded)');
+  const fast = concessionsRate({ crowd: 25, upgrades: upg({ snacks: 3 }), station, avgDwellMin: 0.2 });
+  const slow = concessionsRate({ crowd: 25, upgrades: upg({ snacks: 3 }), station, avgDwellMin: 8 });
+  assert.ok(slow.perMin > fast.perMin * 1.5, 'a long, slow queue outsells a fast one for the same crowd');
 }
 
 // prices scale with ticket prestige — not a frozen flat number
