@@ -417,6 +417,38 @@ test('staff training rebuilds queue visuals when capacity changes', async ({ pag
   expect(pageErrors).toEqual([]);
 });
 
+test('queue joiners walk the lanes to the end of the line (no teleport)', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    // a nearly-empty line: joins flow immediately and have empty switchbacks to walk
+    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 5000, rides: 0, queue: 2 }));
+  });
+  await page.goto('/index.html');
+  await expect.poll(() => page.evaluate(() => window.__TC3D_BOOTED === true)).toBe(true);
+
+  // joins stage walk-in walkers; while one is in flight the standing crowd
+  // (settled) lags the sim count — that lag IS the no-teleport guarantee
+  await expect.poll(
+    () => page.evaluate(() => window.__TC3D_DEBUG__.queueVisual().inFlight),
+    { timeout: 15000 },
+  ).toBeGreaterThan(0);
+  const during = await page.evaluate(() => window.__TC3D_DEBUG__.queueVisual());
+  expect(during.settled).toBeLessThan(Math.round(during.simQueue));
+  // conservation: standing + walking ≈ the sim's count (fractional join in transit)
+  expect(Math.abs(during.settled + during.inFlight - Math.round(during.simQueue))).toBeLessThanOrEqual(1);
+
+  // walkers arrive and hand over to the crowd: settled climbs
+  await expect.poll(
+    () => page.evaluate(() => window.__TC3D_DEBUG__.queueVisual().settled),
+    { timeout: 20000 },
+  ).toBeGreaterThan(during.settled);
+  expect(pageErrors).toEqual([]);
+});
+
 test('staff buttons accept rapid repeated purchases and show feedback', async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', err => pageErrors.push(err.message));

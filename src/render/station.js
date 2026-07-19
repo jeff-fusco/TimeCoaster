@@ -807,6 +807,8 @@ export function buildStationAndQueue({
   stationRefs.queueGuests = [];
   stationRefs.queueSlotCoords = [];
   stationRefs.queueAnim = null;
+  stationRefs.queueInbound = null;
+  stationRefs.queueSlotsPerLane = 0;
   stationRefs.crowd = null;
   stationRefs.plazaCrowd = null;
   stationRefs.plazaPOIs = null;
@@ -892,6 +894,10 @@ export function buildStationAndQueue({
   stationRefs.queueVisualCapacity = queueInfo.visualCapacity;
   stationRefs.queueLanes = queueInfo.nLanes;
   stationRefs.queueDepth = queueInfo.depth;
+  stationRefs.queueSlotsPerLane = queueInfo.slotsPerLane;
+  // walk-in bookkeeping: `settled` guests stand in slots; joiners in flight
+  // walk the lanes first. -1 = adopt the sim count on the first frame.
+  stationRefs.queueInbound = { settled: -1, inFlight: 0 };
   stationRefs.decorBlockers = [
     {
       type: 'oriented-box',
@@ -973,7 +979,7 @@ export function buildStationAndQueue({
   // ── walker pool: guests that visibly board (gate → platform → train) and
   //    alight (train → platform → exit walkway). Spawned via spawnStationWalkers.
   const walkerPool = [];
-  for (let i = 0; i < 64; i++) {
+  for (let i = 0; i < 96; i++) {
     const seed = i + 9001;
     const g = guest(THREE, grp, 0, plazaTop, 0, i * 3 + 1, headColors, guestColors, {
       hat: guestBuyerRoll(seed) < (d.hatFrac || 0) ? guestColors[(seed + 2) % guestColors.length] : null,
@@ -1094,6 +1100,55 @@ function detourPlazaPath(pts, obstacles) {
   return out;
 }
 
+// A guest who just joined the line: enter under the arch and snake down the
+// switchbacks to the end of the line — the walk those empty back lanes exist
+// for. The crowd instance only appears when this walker arrives (see the
+// inbound accounting in updateQueueVisuals), so nobody teleports into line.
+export function spawnQueueJoiner(stationRefs) {
+  const w = stationRefs.walkers;
+  const g = stationRefs.walkerGeom;
+  const coords = stationRefs.queueSlotCoords;
+  const inb = stationRefs.queueInbound;
+  const spl = stationRefs.queueSlotsPerLane || 8;
+  if (!w || !g || !coords?.length || !inb || !w.pool.length || !Number.isFinite(g.archZ)) return false;
+  const target = Math.min(coords.length - 1, Math.max(0, inb.settled + inb.inFlight));
+  const at = i => ({ x: coords[i].x, y: g.plazaTop, z: coords[i].z });
+  // through the arch, then one waypoint pair per switchback U-turn
+  const pts = [
+    { x: g.archX, y: g.plazaTop, z: g.archZ + 0.7 },
+    { x: g.archX, y: g.plazaTop, z: g.archZ - 0.35 },
+  ];
+  const push = p => {
+    const last = pts[pts.length - 1];
+    if (Math.hypot(p.x - last.x, p.z - last.z) > 0.02) pts.push(p);
+  };
+  const entry = coords.length - 1;
+  push(at(entry));
+  for (let i = entry; i > target; i--) {
+    if (((i / spl) | 0) !== (((i - 1) / spl) | 0)) {   // lane boundary: the U-turn
+      push(at(i));
+      push(at(i - 1));
+    }
+  }
+  push(at(target));
+  let len = 0;
+  for (let s = 1; s < pts.length; s++) {
+    len += Math.hypot(pts[s].x - pts[s - 1].x, pts[s].z - pts[s - 1].z);
+  }
+  const mesh = w.pool.pop();
+  w.active.push({
+    mesh,
+    pts,
+    dist: 0,
+    len,
+    speed: 1.5 + Math.random() * 0.5,   // brisk — they're eager to lock a spot
+    delay: Math.random() * 0.2,
+    settleInbound: true,
+  });
+  inb.inFlight++;
+  return true;
+}
+
 // A walk-up-and-decide vignette at the entrance arch, staged from the real
 // plaza→queue flow: a guest strolls from a stand to the arch, pauses to size
 // up the line, then either commits (walks through — the queue crowd grows) or
@@ -1166,7 +1221,27 @@ export function updateQueueVisuals({ queue, stationRefs, dt = 0, time = 0 }) {
     const coords = crowd.coords;
     const last = coords.length - 1;
     const plazaTop = crowd.plazaTop;
-    const m = Math.min(crowd.poolSize, n);
+    const simM = Math.min(crowd.poolSize, n);
+
+    // Walk-ins: a joiner only becomes a standing instance once their walker
+    // has snaked the lanes to the end of the line. The rendered count lags the
+    // sim count by the guests still in flight; if the walker pool runs dry the
+    // overflow settles instantly (graceful at huge scale).
+    const inb = stationRefs.queueInbound;
+    let m = simM;
+    if (inb) {
+      if (inb.settled < 0) inb.settled = simM;   // adopt on first frame after a rebuild
+      if (simM < inb.settled) inb.settled = simM; // boarding pulled from the front
+      let want = simM - inb.settled - inb.inFlight;
+      while (want > 0) {
+        if (!spawnQueueJoiner(stationRefs)) {
+          inb.settled = Math.min(simM, inb.settled + want);   // pool dry: appear in place
+          break;
+        }
+        want--;
+      }
+      m = Math.min(simM, inb.settled);
+    }
 
     const anim = stationRefs.queueAnim || (stationRefs.queueAnim = { advance: 0, prevM: m });
     if (m < anim.prevM) {
@@ -1261,6 +1336,11 @@ export function updateQueueVisuals({ queue, stationRefs, dt = 0, time = 0 }) {
         continue;
       }
       if (walker.dist >= walker.len) {
+        if (walker.settleInbound && stationRefs.queueInbound) {
+          // the joiner reached the end of the line — hand over to the crowd
+          stationRefs.queueInbound.settled++;
+          stationRefs.queueInbound.inFlight--;
+        }
         walker.mesh.visible = false;
         w.active.splice(i, 1);
         w.pool.push(walker.mesh);

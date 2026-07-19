@@ -781,6 +781,11 @@ if(window.__TIME_COASTER_TEST__){
       visualCapacity: stationRefs.queueVisualCapacity,
       lanes: stationRefs.queueLanes,
       guests: stationRefs.crowd?.poolSize || 0,
+      simQueue: sim.queue,
+      plaza: sim.plaza,
+      // walk-in accounting: standing instances vs joiners still in the lanes
+      settled: stationRefs.queueInbound?.settled ?? -1,
+      inFlight: stationRefs.queueInbound?.inFlight ?? 0,
     }),
     canPlaceDecor: (type, x, z) => canPlaceDecoration({ property, decorations, type, x, z, blockers:decorBlockers }),
     screenPoint: (x, z, y = 0) => {
@@ -1141,14 +1146,16 @@ function stepSim(dt){
   });
   sim.plaza=flows.plaza;
   sim.queue=flows.queue;
-  // stage walk-up-and-decide vignettes from the REAL join flow: most walk-ups
-  // commit when willingness is high; at low willingness you watch guests shrug
-  // and drift back to the shops — the balk mechanic made visible
+  // Joiners now walk the lanes for real (queue walk-ins spawned by the
+  // renderer when the count rises). The theater that remains is the BALK —
+  // a looker who sized up the line at the arch and bailed. Staged from the
+  // join flow at the miss rate (1−joinWill), so a punishing wait shows a
+  // parade of shrugs while a great ride shows almost none.
   vignetteAcc=Math.min(vignetteAcc+flows.join, 4);   // don't bank a parade
   vignetteCool-=dt;
   if(vignetteAcc>=1 && vignetteCool<=0){
     vignetteAcc-=1;
-    if(spawnPlazaVignette(stationRefs, Math.random()<d.joinWill?'join':'balk')) vignetteCool=1.6;
+    if(Math.random()>d.joinWill && spawnPlazaVignette(stationRefs,'balk')) vignetteCool=1.6;
   }
   // snack income scales with guests waiting (capped per stand, raised by
   // Shade Canopies), boosted by Janitors, tickets and theming
