@@ -79,7 +79,7 @@ export function createStaffActors({ THREE, scene, disposeGroup }) {
   }
 
   function update({ dt, time, geom, frame, installing = false }) {
-    if (!geom || !actors.length) return;
+    if (!geom || !actors.length) return null;
     // walkerGeom coordinates are local to the station's frame group (it is
     // rotated/translated onto the station track segment) — mirror it.
     if (frame) {
@@ -88,6 +88,11 @@ export function createStaffActors({ THREE, scene, disposeGroup }) {
     }
     const z = zones(geom);
     const sinceLaunch = time - lastDispatch;
+    // the forecourt past the arch — entertainers stage shows there, janitors
+    // sweep it, marketers greet at the arch. Absent on older geometry.
+    const hasFore = Number.isFinite(geom.foreZ0) && Number.isFinite(geom.foreZ1);
+    const foreMid = hasFore ? (geom.foreZ0 + geom.foreZ1) / 2 : 0;
+    let showSpot = null;   // where a show is happening — wanderers drift to watch
 
     for (const a of actors) {
       const { mesh, person, role, idx, roleCount } = a;
@@ -104,12 +109,25 @@ export function createStaffActors({ THREE, scene, disposeGroup }) {
         mesh.position.set(x, z.platY + hop, z.platZ);
         mesh.rotation.y = Math.PI;              // face the berth
       } else if (role === 'entertainers') {
-        // patrol in front of the queue gate; every few seconds, a spin show
-        const lane = z.z0 + 0.18 * (z.z1 - z.z0) + (idx % 2) * 0.5;
-        const { v: x, dir } = pingPong(z.gateX - 2.6, z.gateX + 2.6, t, 0.8);
-        const showing = (t % 6) > 4.4;
-        mesh.position.set(x, z.plazaY + (showing ? Math.abs(Math.sin(t * 9)) * 0.12 : bob), lane);
-        mesh.rotation.y = showing ? t * 7 : (dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+        if (hasFore && idx > 0) {
+          // work the forecourt: orbit the fountain, big spin show every few
+          // seconds — the plaza crowd drifts over to watch (via showSpot)
+          const ang = t * 0.42 + idx * 2.4;
+          const R = 2.4;
+          const x = Math.cos(ang) * R;
+          const zz = foreMid + Math.sin(ang) * R * 0.55;
+          const showing = ((t + idx * 2.3) % 7) > 5.1;
+          mesh.position.set(x, z.plazaY + (showing ? Math.abs(Math.sin(t * 9)) * 0.14 : bob), zz);
+          mesh.rotation.y = showing ? t * 7 : ang + Math.PI / 2;
+          if (showing && !showSpot) showSpot = { x, z: zz };
+        } else {
+          // the lead entertainer works the queue gate as before
+          const lane = z.z0 + 0.18 * (z.z1 - z.z0) + (idx % 2) * 0.5;
+          const { v: x, dir } = pingPong(z.gateX - 2.6, z.gateX + 2.6, t, 0.8);
+          const showing = (t % 6) > 4.4;
+          mesh.position.set(x, z.plazaY + (showing ? Math.abs(Math.sin(t * 9)) * 0.12 : bob), lane);
+          mesh.rotation.y = showing ? t * 7 : (dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+        }
       } else if (role === 'mechanics') {
         if (installing) {
           // on the deck, hammering: sharp quick bob
@@ -124,9 +142,11 @@ export function createStaffActors({ THREE, scene, disposeGroup }) {
           mesh.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
         }
       } else if (role === 'janitors') {
-        // wander the plaza on a per-person loop, broom-rocking as they go
+        // wander the plaza on a per-person loop, broom-rocking as they go —
+        // sweeping all the way through the forecourt when it exists
+        const zEnd = hasFore ? geom.foreZ1 - 0.4 : z.z1;
         const cx = z.x0 + (0.15 + 0.7 * ph) * (z.x1 - z.x0);
-        const cz = z.z0 + 0.35 * (z.z1 - z.z0) + (idx % 2) * 0.9;
+        const cz = z.z0 + (0.2 + 0.55 * ((idx % 3) / 2)) * (zEnd - z.z0);
         const x = cx + Math.sin(t * 0.45) * 1.6;
         const zz = cz + Math.cos(t * 0.3) * 0.8;
         mesh.position.set(x, z.plazaY + bob * 0.6, zz);
@@ -144,15 +164,22 @@ export function createStaffActors({ THREE, scene, disposeGroup }) {
         mesh.position.set(x, z.plazaY + bob * 0.5, z.z1 - 0.4 - (idx % 2) * 0.55);
         mesh.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2;
       } else if (role === 'marketers') {
-        // working the exit-walkway stretch, flyers out (stay on the slab —
-        // wandering past the pier corner reads as walking on water)
-        const { v: x, dir } = pingPong(z.exitX - 1.2, z.exitX + 1.2, t, 0.55);
-        mesh.position.set(x, z.plazaY + bob, z.z1 - 0.4 - (idx % 2) * 0.55);
-        mesh.rotation.y = (dir > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.sin(t * 3) * 0.15;
+        if (hasFore) {
+          // greet incoming guests at the entrance arch, flyers waving
+          const { v: x, dir } = pingPong(geom.archX - 1.7, geom.archX + 1.7, t, 0.5);
+          mesh.position.set(x, z.plazaY + bob, geom.archZ + 1.15 + (idx % 2) * 0.5);
+          mesh.rotation.y = (dir > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.sin(t * 3) * 0.18;
+        } else {
+          // no forecourt yet: work the exit-walkway stretch (stay on the slab)
+          const { v: x, dir } = pingPong(z.exitX - 1.2, z.exitX + 1.2, t, 0.55);
+          mesh.position.set(x, z.plazaY + bob, z.z1 - 0.4 - (idx % 2) * 0.55);
+          mesh.rotation.y = (dir > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.sin(t * 3) * 0.15;
+        }
       }
     }
     // param intentionally unused beyond staleness: keep dt for future easing
     void dt;
+    return showSpot;
   }
 
   return {

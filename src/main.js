@@ -78,6 +78,7 @@ import { buildPropertyGeometry as renderPropertyGeometry } from './render/proper
 import {
   buildStationAndQueue as renderStationAndQueue,
   spawnStationWalkers,
+  spawnPlazaVignette,
   updateQueueVisuals as renderQueueVisuals,
   updatePlazaVisuals,
 } from './render/station.js?v=20260703-13';
@@ -821,6 +822,7 @@ if(window.__TIME_COASTER_TEST__){
 // =========================================================================
 let coinThrottle=0, hudAccum=0, dispatchHinted=false;
 let concAcc=0;   // concessions point-of-sale accumulator (fractional sales)
+let vignetteAcc=0, vignetteCool=0;   // walk-up-and-decide theater at the arch
 const stationBusy=()=>trains.some(t=>t.mode==='dwell');
 // measured income: every credited dollar is recorded so the HUD can show what
 // the park actually earns (projected rate overstates it when trains back up)
@@ -1139,6 +1141,15 @@ function stepSim(dt){
   });
   sim.plaza=flows.plaza;
   sim.queue=flows.queue;
+  // stage walk-up-and-decide vignettes from the REAL join flow: most walk-ups
+  // commit when willingness is high; at low willingness you watch guests shrug
+  // and drift back to the shops — the balk mechanic made visible
+  vignetteAcc=Math.min(vignetteAcc+flows.join, 4);   // don't bank a parade
+  vignetteCool-=dt;
+  if(vignetteAcc>=1 && vignetteCool<=0){
+    vignetteAcc-=1;
+    if(spawnPlazaVignette(stationRefs, Math.random()<d.joinWill?'join':'balk')) vignetteCool=1.6;
+  }
   // snack income scales with guests waiting (capped per stand, raised by
   // Shade Canopies), boosted by Janitors, tickets and theming
   let passive=0;
@@ -1216,13 +1227,14 @@ function tick(){
     if(d){
       ensureQueueVisualFresh(d);
       updateQueueVisuals(frameDt);
-      if(stationRefs.walkerGeom) staffActors?.update({
+      // an entertainer mid-show returns their spot; wanderers drift to watch
+      if(stationRefs.walkerGeom) stationRefs.plazaShow = staffActors?.update({
         dt: frameDt,
         time: performance.now()*0.001,
         geom: stationRefs.walkerGeom,
         frame: stationRefs.frameGroup,
         installing: !!maintenance.current,
-      });
+      }) || null;
     }
     hudAccum+=frameDt;
     if(hudAccum>=0.2){ refreshHUD(); hudAccum=0; }

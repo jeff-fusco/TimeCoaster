@@ -596,14 +596,23 @@ export function updatePlazaVisuals({ plaza = 0, stationRefs, dt = 0, time = 0 })
       const dz = w.tz - w.z;
       const dist = Math.hypot(dx, dz);
       if (dist < 0.08) {
-        // arrived: browse a while, then drift to the next draw
+        // arrived: browse a while, then drift to the next draw — or, if an
+        // entertainer is mid-show, wander over to catch it
         w.pause = 2.5 + guestBuyerRoll(i * 23 + w.hops * 7 + 5) * 4.5;
         w.hops++;
-        const poi = pc.pickPoi(guestBuyerRoll(i * 29 + w.hops * 13 + 1));
+        const show = stationRefs.plazaShow;
         const a = guestBuyerRoll(i * 31 + w.hops * 17 + 9) * Math.PI * 2;
-        const rr = (poi.r0 ?? 0.35) + guestBuyerRoll(i * 37 + w.hops * 19 + 15) * (poi.r - (poi.r0 ?? 0.35));
-        w.tx = Math.min(pc.bounds.x1, Math.max(pc.bounds.x0, poi.x + Math.cos(a) * rr));
-        w.tz = Math.min(pc.bounds.z1, Math.max(pc.bounds.z0, poi.z + Math.sin(a) * rr));
+        let cx, cz, rr;
+        if (show && guestBuyerRoll(i * 41 + w.hops * 23 + 3) < 0.45) {
+          cx = show.x; cz = show.z;
+          rr = 0.8 + guestBuyerRoll(i * 37 + w.hops * 19 + 15) * 1.0;   // audience ring
+        } else {
+          const poi = pc.pickPoi(guestBuyerRoll(i * 29 + w.hops * 13 + 1));
+          cx = poi.x; cz = poi.z;
+          rr = (poi.r0 ?? 0.35) + guestBuyerRoll(i * 37 + w.hops * 19 + 15) * (poi.r - (poi.r0 ?? 0.35));
+        }
+        w.tx = Math.min(pc.bounds.x1, Math.max(pc.bounds.x0, cx + Math.cos(a) * rr));
+        w.tz = Math.min(pc.bounds.z1, Math.max(pc.bounds.z0, cz + Math.sin(a) * rr));
       } else if (dt > 0) {
         const step = Math.min(dist, w.speed * dt);
         w.x += dx / dist * step;
@@ -916,6 +925,15 @@ export function spawnStationWalkers(stationRefs, kind, riders, duration = 2, zon
           { x: g.exitX, y: g.plazaTop, z: g.qStart - 0.3 },
           { x: g.exitX, y: g.plazaTop, z: g.exitEndZ },
         ];
+    // riders rejoin the plaza: off the walkway they drift into the forecourt
+    // (visibly closing the plaza → ride → plaza loop) before despawning
+    if (kind === 'exit' && Number.isFinite(g.foreZ0)) {
+      pts.push({
+        x: g.exitX * 0.35 + (Math.random() - 0.5) * 1.6,
+        y: g.plazaTop,
+        z: g.foreZ0 + 1.0 + Math.random() * 1.8,
+      });
+    }
     let len = 0;
     for (let s = 1; s < pts.length; s++) {
       len += Math.hypot(pts[s].x - pts[s - 1].x, pts[s].z - pts[s - 1].z);
@@ -929,6 +947,48 @@ export function spawnStationWalkers(stationRefs, kind, riders, duration = 2, zon
       delay: (i / count) * Math.max(0.3, duration * 0.5) + Math.random() * 0.15,
     });
   }
+}
+
+// A walk-up-and-decide vignette at the entrance arch, staged from the real
+// plaza→queue flow: a guest strolls from a stand to the arch, pauses to size
+// up the line, then either commits (walks through — the queue crowd grows) or
+// balks (head-shake, drifts back to the shops). Pure theater over sim truth.
+export function spawnPlazaVignette(stationRefs, kind = 'join') {
+  const w = stationRefs.walkers;
+  const g = stationRefs.walkerGeom;
+  const pois = stationRefs.plazaPOIs;
+  if (!w || !g || !pois?.length || !w.pool.length || !Number.isFinite(g.archZ)) return false;
+  const ringPoint = poi => {
+    const a = Math.random() * Math.PI * 2;
+    const r = (poi.r0 ?? 0.4) + Math.random() * ((poi.r ?? 1) - (poi.r0 ?? 0.4));
+    return { x: poi.x + Math.cos(a) * r, y: g.plazaTop, z: poi.z + Math.sin(a) * r };
+  };
+  const start = ringPoint(pois[(Math.random() * pois.length) | 0]);
+  const arch = { x: g.archX, y: g.plazaTop, z: g.archZ + 0.85 };
+  const pts = [start, arch];
+  if (kind === 'join') {
+    pts.push({ x: g.archX, y: g.plazaTop, z: g.archZ - 0.75 });   // through the gate
+  } else {
+    pts.push(ringPoint(pois[(Math.random() * pois.length) | 0])); // shrug, wander back
+  }
+  const lenToArch = Math.hypot(arch.x - start.x, arch.z - start.z);
+  let len = lenToArch;
+  for (let s = 2; s < pts.length; s++) {
+    len += Math.hypot(pts[s].x - pts[s - 1].x, pts[s].z - pts[s - 1].z);
+  }
+  const mesh = w.pool.pop();
+  w.active.push({
+    mesh,
+    pts,
+    dist: 0,
+    len,
+    speed: 0.6 + Math.random() * 0.25,
+    delay: Math.random() * 0.3,
+    pauseAt: lenToArch,
+    pauseFor: kind === 'join' ? 0.7 + Math.random() * 0.5 : 1.2 + Math.random() * 0.6,
+    wiggle: kind !== 'join',   // the "nah" head-shake
+  });
+  return true;
 }
 
 function placeWalker(walker) {
@@ -1035,7 +1095,9 @@ export function updateQueueVisuals({ queue, stationRefs, dt = 0, time = 0 }) {
     }
   }
 
-  // walkers: staggered start, then advance along their waypoint polyline
+  // walkers: staggered start, then advance along their waypoint polyline.
+  // A walker with pauseAt holds at that distance (the arch decision beat) —
+  // balkers get a little "nah" head-shake while they think it over.
   const w = stationRefs.walkers;
   if (w && w.active.length && dt > 0) {
     for (let i = w.active.length - 1; i >= 0; i--) {
@@ -1043,6 +1105,13 @@ export function updateQueueVisuals({ queue, stationRefs, dt = 0, time = 0 }) {
       if ((walker.delay -= dt) > 0) continue;
       walker.mesh.visible = true;
       walker.dist += walker.speed * dt;
+      if (walker.pauseFor > 0 && walker.dist >= (walker.pauseAt ?? Infinity)) {
+        walker.dist = walker.pauseAt;
+        walker.pauseFor -= dt;
+        placeWalker(walker);
+        if (walker.wiggle) walker.mesh.position.x += Math.sin(time * 11) * 0.05;
+        continue;
+      }
       if (walker.dist >= walker.len) {
         walker.mesh.visible = false;
         w.active.splice(i, 1);
