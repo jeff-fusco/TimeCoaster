@@ -79,6 +79,7 @@ import {
   buildStationAndQueue as renderStationAndQueue,
   spawnStationWalkers,
   updateQueueVisuals as renderQueueVisuals,
+  updatePlazaVisuals,
 } from './render/station.js?v=20260703-13';
 import {
   CAR_LEN,
@@ -641,7 +642,9 @@ function buildStationAndQueue(){
 }
 
 function updateQueueVisuals(dt=0){
-  renderQueueVisuals({ queue: sim.queue, stationRefs, dt, time: performance.now()*0.001 });
+  const time=performance.now()*0.001;
+  renderQueueVisuals({ queue: sim.queue, stationRefs, dt, time });
+  updatePlazaVisuals({ plaza: sim.plaza, stationRefs, dt, time });
 }
 
 function ensureQueueVisualFresh(d = derived()){
@@ -1696,8 +1699,21 @@ function spawnCoin(worldPos,amount){
 // A concession sale: an item icon + price floating over a random queue guest.
 function spawnConcessionPop(item, price){
   const g=stationRefs.frameGroup, coords=stationRefs.queueSlotCoords;
-  if(!g || !coords || !coords.length) return;
-  const c=coords[(Math.random()*coords.length)|0];
+  if(!g) return;
+  // sales ring up at the stands: pop over the matching forecourt POI (hat cart,
+  // balloon cart, fountain snackers), jittered so a busy stand reads as a crowd;
+  // fall back to the queue line if the forecourt isn't built
+  const pois=stationRefs.plazaPOIs;
+  let c=null;
+  if(pois && pois.length){
+    const match=pois.filter(p=>p.kind===item.key) ;
+    const pool=match.length?match:pois;
+    const p=pool[(Math.random()*pool.length)|0];
+    c={ x:p.x+(Math.random()-0.5)*p.r, z:p.z+(Math.random()-0.5)*p.r };
+  } else if(coords && coords.length){
+    c=coords[(Math.random()*coords.length)|0];
+  }
+  if(!c) return;
   _v.set(c.x, (stationRefs.walkerGeom?.plazaTop ?? 0.5)+0.95, c.z);
   g.localToWorld(_v);
   _v.project(camera);

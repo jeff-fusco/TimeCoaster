@@ -109,6 +109,7 @@ function buildQueue({
   platLen,
   platTop,
   canopyLevel = 0,
+  snacksLevel = 0,
   hatFrac = 0,
   balloonFrac = 0,
   stationRefs,
@@ -131,10 +132,14 @@ function buildQueue({
   const xR = laneLen / 2;
   const plazaTop = 0.06;
 
-  // ── plaza pier: a packed-earth slab jutting south off the starter island ──
+  // ── plaza pier: a packed-earth slab jutting south off the starter island.
+  //    Past the entrance arch it widens into the FORECOURT — the milling ground
+  //    where the plaza crowd shops, gathers at the fountain, and sizes up the
+  //    line before committing to it. ──
+  const FORE_DEPTH = 5.2;
   const plazaW = laneLen + 2.6;
   const plazaZ0 = startZ - 1.5;                 // tucks under the starter slab edge
-  const plazaZ1 = startZ + depth + 2.1;         // room for the entrance arch
+  const plazaZ1 = startZ + depth + 2.1 + FORE_DEPTH;
   const plazaDepth = 1.45;
   const plaza = new THREE.Mesh(
     new THREE.BoxGeometry(plazaW, plazaDepth, plazaZ1 - plazaZ0),
@@ -334,6 +339,66 @@ function buildQueue({
     }
   }
 
+  // ── forecourt furniture: a fountain to gather at, benches to rest on ──
+  const foreZ0 = archZ + 1.0;
+  const foreZ1 = plazaZ1 - 0.55;
+  const foreMidZ = (foreZ0 + foreZ1) / 2;
+  {
+    // tiered fountain: stone basin, water disc, center spire with a cap
+    const stoneMat = new THREE.MeshLambertMaterial({ color: 0xd8cba8 });
+    const waterMat = new THREE.MeshLambertMaterial({ color: 0x7ec8e3 });
+    const basin = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 1.05, 0.34, 12), stoneMat);
+    basin.position.set(0, plazaTop + 0.17, foreMidZ);
+    basin.castShadow = true;
+    grp.add(basin);
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(0.82, 0.82, 0.08, 12), waterMat);
+    water.position.set(0, plazaTop + 0.36, foreMidZ);
+    grp.add(water);
+    const spire = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.62, 8), stoneMat);
+    spire.position.set(0, plazaTop + 0.65, foreMidZ);
+    spire.castShadow = true;
+    grp.add(spire);
+    const jet = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), waterMat);
+    jet.position.set(0, plazaTop + 1.02, foreMidZ);
+    grp.add(jet);
+  }
+  const benchMat = new THREE.MeshLambertMaterial({ color: colors.trunk });
+  const benchTopMat = new THREE.MeshLambertMaterial({ color: 0xfbf3e2 });
+  const benchAt = (bx, bz) => {
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.1, 0.4), benchTopMat);
+    seat.position.set(bx, plazaTop + 0.34, bz);
+    seat.castShadow = true;
+    grp.add(seat);
+    for (const dx of [-0.42, 0.42]) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.3, 0.34), benchMat);
+      leg.position.set(bx + dx, plazaTop + 0.15, bz);
+      grp.add(leg);
+    }
+  };
+  benchAt(-laneLen * 0.38, foreZ0 + 0.6);
+  benchAt(laneLen * 0.38, foreZ0 + 0.6);
+
+  // snack kiosk anchors the forecourt's left side once Snack Stands are bought
+  if (snacksLevel > 0) {
+    const kx = -laneLen * 0.33;
+    const kz = foreZ0 + 1.5;
+    box(THREE, grp, 0xe85d75, 1.2, 1.0, 1.2, kx, 0.56, kz, true);
+    box(THREE, grp, colors.cloud, 1.5, 0.18, 1.5, kx, 1.2, kz, true);
+  }
+
+  // points of interest the plaza crowd drifts between (local frame coords);
+  // weights bias where wanderers head — the stands and the fountain are the
+  // draws. r0..r is the browsing ring: r0 keeps guests OUT of the furniture
+  // (nobody wades in the fountain or stands inside a cart).
+  const pois = [{ x: 0, z: foreMidZ, r0: 1.25, r: 1.9, kind: 'fountain', w: 3 }];
+  if (snacksLevel > 0) pois.push({ x: -laneLen * 0.33, z: foreZ0 + 2.45, r0: 0.55, r: 1.3, kind: 'snack', w: 3 });
+  if (hatFrac > 0) pois.push({ x: -laneLen * 0.28, z: cartZ - 0.75, r0: 0.35, r: 1.1, kind: 'hat', w: 2 });
+  if (balloonFrac > 0) pois.push({ x: laneLen * 0.28, z: cartZ - 0.75, r0: 0.35, r: 1.0, kind: 'balloon', w: 2 });
+  pois.push({ x: -laneLen * 0.38, z: foreZ0 + 0.6, r0: 0.4, r: 0.9, kind: 'bench', w: 1 });
+  pois.push({ x: laneLen * 0.38, z: foreZ0 + 0.6, r0: 0.4, r: 0.9, kind: 'bench', w: 1 });
+  // the arch approach — where deciding guests linger (also the ③ vignette mark)
+  pois.push({ x: archX, z: archZ + 1.1, r0: 0.3, r: 1.0, kind: 'arch', w: 1 });
+
   // ── guest slots: slot 0 at the boarding gate, snaking back to the entrance.
   //    Every guest is an individual — the crowd renders as a handful of
   //    InstancedMeshes (see buildCrowd), so 700 guests cost ~5 draw calls.
@@ -361,6 +426,20 @@ function buildQueue({
     hatFrac,
     balloonFrac,
   });
+  // the forecourt crowd + the POIs coin pops and vignettes anchor to
+  stationRefs.plazaPOIs = pois;
+  stationRefs.plazaBounds = { x0: xL + 0.6, x1: xR - 0.6, z0: foreZ0, z1: foreZ1 };
+  stationRefs.plazaCrowd = buildPlazaCrowd({
+    THREE,
+    grp,
+    plazaTop,
+    bounds: stationRefs.plazaBounds,
+    pois,
+    headColors,
+    guestColors,
+    hatFrac,
+    balloonFrac,
+  });
   return {
     depth,
     laneLen,
@@ -372,6 +451,10 @@ function buildQueue({
     xR,
     gapW,
     visualCapacity: stationRefs.queueSlotCoords.length,
+    archX,
+    archZ,
+    foreZ0,
+    foreZ1,
     bounds: {
       cx: 0,
       cz: (plazaZ0 + plazaZ1) / 2,
@@ -434,6 +517,150 @@ function buildCrowd({ THREE, grp, coords, plazaTop, headColors, guestColors, hat
   };
 }
 
+// The forecourt crowd: plaza guests who mill between the fountain, the carts
+// and the benches — window-shopping rather than queueing. Same instanced
+// per-colour trick as the queue crowd; movement is a tiny seeded state machine
+// per wanderer (walk to a POI ring point, browse a few seconds, drift on).
+function buildPlazaCrowd({ THREE, grp, plazaTop, bounds, pois, headColors, guestColors, hatFrac, balloonFrac, poolSize = 90 }) {
+  if (!pois?.length) return null;
+  const n = poolSize;
+  const make = (geo, colorHex, count, shadow = true) => {
+    const mesh = new THREE.InstancedMesh(geo, new THREE.MeshLambertMaterial({ color: colorHex }), Math.max(count, 1));
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.count = 0;
+    mesh.castShadow = shadow;
+    mesh.frustumCulled = false;
+    grp.add(mesh);
+    return mesh;
+  };
+  const nColors = guestColors.length;
+  const groupCap = Math.ceil(n / Math.max(1, nColors));
+  const bodies = guestColors.map(c => make(new THREE.CylinderGeometry(0.12, 0.16, 0.42, 6), c, groupCap));
+  const heads = guestColors.map((_, k) => make(new THREE.SphereGeometry(0.13, 8, 6), headColors[k % headColors.length], groupCap));
+  const hatOwners = guestColors.map(() => []);
+  const balloonOwners = guestColors.map(() => []);
+  for (let i = 0; i < n; i++) {
+    if (guestBuyerRoll(i + 131) < hatFrac) hatOwners[(i + 2) % nColors].push(i);
+    if (guestBuyerRoll(i + 8087) < balloonFrac) balloonOwners[(i + 4) % nColors].push(i);
+  }
+  const hats = guestColors.map((c, k) => make(new THREE.ConeGeometry(HAT_SIZE.radius, HAT_SIZE.height, 7), c, hatOwners[k].length));
+  const balloons = guestColors.map((c, k) => make(new THREE.SphereGeometry(BALLOON_SIZE.radius, 8, 6), c, balloonOwners[k].length));
+  const strings = balloonOwners.map(list =>
+    make(new THREE.CylinderGeometry(BALLOON_SIZE.stringR, BALLOON_SIZE.stringR, BALLOON_SIZE.stringLen, 3), 0xf5f0d7, list.length, false));
+
+  // one weighted POI pick, deterministic on the roll
+  const totalW = pois.reduce((s, p) => s + p.w, 0);
+  const pickPoi = r => {
+    let roll = r * totalW;
+    for (const p of pois) { roll -= p.w; if (roll <= 0) return p; }
+    return pois[pois.length - 1];
+  };
+  const wanderers = [];
+  for (let i = 0; i < n; i++) {
+    const poi = pickPoi(guestBuyerRoll(i * 3 + 17));
+    const a = guestBuyerRoll(i * 5 + 29) * Math.PI * 2;
+    const rr = (poi.r0 ?? 0.35) + guestBuyerRoll(i * 7 + 43) * (poi.r - (poi.r0 ?? 0.35));
+    wanderers.push({
+      x: bounds.x0 + guestBuyerRoll(i * 11 + 3) * (bounds.x1 - bounds.x0),
+      z: bounds.z0 + guestBuyerRoll(i * 13 + 7) * (bounds.z1 - bounds.z0),
+      tx: poi.x + Math.cos(a) * rr,
+      tz: poi.z + Math.sin(a) * rr,
+      pause: guestBuyerRoll(i * 17 + 11) * 3,
+      speed: 0.45 + guestBuyerRoll(i * 19 + 13) * 0.3,
+      hops: 0,
+    });
+  }
+  return {
+    bodies, heads, hats, balloons, strings, hatOwners, balloonOwners,
+    nColors, plazaTop, bounds, pois, pickPoi, wanderers,
+    poolSize: n,
+    mat: new THREE.Matrix4(),
+  };
+}
+
+// Per-frame forecourt crowd: how many wanderers show is a token scale of the
+// live plaza stock (sqrt keeps early growth visible, the pool caps the cost).
+export function updatePlazaVisuals({ plaza = 0, stationRefs, dt = 0, time = 0 }) {
+  const pc = stationRefs.plazaCrowd;
+  if (!pc) return;
+  const vis = Math.min(pc.poolSize, Math.ceil(Math.sqrt(Math.max(0, plaza)) * 3));
+  const M = pc.mat;
+  const nColors = pc.nColors;
+  for (let i = 0; i < vis; i++) {
+    const w = pc.wanderers[i];
+    let walking = false;
+    if (w.pause > 0) {
+      w.pause -= dt;
+    } else {
+      const dx = w.tx - w.x;
+      const dz = w.tz - w.z;
+      const dist = Math.hypot(dx, dz);
+      if (dist < 0.08) {
+        // arrived: browse a while, then drift to the next draw
+        w.pause = 2.5 + guestBuyerRoll(i * 23 + w.hops * 7 + 5) * 4.5;
+        w.hops++;
+        const poi = pc.pickPoi(guestBuyerRoll(i * 29 + w.hops * 13 + 1));
+        const a = guestBuyerRoll(i * 31 + w.hops * 17 + 9) * Math.PI * 2;
+        const rr = (poi.r0 ?? 0.35) + guestBuyerRoll(i * 37 + w.hops * 19 + 15) * (poi.r - (poi.r0 ?? 0.35));
+        w.tx = Math.min(pc.bounds.x1, Math.max(pc.bounds.x0, poi.x + Math.cos(a) * rr));
+        w.tz = Math.min(pc.bounds.z1, Math.max(pc.bounds.z0, poi.z + Math.sin(a) * rr));
+      } else if (dt > 0) {
+        const step = Math.min(dist, w.speed * dt);
+        w.x += dx / dist * step;
+        w.z += dz / dist * step;
+        walking = true;
+      }
+    }
+    // stroll bob while walking, a gentler idle sway while browsing
+    const y = pc.plazaTop + (walking
+      ? Math.abs(Math.sin(time * 6 + i * 1.3)) * 0.045
+      : Math.abs(Math.sin(time * 1.6 + i * 2.1)) * 0.015);
+    const g = i % nColors;
+    const k = (i / nColors) | 0;
+    M.makeTranslation(w.x, y + 0.21, w.z);
+    pc.bodies[g].setMatrixAt(k, M);
+    M.makeTranslation(w.x, y + 0.5, w.z);
+    pc.heads[g].setMatrixAt(k, M);
+  }
+  for (let g = 0; g < nColors; g++) {
+    const visible = Math.max(0, Math.ceil((vis - g) / nColors));
+    pc.bodies[g].count = visible;
+    pc.heads[g].count = visible;
+    pc.bodies[g].instanceMatrix.needsUpdate = true;
+    pc.heads[g].instanceMatrix.needsUpdate = true;
+  }
+  // accessories track their owner (ascending owner buckets → visible prefix)
+  const hatY = 0.5 + HAT_SIZE.yOffset;
+  const B = BALLOON_SIZE;
+  for (let g = 0; g < nColors; g++) {
+    const hatBucket = pc.hatOwners[g];
+    let hv = 0;
+    for (; hv < hatBucket.length && hatBucket[hv] < vis; hv++) {
+      const w = pc.wanderers[hatBucket[hv]];
+      M.makeTranslation(w.x, pc.plazaTop + hatY, w.z);
+      pc.hats[g].setMatrixAt(hv, M);
+    }
+    pc.hats[g].count = hv;
+    pc.hats[g].instanceMatrix.needsUpdate = true;
+
+    const balloonBucket = pc.balloonOwners[g];
+    let bv = 0;
+    for (; bv < balloonBucket.length && balloonBucket[bv] < vis; bv++) {
+      const w = pc.wanderers[balloonBucket[bv]];
+      // balloons drift on a lazy per-owner phase
+      const sway = Math.sin(time * 1.2 + balloonBucket[bv] * 2.7) * 0.03;
+      M.makeTranslation(w.x + B.x + sway, pc.plazaTop + 0.5 + B.y, w.z + B.z);
+      pc.balloons[g].setMatrixAt(bv, M);
+      M.makeTranslation(w.x + B.x + sway, pc.plazaTop + 0.5 + B.y - B.radius - B.stringLen / 2 + 0.04, w.z + B.z);
+      pc.strings[g].setMatrixAt(bv, M);
+    }
+    pc.balloons[g].count = bv;
+    pc.strings[g].count = bv;
+    pc.balloons[g].instanceMatrix.needsUpdate = true;
+    pc.strings[g].instanceMatrix.needsUpdate = true;
+  }
+}
+
 export function buildStationAndQueue({
   THREE,
   stationGrp,
@@ -464,6 +691,9 @@ export function buildStationAndQueue({
   stationRefs.queueSlotCoords = [];
   stationRefs.queueAnim = null;
   stationRefs.crowd = null;
+  stationRefs.plazaCrowd = null;
+  stationRefs.plazaPOIs = null;
+  stationRefs.plazaBounds = null;
   stationRefs.walkers = null;
   stationRefs.walkerGeom = null;
   stationRefs.frameGroup = null;
@@ -529,6 +759,7 @@ export function buildStationAndQueue({
     platLen: PLAT_LEN,
     platTop: PLAT_H,
     canopyLevel: upgrades.canopy?.level || 0,
+    snacksLevel: upgrades.snacks?.level || 0,
     hatFrac: d.hatFrac || 0,
     balloonFrac: d.balloonFrac || 0,
     stationRefs,
@@ -566,13 +797,7 @@ export function buildStationAndQueue({
     },
   ];
 
-  // snack kiosk serves the line from the gate-side margin of the queue plaza
-  if (upgrades.snacks.level > 0) {
-    const kx = -(Math.max(PLAT_LEN, 8) / 2 + 0.55);
-    const kz = qStart + 1.7;
-    box(THREE, grp, 0xe85d75, 1.2, 1.0, 1.2, kx, 0.56, kz, true);
-    box(THREE, grp, colors.cloud, 1.5, 0.18, 1.5, kx, 1.2, kz, true);
-  }
+  // (the snack kiosk now anchors the forecourt — built inside buildQueue)
 
   // ── exit walkway: steps down at the rear (unload) end of the platform, a
   //    strip along the plaza's margin, and an EXIT sign where guests stroll off ──
@@ -649,6 +874,11 @@ export function buildStationAndQueue({
     gateX: queueInfo.gateX,
     exitX,
     exitEndZ,
+    // the forecourt past the entrance arch — staff and vignettes roam it too
+    archX: queueInfo.archX,
+    archZ: queueInfo.archZ,
+    foreZ0: queueInfo.foreZ0,
+    foreZ1: queueInfo.foreZ1,
   };
 }
 
