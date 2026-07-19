@@ -147,8 +147,18 @@ export function createStaffActors({ THREE, scene, disposeGroup }) {
         const zEnd = hasFore ? geom.foreZ1 - 0.4 : z.z1;
         const cx = z.x0 + (0.15 + 0.7 * ph) * (z.x1 - z.x0);
         const cz = z.z0 + (0.2 + 0.55 * ((idx % 3) / 2)) * (zEnd - z.z0);
-        const x = cx + Math.sin(t * 0.45) * 1.6;
-        const zz = cz + Math.cos(t * 0.3) * 0.8;
+        let x = cx + Math.sin(t * 0.45) * 1.6;
+        let zz = cz + Math.cos(t * 0.3) * 0.8;
+        // sweep AROUND the fountain and stands, not through them
+        for (const o of geom.plazaObstacles || []) {
+          const dx = x - o.x, dz = zz - o.z;
+          const d2 = dx * dx + dz * dz;
+          if (d2 < o.r * o.r) {
+            const d = Math.sqrt(d2) || 0.001;
+            x = o.x + dx / d * o.r;
+            zz = o.z + dz / d * o.r;
+          }
+        }
         mesh.position.set(x, z.plazaY + bob * 0.6, zz);
         mesh.rotation.y = Math.atan2(Math.cos(t * 0.45) * 1.6 * 0.45, -Math.sin(t * 0.3) * 0.8 * 0.3);
         mesh.rotation.z = Math.sin(t * 4) * 0.05;   // sweep sway

@@ -110,6 +110,8 @@ function buildQueue({
   platTop,
   canopyLevel = 0,
   snacksLevel = 0,
+  comfortLevel = 0,
+  foodCourtLevel = 0,
   hatFrac = 0,
   balloonFrac = 0,
   stationRefs,
@@ -362,6 +364,14 @@ function buildQueue({
     jet.position.set(0, plazaTop + 1.02, foreMidZ);
     grp.add(jet);
   }
+  // ── upgrade-scaled forecourt furniture. The plaza GROWS with investment:
+  //    Queue Comfort adds benches, Snack Stands add a second kiosk at Lv6,
+  //    the Food Court builds a pavilion whose seating spreads with its level,
+  //    and high Shade Canopies spill parasols into the forecourt.
+  //    Everything solid registers a keep-out circle so guests walk AROUND it.
+  const pois = [{ x: 0, z: foreMidZ, r0: 1.25, r: 1.9, kind: 'fountain', w: 3 }];
+  const obstacles = [{ x: 0, z: foreMidZ, r: 1.2 }];   // fountain basin
+
   const benchMat = new THREE.MeshLambertMaterial({ color: colors.trunk });
   const benchTopMat = new THREE.MeshLambertMaterial({ color: 0xfbf3e2 });
   const benchAt = (bx, bz) => {
@@ -374,28 +384,94 @@ function buildQueue({
       leg.position.set(bx + dx, plazaTop + 0.15, bz);
       grp.add(leg);
     }
+    pois.push({ x: bx, z: bz, r0: 0.45, r: 0.95, kind: 'bench', w: 1 });
+    obstacles.push({ x: bx, z: bz, r: 0.5 });
   };
-  benchAt(-laneLen * 0.38, foreZ0 + 0.6);
-  benchAt(laneLen * 0.38, foreZ0 + 0.6);
+  // 2 benches to start; Queue Comfort adds one per 3 levels (a comfy park
+  // gives its guests somewhere to sit)
+  const benchSlots = [
+    [-0.46, foreZ0 + 0.45], [0.46, foreZ0 + 0.45],
+    [-0.15, foreZ0 + 0.45], [0.15, foreZ0 + 0.45],
+    [-0.1, foreZ1 - 0.4], [0.1, foreZ1 - 0.4],
+  ];
+  const nBenches = Math.min(benchSlots.length, 2 + Math.floor(comfortLevel / 3));
+  for (let k = 0; k < nBenches; k++) benchAt(benchSlots[k][0] * laneLen, benchSlots[k][1]);
 
-  // snack kiosk anchors the forecourt's left side once Snack Stands are bought
-  if (snacksLevel > 0) {
-    const kx = -laneLen * 0.33;
-    const kz = foreZ0 + 1.5;
+  // snack kiosk anchors the forecourt's left side once Snack Stands are bought;
+  // a second kiosk opens across the back at Lv6
+  const kioskAt = (kx, kz) => {
     box(THREE, grp, 0xe85d75, 1.2, 1.0, 1.2, kx, 0.56, kz, true);
     box(THREE, grp, colors.cloud, 1.5, 0.18, 1.5, kx, 1.2, kz, true);
+    pois.push({ x: kx, z: kz + 0.95, r0: 0.55, r: 1.3, kind: 'snack', w: 3 });
+    obstacles.push({ x: kx, z: kz, r: 0.95 });
+  };
+  if (snacksLevel > 0) kioskAt(-laneLen * 0.33, foreZ0 + 1.5);
+  if (snacksLevel >= 6) kioskAt(-laneLen * 0.3, cartZ - 1.9);
+
+  // Food Court: a roofed pavilion with picnic tables — seating spreads as the
+  // level grows. This is the destination build's centrepiece, so it SHOWS.
+  if (foodCourtLevel > 0) {
+    const fx = laneLen * 0.3;
+    const fz = foreZ0 + 1.6;
+    const postMatFc = new THREE.MeshLambertMaterial({ color: colors.trunk });
+    for (const [dx, dz] of [[-1.1, -0.7], [1.1, -0.7], [-1.1, 0.7], [1.1, 0.7]]) {
+      const p = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 1.6, 6), postMatFc);
+      p.position.set(fx + dx, plazaTop + 0.8, fz + dz);
+      p.castShadow = true;
+      grp.add(p);
+    }
+    box(THREE, grp, 0xf0a35e, 2.7, 0.16, 1.9, fx, plazaTop + 1.68, fz, true);   // awning
+    box(THREE, grp, 0xfbf3e2, 2.2, 0.5, 0.6, fx, plazaTop + 0.45, fz - 0.4, true); // counter
+    obstacles.push({ x: fx, z: fz, r: 1.35 });
+    const nTables = Math.min(5, 1 + Math.floor(foodCourtLevel / 3));
+    const tableSpots = [[-0.9, 1.6], [0.9, 1.6], [0, 2.4], [-1.6, 2.5], [1.6, 2.5]];
+    const tableTopMat = new THREE.MeshLambertMaterial({ color: 0xfbf3e2 });
+    for (let t = 0; t < nTables; t++) {
+      const tx = fx + tableSpots[t][0];
+      const tz = fz + tableSpots[t][1];
+      const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.42, 6), postMatFc);
+      leg.position.set(tx, plazaTop + 0.21, tz);
+      grp.add(leg);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.07, 10), tableTopMat);
+      top.position.set(tx, plazaTop + 0.45, tz);
+      top.castShadow = true;
+      grp.add(top);
+      obstacles.push({ x: tx, z: tz, r: 0.55 });
+    }
+    // the busier the food court, the bigger a draw it is
+    pois.push({ x: fx, z: fz + 1.7, r0: 0.65, r: 1.7, kind: 'foodcourt', w: 2 + Math.min(3, Math.floor(foodCourtLevel / 4)) });
   }
 
-  // points of interest the plaza crowd drifts between (local frame coords);
-  // weights bias where wanderers head — the stands and the fountain are the
-  // draws. r0..r is the browsing ring: r0 keeps guests OUT of the furniture
-  // (nobody wades in the fountain or stands inside a cart).
-  const pois = [{ x: 0, z: foreMidZ, r0: 1.25, r: 1.9, kind: 'fountain', w: 3 }];
-  if (snacksLevel > 0) pois.push({ x: -laneLen * 0.33, z: foreZ0 + 2.45, r0: 0.55, r: 1.3, kind: 'snack', w: 3 });
-  if (hatFrac > 0) pois.push({ x: -laneLen * 0.28, z: cartZ - 0.75, r0: 0.35, r: 1.1, kind: 'hat', w: 2 });
-  if (balloonFrac > 0) pois.push({ x: laneLen * 0.28, z: cartZ - 0.75, r0: 0.35, r: 1.0, kind: 'balloon', w: 2 });
-  pois.push({ x: -laneLen * 0.38, z: foreZ0 + 0.6, r0: 0.4, r: 0.9, kind: 'bench', w: 1 });
-  pois.push({ x: laneLen * 0.38, z: foreZ0 + 0.6, r0: 0.4, r: 0.9, kind: 'bench', w: 1 });
+  // vendor carts register their keep-outs (built above, along the back edge)
+  if (hatFrac > 0) {
+    pois.push({ x: -laneLen * 0.28, z: cartZ - 0.75, r0: 0.35, r: 1.1, kind: 'hat', w: 2 });
+    obstacles.push({ x: -laneLen * 0.28, z: cartZ, r: 0.85 });
+  }
+  if (balloonFrac > 0) {
+    pois.push({ x: laneLen * 0.28, z: cartZ - 0.75, r0: 0.35, r: 1.0, kind: 'balloon', w: 2 });
+    obstacles.push({ x: laneLen * 0.28, z: cartZ, r: 0.8 });
+  }
+
+  // deep Shade Canopies investment spills parasols into the forecourt
+  if (canopyLevel > 6) {
+    const nP = Math.min(6, canopyLevel - 6);
+    const parasolPoleMat = new THREE.MeshLambertMaterial({ color: 0xfbf3e2 });
+    for (let k = 0; k < nP; k++) {
+      const px = ((k / Math.max(1, nP - 1)) - 0.5) * laneLen * 0.72;
+      const pz = cartZ - 1.15;
+      const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.7, 5), parasolPoleMat);
+      pole.position.set(px, plazaTop + 0.85, pz);
+      grp.add(pole);
+      const top = new THREE.Mesh(
+        new THREE.ConeGeometry(0.62, 0.34, 8),
+        new THREE.MeshLambertMaterial({ color: guestColors[(k + 3) % guestColors.length] }),
+      );
+      top.position.set(px, plazaTop + 1.75, pz);
+      top.castShadow = true;
+      grp.add(top);
+    }
+  }
+
   // the arch approach — where deciding guests linger (also the ③ vignette mark)
   pois.push({ x: archX, z: archZ + 1.1, r0: 0.3, r: 1.0, kind: 'arch', w: 1 });
 
@@ -428,6 +504,7 @@ function buildQueue({
   });
   // the forecourt crowd + the POIs coin pops and vignettes anchor to
   stationRefs.plazaPOIs = pois;
+  stationRefs.plazaObstacles = obstacles;
   stationRefs.plazaBounds = { x0: xL + 0.6, x1: xR - 0.6, z0: foreZ0, z1: foreZ1 };
   stationRefs.plazaCrowd = buildPlazaCrowd({
     THREE,
@@ -435,6 +512,7 @@ function buildQueue({
     plazaTop,
     bounds: stationRefs.plazaBounds,
     pois,
+    obstacles,
     headColors,
     guestColors,
     hatFrac,
@@ -521,7 +599,23 @@ function buildCrowd({ THREE, grp, coords, plazaTop, headColors, guestColors, hat
 // and the benches — window-shopping rather than queueing. Same instanced
 // per-colour trick as the queue crowd; movement is a tiny seeded state machine
 // per wanderer (walk to a POI ring point, browse a few seconds, drift on).
-function buildPlazaCrowd({ THREE, grp, plazaTop, bounds, pois, headColors, guestColors, hatFrac, balloonFrac, poolSize = 90 }) {
+// Project a point out of every keep-out circle (fountain, carts, tables…) so
+// guests slide around furniture instead of clipping through it.
+function pushOutOfObstacles(w, obstacles) {
+  if (!obstacles) return;
+  for (const o of obstacles) {
+    const dx = w.x - o.x;
+    const dz = w.z - o.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < o.r * o.r) {
+      const d = Math.sqrt(d2) || 0.001;
+      w.x = o.x + dx / d * o.r;
+      w.z = o.z + dz / d * o.r;
+    }
+  }
+}
+
+function buildPlazaCrowd({ THREE, grp, plazaTop, bounds, pois, obstacles = [], headColors, guestColors, hatFrac, balloonFrac, poolSize = 90 }) {
   if (!pois?.length) return null;
   const n = poolSize;
   const make = (geo, colorHex, count, shadow = true) => {
@@ -560,19 +654,23 @@ function buildPlazaCrowd({ THREE, grp, plazaTop, bounds, pois, headColors, guest
     const poi = pickPoi(guestBuyerRoll(i * 3 + 17));
     const a = guestBuyerRoll(i * 5 + 29) * Math.PI * 2;
     const rr = (poi.r0 ?? 0.35) + guestBuyerRoll(i * 7 + 43) * (poi.r - (poi.r0 ?? 0.35));
-    wanderers.push({
+    const tgt = { x: poi.x + Math.cos(a) * rr, z: poi.z + Math.sin(a) * rr };
+    pushOutOfObstacles(tgt, obstacles);
+    const w = {
       x: bounds.x0 + guestBuyerRoll(i * 11 + 3) * (bounds.x1 - bounds.x0),
       z: bounds.z0 + guestBuyerRoll(i * 13 + 7) * (bounds.z1 - bounds.z0),
-      tx: poi.x + Math.cos(a) * rr,
-      tz: poi.z + Math.sin(a) * rr,
+      tx: tgt.x,
+      tz: tgt.z,
       pause: guestBuyerRoll(i * 17 + 11) * 3,
       speed: 0.45 + guestBuyerRoll(i * 19 + 13) * 0.3,
       hops: 0,
-    });
+    };
+    pushOutOfObstacles(w, obstacles);   // never spawn inside the furniture
+    wanderers.push(w);
   }
   return {
     bodies, heads, hats, balloons, strings, hatOwners, balloonOwners,
-    nColors, plazaTop, bounds, pois, pickPoi, wanderers,
+    nColors, plazaTop, bounds, pois, obstacles, pickPoi, wanderers,
     poolSize: n,
     mat: new THREE.Matrix4(),
   };
@@ -611,13 +709,23 @@ export function updatePlazaVisuals({ plaza = 0, stationRefs, dt = 0, time = 0 })
           cx = poi.x; cz = poi.z;
           rr = (poi.r0 ?? 0.35) + guestBuyerRoll(i * 37 + w.hops * 19 + 15) * (poi.r - (poi.r0 ?? 0.35));
         }
-        w.tx = Math.min(pc.bounds.x1, Math.max(pc.bounds.x0, cx + Math.cos(a) * rr));
-        w.tz = Math.min(pc.bounds.z1, Math.max(pc.bounds.z0, cz + Math.sin(a) * rr));
+        // clamp to the forecourt, then project out of furniture so the target
+        // is always reachable (a target inside the fountain would pin the
+        // walker against the rim forever)
+        const tgt = {
+          x: Math.min(pc.bounds.x1, Math.max(pc.bounds.x0, cx + Math.cos(a) * rr)),
+          z: Math.min(pc.bounds.z1, Math.max(pc.bounds.z0, cz + Math.sin(a) * rr)),
+        };
+        pushOutOfObstacles(tgt, pc.obstacles);
+        w.tx = tgt.x;
+        w.tz = tgt.z;
       } else if (dt > 0) {
         const step = Math.min(dist, w.speed * dt);
         w.x += dx / dist * step;
         w.z += dz / dist * step;
         walking = true;
+        // slide around the fountain/carts/tables rather than through them
+        pushOutOfObstacles(w, pc.obstacles);
       }
     }
     // stroll bob while walking, a gentler idle sway while browsing
@@ -769,6 +877,8 @@ export function buildStationAndQueue({
     platTop: PLAT_H,
     canopyLevel: upgrades.canopy?.level || 0,
     snacksLevel: upgrades.snacks?.level || 0,
+    comfortLevel: upgrades.comfort?.level || 0,
+    foodCourtLevel: upgrades.foodCourt?.level || 0,
     hatFrac: d.hatFrac || 0,
     balloonFrac: d.balloonFrac || 0,
     stationRefs,
@@ -888,6 +998,7 @@ export function buildStationAndQueue({
     archZ: queueInfo.archZ,
     foreZ0: queueInfo.foreZ0,
     foreZ1: queueInfo.foreZ1,
+    plazaObstacles: stationRefs.plazaObstacles || [],
   };
 }
 
@@ -927,26 +1038,60 @@ export function spawnStationWalkers(stationRefs, kind, riders, duration = 2, zon
         ];
     // riders rejoin the plaza: off the walkway they drift into the forecourt
     // (visibly closing the plaza → ride → plaza loop) before despawning
+    let path = pts;
     if (kind === 'exit' && Number.isFinite(g.foreZ0)) {
       pts.push({
         x: g.exitX * 0.35 + (Math.random() - 0.5) * 1.6,
         y: g.plazaTop,
         z: g.foreZ0 + 1.0 + Math.random() * 1.8,
       });
+      path = detourPlazaPath(pts, stationRefs.plazaObstacles);   // skirt the fountain
     }
     let len = 0;
-    for (let s = 1; s < pts.length; s++) {
-      len += Math.hypot(pts[s].x - pts[s - 1].x, pts[s].z - pts[s - 1].z);
+    for (let s = 1; s < path.length; s++) {
+      len += Math.hypot(path[s].x - path[s - 1].x, path[s].z - path[s - 1].z);
     }
     w.active.push({
       mesh,
-      pts,
+      pts: path,
       dist: 0,
       len,
       speed: Math.min(7, Math.max(1.2, len / Math.max(0.7, duration * 0.8))),
       delay: (i / count) * Math.max(0.3, duration * 0.5) + Math.random() * 0.15,
     });
   }
+}
+
+// Bend a plaza-level polyline around the big central obstacles (fountain,
+// food-court pavilion): if a segment passes through one, insert a waypoint at
+// the closest approach pushed out past the rim. One detour per segment is
+// plenty at toy scale. Segments that change height (stairs) are left alone.
+function detourPlazaPath(pts, obstacles) {
+  if (!obstacles?.length) return pts;
+  const out = [pts[0]];
+  for (let s = 1; s < pts.length; s++) {
+    const a = out[out.length - 1];
+    const b = pts[s];
+    if ((a.y ?? 0) === (b.y ?? 0)) {
+      const abx = b.x - a.x, abz = b.z - a.z;
+      const len2 = abx * abx + abz * abz;
+      for (const o of obstacles) {
+        if (o.r < 1.0 || len2 < 1e-6) continue;
+        const t = Math.max(0, Math.min(1, ((o.x - a.x) * abx + (o.z - a.z) * abz) / len2));
+        if (t <= 0.02 || t >= 0.98) continue;
+        const cx = a.x + abx * t, cz = a.z + abz * t;
+        let dx = cx - o.x, dz = cz - o.z;
+        const d = Math.hypot(dx, dz);
+        if (d >= o.r + 0.25) continue;
+        if (d < 0.02) { dx = -abz; dz = abx; }   // dead-centre: veer sideways
+        const n = Math.hypot(dx, dz) || 1;
+        out.push({ x: o.x + dx / n * (o.r + 0.45), y: b.y ?? a.y, z: o.z + dz / n * (o.r + 0.45) });
+        break;
+      }
+    }
+    out.push(b);
+  }
+  return out;
 }
 
 // A walk-up-and-decide vignette at the entrance arch, staged from the real
@@ -965,16 +1110,19 @@ export function spawnPlazaVignette(stationRefs, kind = 'join') {
   };
   const start = ringPoint(pois[(Math.random() * pois.length) | 0]);
   const arch = { x: g.archX, y: g.plazaTop, z: g.archZ + 0.85 };
-  const pts = [start, arch];
+  const raw = [start, arch];
   if (kind === 'join') {
-    pts.push({ x: g.archX, y: g.plazaTop, z: g.archZ - 0.75 });   // through the gate
+    raw.push({ x: g.archX, y: g.plazaTop, z: g.archZ - 0.75 });   // through the gate
   } else {
-    pts.push(ringPoint(pois[(Math.random() * pois.length) | 0])); // shrug, wander back
+    raw.push(ringPoint(pois[(Math.random() * pois.length) | 0])); // shrug, wander back
   }
-  const lenToArch = Math.hypot(arch.x - start.x, arch.z - start.z);
-  let len = lenToArch;
-  for (let s = 2; s < pts.length; s++) {
+  // bend the stroll around the fountain/pavilion, then measure the pause mark
+  // (the arch waypoint) along the bent path
+  const pts = detourPlazaPath(raw, stationRefs.plazaObstacles);
+  let len = 0, lenToArch = 0;
+  for (let s = 1; s < pts.length; s++) {
     len += Math.hypot(pts[s].x - pts[s - 1].x, pts[s].z - pts[s - 1].z);
+    if (pts[s] === arch) lenToArch = len;
   }
   const mesh = w.pool.pop();
   w.active.push({

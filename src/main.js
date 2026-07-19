@@ -609,7 +609,7 @@ function applyBiome(rebuild=false){
 function queueSignature(d = derived()){
   const station = `${ctrlPts[0]?.x},${ctrlPts[0]?.z},${ctrlPts[1]?.x},${ctrlPts[1]?.z}`;
   // coaster name + hype drive the entrance name marquee (name text + tier)
-  return `${d.queueCap}|${UPGRADES.snacks.level}|${UPGRADES.canopy.level}|${UPGRADES.hats.level}|${UPGRADES.balloons.level}|${UPGRADES.hype.level}|${coasterName.trim()}|${d.berths}|${station}`;
+  return `${d.queueCap}|${UPGRADES.snacks.level}|${UPGRADES.canopy.level}|${UPGRADES.hats.level}|${UPGRADES.balloons.level}|${UPGRADES.hype.level}|${UPGRADES.foodCourt?.level || 0}|${UPGRADES.comfort?.level || 0}|${coasterName.trim()}|${d.berths}|${station}`;
 }
 
 function refreshDecorBlockers(){
@@ -1718,7 +1718,7 @@ function spawnConcessionPop(item, price){
   const pois=stationRefs.plazaPOIs;
   let c=null;
   if(pois && pois.length){
-    const match=pois.filter(p=>p.kind===item.key) ;
+    const match=pois.filter(p=>p.kind===item.key || (item.key==='snack' && p.kind==='foodcourt'));
     const pool=match.length?match:pois;
     const p=pool[(Math.random()*pool.length)|0];
     c={ x:p.x+(Math.random()-0.5)*p.r, z:p.z+(Math.random()-0.5)*p.r };
