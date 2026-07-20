@@ -610,7 +610,7 @@ function applyBiome(rebuild=false){
 function queueSignature(d = derived()){
   const station = `${ctrlPts[0]?.x},${ctrlPts[0]?.z},${ctrlPts[1]?.x},${ctrlPts[1]?.z}`;
   // coaster name + hype drive the entrance name marquee (name text + tier)
-  return `${d.queueCap}|${UPGRADES.snacks.level}|${UPGRADES.canopy.level}|${UPGRADES.hats.level}|${UPGRADES.balloons.level}|${UPGRADES.hype.level}|${UPGRADES.foodCourt?.level || 0}|${UPGRADES.comfort?.level || 0}|${coasterName.trim()}|${d.berths}|${station}`;
+  return `${d.queueCap}|${UPGRADES.snacks.level}|${UPGRADES.canopy.level}|${UPGRADES.hats.level}|${UPGRADES.balloons.level}|${UPGRADES.hype.level}|${UPGRADES.foodCourt?.level || 0}|${UPGRADES.comfort?.level || 0}|${UPGRADES.turnstiles?.level || 0}|${UPGRADES.express?.level || 0}|${coasterName.trim()}|${d.berths}|${station}`;
 }
 
 function refreshDecorBlockers(){

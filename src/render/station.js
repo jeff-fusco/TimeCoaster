@@ -112,6 +112,8 @@ function buildQueue({
   snacksLevel = 0,
   comfortLevel = 0,
   foodCourtLevel = 0,
+  turnstilesLevel = 0,
+  expressLevel = 0,
   hatFrac = 0,
   balloonFrac = 0,
   stationRefs,
@@ -231,6 +233,87 @@ function buildQueue({
   const gateX = xL + gapW / 2;
   box(THREE, grp, 0xcdb884, gapW - 0.2, 0.24, 0.7, gateX, plazaTop + 0.12, startZ - 0.42, true);
   box(THREE, grp, 0xd8c79a, gapW - 0.2, 0.24, 0.5, gateX, plazaTop + 0.34, startZ - 0.68, true);
+
+  // ── Smart Turnstiles: tripod stiles guard the boarding gap. More levels add
+  //    a second stile and, high up, a "smart" metal-and-LED look. ──
+  if (turnstilesLevel > 0) {
+    const smart = turnstilesLevel >= 8;
+    const postMatT = new THREE.MeshLambertMaterial({ color: smart ? 0x8794a6 : 0xcdb884 });
+    const armMat = new THREE.MeshLambertMaterial({ color: smart ? 0xb9c2cf : 0xe7dcc0 });
+    const nStiles = Math.min(2, Math.ceil(turnstilesLevel / 4));
+    const tz = startZ - 0.05;
+    for (let s = 0; s < nStiles; s++) {
+      const tx = gateX + (nStiles === 1 ? 0 : (s - 0.5) * 0.5);
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.09, 0.95, 8), postMatT);
+      post.position.set(tx, plazaTop + 0.48, tz);
+      post.castShadow = true;
+      grp.add(post);
+      // three tripod arms at 120°, angled as if mid-turn
+      for (let a = 0; a < 3; a++) {
+        const ang = (a / 3) * Math.PI * 2 + s * 0.7;
+        const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.5, 5), armMat);
+        arm.position.set(tx + Math.cos(ang) * 0.25, plazaTop + 0.72, tz + Math.sin(ang) * 0.25);
+        arm.rotation.z = Math.PI / 2;
+        arm.rotation.y = -ang;
+        grp.add(arm);
+      }
+      if (smart) {   // a little green "go" indicator on top
+        const led = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.1, 0.04), new THREE.MeshBasicMaterial({ color: 0x5ad16a }));
+        led.position.set(tx, plazaTop + 1.02, tz - 0.09);
+        grp.add(led);
+      }
+    }
+  }
+
+  // ── Express Lane: a premium bypass strip running the length of the queue
+  //    just outside the boarding-gate edge, feeding the gate ahead of the
+  //    switchbacks. A little EXPRESS sign marks its entrance. ──
+  if (expressLevel > 0) {
+    const ex = xL - 0.62;
+    const exGold = 0xf0c14b;
+    const strip = new THREE.Mesh(
+      new THREE.BoxGeometry(0.62, 0.06, depth + 0.4),
+      new THREE.MeshLambertMaterial({ color: exGold }),
+    );
+    strip.position.set(ex, plazaTop + 0.03, startZ + depth / 2);
+    strip.receiveShadow = true;
+    grp.add(strip);
+    // rope posts with a premium sheen down both edges
+    const exPostMat = new THREE.MeshLambertMaterial({ color: 0x9a6b2f });
+    const exCapMat = new THREE.MeshLambertMaterial({ color: exGold });
+    const nExPosts = Math.max(2, Math.round(depth / 1.3));
+    for (let i = 0; i <= nExPosts; i++) {
+      const pz = startZ + (i / nExPosts) * depth;
+      for (const px of [ex - 0.3, ex + 0.3]) {
+        const p = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.7, 6), exPostMat);
+        p.position.set(px, plazaTop + 0.35, pz);
+        grp.add(p);
+        const cap = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), exCapMat);
+        cap.position.set(px, plazaTop + 0.72, pz);
+        grp.add(cap);
+      }
+    }
+    // EXPRESS sign at the entrance end
+    const exSignPost = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 1.5, 6), exPostMat);
+    exSignPost.position.set(ex, plazaTop + 0.75, startZ + depth + 0.2);
+    exSignPost.castShadow = true;
+    grp.add(exSignPost);
+    const exTex = makeBoardTexture(THREE, 'EXPRESS', '#f0c14b', '#3a2a10');
+    const exBoard = new THREE.Mesh(
+      new THREE.BoxGeometry(1.35, 0.4, 0.08),
+      [
+        new THREE.MeshLambertMaterial({ color: 0x3a2a10 }),
+        new THREE.MeshLambertMaterial({ color: 0x3a2a10 }),
+        new THREE.MeshLambertMaterial({ color: 0x3a2a10 }),
+        new THREE.MeshLambertMaterial({ color: 0x3a2a10 }),
+        new THREE.MeshLambertMaterial({ map: exTex }),
+        new THREE.MeshLambertMaterial({ map: exTex }),
+      ],
+    );
+    exBoard.position.set(ex, plazaTop + 1.5, startZ + depth + 0.2);
+    exBoard.castShadow = true;
+    grp.add(exBoard);
+  }
 
   // ── entrance arch + pennant banners at the far end ──
   const archX = entranceAtRight ? xR - gapW / 2 : xL + gapW / 2;
@@ -881,6 +964,8 @@ export function buildStationAndQueue({
     snacksLevel: upgrades.snacks?.level || 0,
     comfortLevel: upgrades.comfort?.level || 0,
     foodCourtLevel: upgrades.foodCourt?.level || 0,
+    turnstilesLevel: upgrades.turnstiles?.level || 0,
+    expressLevel: upgrades.express?.level || 0,
     hatFrac: d.hatFrac || 0,
     balloonFrac: d.balloonFrac || 0,
     stationRefs,
