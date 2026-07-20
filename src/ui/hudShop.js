@@ -138,7 +138,16 @@ export function createHudShop({
       $('fExc').style.width = `${Math.min(100, exc)}%`;
       $('fInt').style.width = `${Math.min(100, intn)}%`;
       $('fNau').style.width = `${Math.min(100, nau)}%`;
-      $('grade').textContent = gradeFor(exc);
+      // a stalled ride (a crest the train can't clear) overrides the grade with
+      // a clear warning — the ride earns nothing until the track is fixed
+      const grade = $('grade');
+      if (stats.rollback) {
+        grade.textContent = '⚠ STALLED';
+        grade.classList.add('stalled');
+      } else {
+        grade.textContent = gradeFor(exc);
+        grade.classList.remove('stalled');
+      }
     }
 
     shopOrder.forEach(key => {

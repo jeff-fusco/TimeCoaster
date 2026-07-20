@@ -76,6 +76,8 @@ export function stepTrains({
   advanceTime = 1.1,
   autoDispatch = false,
   dispatchDelay = Infinity,
+  stalled = false,
+  stallS = -1,
   placeTrain = () => {},
   setOccupancy = () => {},
   onDeposit = () => {},
@@ -90,7 +92,84 @@ export function stepTrains({
     tr.cycleBoard = Math.min(economy.seatsCap, Math.floor(sim.queue));
     sim.queue = Math.max(0, sim.queue - tr.cycleBoard);
   };
+
+  // ── hard stall: the track has a crest the train can't clear. One running
+  //    train demonstrates the failure — climbs to the stall point, runs out of
+  //    steam, slides back to the station — and every train ends parked in mode
+  //    'stalled' with nobody aboard. No boarding, no dispatch, no ride income
+  //    until the caller passes stalled=false (the track validates again).
+  const inStall = tr => tr.mode === 'stalled' || tr.mode === 'stall-climb' || tr.mode === 'stall-slide';
+  if (stalled) {
+    // choose one demonstrator: a running train on the approach (between the
+    // platform and the crest) closest to the stall — it's the one about to hit
+    // the wall. If none is on the approach, no climb theatre; everyone freezes.
+    let climber = null;
+    if (stallS > stopS + 2) {
+      for (const tr of trains) {
+        if (tr.mode === 'run' && tr.s >= stopS && tr.s <= stallS && (!climber || tr.s > climber.s)) climber = tr;
+      }
+    }
+    for (const tr of trains) {
+      if (inStall(tr)) continue;
+      tr.boarded = 0;
+      tr.cycleBoard = 0;
+      tr.startBoard = 0;
+      tr.timer = 0;
+      if (tr === climber) {
+        tr.mode = 'stall-climb';   // this one shows why the ride is broken
+      } else {
+        // everyone else stops where they are — trains rest in their block
+        // sections when the ride goes down, exactly like the real thing
+        tr.mode = 'stalled';
+        tr.phase = null;
+        tr.berth = null;
+      }
+    }
+  } else {
+    for (const tr of trains) {
+      if (!inStall(tr)) continue;
+      // track fixed: wake the fleet from wherever it parked
+      tr.mode = 'run';
+      tr.phase = null;
+      tr.slideV = 0;
+      tr.prevS = tr.s;
+    }
+  }
+
   for (const tr of trains) {
+    if (tr.mode === 'stall-climb') {
+      // ease toward the crest and die there — speed bleeds to a stop
+      tr.prevS = tr.s;
+      const remaining = Math.max(0, stallS - tr.s);
+      const v = Math.max(0.6, Math.min(speedAt(tr.s), remaining * 1.1));
+      tr.s = Math.min(stallS - 0.05, tr.s + v * dt);
+      if (tr.s >= stallS - 0.1) {
+        tr.mode = 'stall-slide';
+        tr.slideV = 0;
+      }
+      placeTrain(tr);
+      setOccupancy(tr, 0);
+      continue;
+    }
+    if (tr.mode === 'stall-slide') {
+      // gravity rolls the demonstrator back down to the empty platform
+      tr.prevS = tr.s;
+      tr.slideV = Math.min(9, (tr.slideV || 0) + 6 * dt);
+      tr.s -= tr.slideV * dt;
+      if (tr.s <= stopS) {
+        tr.s = stopS;
+        tr.mode = 'stalled';
+        tr.phase = null;
+      }
+      placeTrain(tr);
+      setOccupancy(tr, 0);
+      continue;
+    }
+    if (tr.mode === 'stalled') {
+      placeTrain(tr);
+      setOccupancy(tr, 0);
+      continue;
+    }
     if (tr.mode === 'run') {
       tr.prevS = tr.s;
       const rawAdv = speedAt(tr.s) * dt;

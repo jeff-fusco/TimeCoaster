@@ -829,6 +829,7 @@ if(window.__TIME_COASTER_TEST__){
 let coinThrottle=0, hudAccum=0, dispatchHinted=false;
 let concAcc=0;   // concessions point-of-sale accumulator (fractional sales)
 let vignetteAcc=0, vignetteCool=0;   // walk-up-and-decide theater at the arch
+const stallState={ active:false };   // hard-stall latch (fires the toast once on change)
 const stationBusy=()=>trains.some(t=>t.mode==='dwell');
 // measured income: every credited dollar is recorded so the HUD can show what
 // the park actually earns (projected rate overstates it when trains back up)
@@ -844,12 +845,29 @@ const dispatchDeposit=(tr,income)=>{
 };
 
 function updateTrains(dt,d){
+  // Hard stall: a crest the launch/lift energy can't clear. The physics sweep
+  // flags it (path.stats.rollback) and marks where it dies (stallS). A stalled
+  // ride pays nothing until the track is fixed — one train climbs to the crest,
+  // gives up, and rolls back to the empty platform to show why.
+  const stalled=!!path?.stats?.rollback;
+  if(stalled!==stallState.active){
+    stallState.active=stalled;
+    if(stalled){
+      const h=path.stats.stallHeight;
+      showToast(`⚠ STALLED — the train can't clear the ${h}m crest. Lower the hill, add a ⛓ Lift, or buy Faster Track.`);
+      audio.play('error');
+    } else {
+      showToast('Ride cleared — trains are running again!');
+    }
+    refreshHUD();
+  }
   stepTrains({
     trains, dt, economy:d, pathLen:path.len, stopS:stationRefs.stopS, sim, state,
     speedAt, stationBusy,
     carLen:CAR_LEN, blockGap:BLOCK_GAP,
     berths:d.berths, advanceTime:d.advanceTime,
     autoDispatch:d.autoDispatch, dispatchDelay:d.dispatchDelay,
+    stalled, stallS: path?.stats?.stallS ?? -1,
     placeTrain: tr => tr.cars.forEach((car,i)=>placeCar(car, tr.s-i*CAR_LEN)),
     setOccupancy: setTrainOccupancy,
     onDeposit: dispatchDeposit,

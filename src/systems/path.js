@@ -368,6 +368,7 @@ export function buildPath({
   const energy = new Array(N);
   const frictionK = Math.min(0.6, Math.max(0, physics.friction));
   let rollback = false;
+  let stallIdx = -1;   // first sample the train can't reach on its own energy
   let E = launchEnergy;
   for (let step = 0; step < N; step++) {
     const i = step;
@@ -387,7 +388,8 @@ export function buildPath({
       else if (k === 'brake') E = Math.min(E, potential + ke(brakeSpeed));
       if (E < potential + 0.02) {                          // too tall to reach unassisted
         rollback = true;
-        E = potential + ke(rollbackSpeed);                 // stylized: crawl over, never fully stuck
+        if (stallIdx < 0) stallIdx = i;
+        E = potential + ke(rollbackSpeed);                 // stylized speed floor for the sweep
       }
     }
     energy[i] = E;
@@ -558,6 +560,20 @@ export function buildPath({
     dirChanges,
     maxDrop,
     rollback,
+    // hard-stall telemetry: where the train runs out of energy (the demo train
+    // climbs to stallS, then slides back). stallHeight reports the CREST of the
+    // hill it's failing to clear — walk forward from the stall while the track
+    // keeps rising — so the warning names the height the player over-built.
+    stallS: stallIdx >= 0 ? cum[stallIdx] : -1,
+    stallHeight: stallIdx >= 0 ? +(() => {
+      let peak = height[stallIdx];
+      for (let j = 1; j < N; j++) {
+        const h = height[(stallIdx + j) % N];
+        if (h < peak - 0.05) break;
+        if (h > peak) peak = h;
+      }
+      return peak;
+    })().toFixed(1) : 0,
     featureCounts,
     excitement: +excitement.toFixed(1),
     intensity: +intensity.toFixed(1),

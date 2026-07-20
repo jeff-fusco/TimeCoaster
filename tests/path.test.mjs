@@ -256,14 +256,31 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
 
 {
   // a hill taller than the launch energy, with no lift, flags a rollback and
-  // leaves the train crawling (not reversing — trains always complete the loop)
+  // marks the stall point (arc-length + height) the hard-stall mechanic uses
   const ctrlPts = makeCtrlPts();
   ctrlPts[3].y = 12;
   const path = makePath(ctrlPts);
   assert.equal(path.stats.rollback, true, 'an under-powered tall hill flags a rollback');
   const minSpeed = Math.min(...path.speed);
-  assert.ok(minSpeed > 0, 'the train crawls rather than reversing');
+  assert.ok(minSpeed > 0, 'the sweep keeps a speed floor rather than dividing by zero');
   assert.ok(minSpeed <= PHYS.rollbackSpeed + 0.6, 'it barely creeps over the too-tall hill');
+  // stall telemetry: a real arc-length inside the circuit, near the tall crest
+  assert.ok(path.stats.stallS > 0 && path.stats.stallS < path.len, 'stallS is a point on the track');
+  assert.ok(path.stats.stallHeight > 6, `stall height reflects the tall crest (got ${path.stats.stallHeight})`);
+
+  // the starter/normal coaster never stalls
+  const ok = makePath();
+  assert.equal(ok.stats.rollback, false, 'a normal coaster runs clean');
+  assert.equal(ok.stats.stallS, -1, 'no stall point when nothing stalls');
+  assert.equal(ok.stats.stallHeight, 0, 'no stall height when nothing stalls');
+
+  // a chain lift up to the tall crest fixes the stall (energy topped off)
+  const lifted = makeCtrlPts();
+  lifted[2].seg = 'lift';
+  lifted[3].y = 12;
+  const lp = makePath(lifted);
+  assert.equal(lp.stats.rollback, false, 'a chain lift clears the tall hill — no stall');
+  assert.equal(lp.stats.stallS, -1, 'lifted circuit has no stall point');
 }
 
 {
