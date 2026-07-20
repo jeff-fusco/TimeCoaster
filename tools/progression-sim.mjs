@@ -185,7 +185,9 @@ export function simulate({ maxMinutes = 6000, log = () => {} } = {}) {
   const eraSnapshots = [];
   let certTime = null;
 
-  for (let step = 0; step < 800 && t < maxMinutes; step++) {
+  // step budget covers purchases AND save-hops (re-decision points mid-save);
+  // hops can outnumber buys several-fold, so give the loop generous headroom
+  for (let step = 0; step < 6000 && t < maxMinutes; step++) {
     const { net, gross, stats, derived: d } = netIncome(state);
     if (certTime === null && stats.excitement >= certificationBar(1)) certTime = t;
     for (const dec of decades) {
@@ -284,6 +286,17 @@ export function report(run) {
       `  payroll ${snap.payrollPct.toFixed(1).padStart(5)}%  exc ${Math.round(snap.excitement)}`
     );
   }
+
+  lines.push('');
+  lines.push('FINAL BUILD (what the greedy player actually owned)');
+  const ups = Object.entries(run.finalState.up).filter(([, v]) => v > 0)
+    .map(([k, v]) => `${k}:${v}`).join(' ');
+  const crew = Object.entries(run.finalState.staff).filter(([, v]) => v.hired > 0)
+    .map(([k, v]) => `${k}:${v.hired}/${v.trained}`).join(' ');
+  const done = Object.keys(run.finalState.research).length;
+  lines.push(`  upgrades  ${ups || '(none)'}`);
+  lines.push(`  staff     ${crew || '(none)'}`);
+  lines.push(`  research  ${done} projects done`);
 
   lines.push('');
   lines.push('TIMELINE (first 30 purchases)');

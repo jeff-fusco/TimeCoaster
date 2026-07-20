@@ -234,9 +234,15 @@ export function deriveEconomy({
     station,
     ticketLevel: U.ticket.level,
     janitorMult,
-    hype,
+    // theming lifts snack spend at half power — full-strength hype on top of
+    // the Food Court's own compounding made concessions strictly outscale
+    // rides (the greedy sim hit 100% concession income; rides became décor)
+    hype: Math.sqrt(Math.max(0, hype)),
     vendorMult,
     snackMult,
+    // thrilled crowds splurge: the excitement coupling that keeps concessions
+    // relevant at scale once the stands' serving cap binds (mirrors photos)
+    thrillMult: 1 + st.excitement / 60,
     avgDwellMin,
   });
   const photoPerMin = estBoard > 0.5 ? photoPerRide * trainCyclesPerMin : 0;

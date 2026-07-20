@@ -168,7 +168,12 @@ const station = {
   const expectPlaza = Math.min(economy.plazaCapacity, economy.arrivalRate * 60 * economy.visitMin);
   assert.ok(Math.abs(economy.plazaPop - expectPlaza) < 1e-6, 'plaza = arrivals/min × visit length, capped');
   assert.ok(economy.joinWill > 0 && economy.joinWill <= 1, 'join willingness is a sane fraction');
-  assert.ok(Math.abs(economy.concessions.perMin - economy.concessions.served * 0.14 * (3 + 0.5 * 2) * economy.concessions.dwellMult) < 1e-9);
+  // served × snack freq (0.10 × lv1) × ($3 + $0.5 × ticket lv2) × dwell × the
+  // thrill splurge (1 + excitement/60 — this fixture rides at excitement 55)
+  assert.ok(Math.abs(
+    economy.concessions.perMin -
+    economy.concessions.served * 0.10 * (3 + 0.5 * 2) * economy.concessions.dwellMult * (1 + 55 / 60),
+  ) < 1e-9);
   assert.ok(economy.concessions.dwellMult >= 1, 'dwell multiplier is at least neutral');
   assert.ok(economy.ratePerMin > economy.ridePerMin, 'concessions add to the projected rate');
   assert.ok(economy.perRideFull > 140);
@@ -290,10 +295,14 @@ const station = {
   const args = { pathStats: { excitement: 150, lapTime: 20, maxSpeed: 20, length: 300 }, station, simQueue: 200, researchDone: {} };
   const plain = deriveEconomy({ ...args, upgrades: base });
   assert.equal(plain.concessions.cap, station.snackCap, 'base concession capacity comes from station config');
-  // served (plaza capped at the stands) × snack freq (0.14 × lv2) × $3 (ticket
-  // lv0) × dwell mult. The plaza is large here, so the stands' cap binds.
+  // served (plaza capped at the stands) × snack freq (0.10 × lv2) × $3 (ticket
+  // lv0) × dwell × thrill splurge (excitement 150 here). The plaza is large,
+  // so the stands' cap binds.
   assert.equal(plain.concessions.served, station.snackCap, 'a big plaza is capped by the stands');
-  assert.ok(Math.abs(plain.concessions.perMin - plain.concessions.served * 0.14 * 2 * 3 * plain.concessions.dwellMult) < 1e-6);
+  assert.ok(Math.abs(
+    plain.concessions.perMin -
+    plain.concessions.served * 0.10 * 2 * 3 * plain.concessions.dwellMult * (1 + 150 / 60),
+  ) < 1e-6);
 
   const withCanopy = deriveEconomy({ ...args, upgrades: { ...base, canopy: { level: 4 } } });
   assert.equal(withCanopy.concessions.cap, station.snackCap + 4 * CONCESSION_CAP_PER_CANOPY, 'each canopy level serves more guests');

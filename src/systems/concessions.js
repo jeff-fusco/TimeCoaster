@@ -16,15 +16,15 @@
 // Buy frequency = expected purchases per present guest per minute, per upgrade
 // level. Kept low so a guest buys occasionally, not constantly.
 export const CONCESSIONS = [
-  { key: 'snack',   name: 'Snacks',   icon: '🍿', upgrade: 'snacks',   basePrice: 3,  pricePerTicket: 0.5, freqPerLevel: 0.14, biomeSnack: true },
+  { key: 'snack',   name: 'Snacks',   icon: '🍿', upgrade: 'snacks',   basePrice: 3,  pricePerTicket: 0.5, freqPerLevel: 0.10, biomeSnack: true },
   { key: 'balloon', name: 'Balloons', icon: '🎈', upgrade: 'balloons', basePrice: 6,  pricePerTicket: 0.4, freqPerLevel: 0.05 },
   { key: 'hat',     name: 'Hats',     icon: '🎩', upgrade: 'hats',     basePrice: 14, pricePerTicket: 0.8, freqPerLevel: 0.035 },
 ];
 
 export const CONCESSION_BASE_CAP = 30;         // guests the stands can serve at once
 export const CONCESSION_CAP_PER_CANOPY = 40;   // Shade Canopies raise the servable crowd
-export const CONCESSION_CAP_PER_FOODCOURT = 140; // a Food Court serves a whole plaza
-export const FOODCOURT_SPEND_MULT = 1.25;      // ×spend per Food Court level (compounds)
+export const CONCESSION_CAP_PER_FOODCOURT = 60;  // a Food Court seats a big crowd
+export const FOODCOURT_SPEND_MULT = 1.15;      // ×spend per Food Court level (compounds)
 
 // Dwell reward — the "destination build" lever. Guests who spend longer in a
 // slow, full queue buy more; a fast-dispatch thrill park clears the line before
@@ -55,6 +55,7 @@ export function concessionsRate({
   hype = 1,
   vendorMult = 1,    // Family Package marketing
   snackMult = 1,     // Desert biome: thirsty guests (snacks only)
+  thrillMult = 1,    // thrilled crowds splurge — economy passes 1 + excitement/60
   avgDwellMin = 0,   // how long the average guest waits in line (queue / throughput)
 }) {
   // Food Court: the compounding "concessions empire" lever — each level serves a
@@ -67,7 +68,8 @@ export function concessionsRate({
   const served = Math.min(Math.max(0, Math.round(crowd)), cap);
   const dwellMult = dwellMultiplier(avgDwellMin);
   const foodCourtMult = Math.pow(FOODCOURT_SPEND_MULT, foodCourt);
-  const baseMult = Math.max(0, janitorMult) * Math.max(0, hype) * Math.max(0, vendorMult) * dwellMult * foodCourtMult;
+  const baseMult = Math.max(0, janitorMult) * Math.max(0, hype) * Math.max(0, vendorMult) *
+    Math.max(0, thrillMult) * dwellMult * foodCourtMult;
 
   const items = [];
   let perMin = 0, salesPerMin = 0;

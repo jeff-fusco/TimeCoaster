@@ -36,7 +36,7 @@ const STAGES = {
   mid: {
     upgrades: {
       car: 4, seats: 3, speed: 4, train: 1, queue: 6, snacks: 3, ticket: 8,
-      market: 4, hype: 5, express: 1, canopy: 1, comfort: 1, hats: 1, balloons: 2,
+      market: 4, hype: 5, express: 1, canopy: 1, comfort: 1, hats: 1, balloons: 2, foodCourt: 2,
     },
     staff: { operators: [3, 1], entertainers: [2, 1], mechanics: [2, 1], janitors: [1, 0], scientists: [1, 0] },
     research: { brakes: true, loop: true, launch: true, queue2: true, photo: true, flyers: true },
@@ -45,7 +45,7 @@ const STAGES = {
   late: {
     upgrades: {
       car: 8, seats: 8, speed: 10, train: 3, queue: 12, snacks: 8, ticket: 15,
-      market: 9, hype: 12, express: 6, canopy: 5, comfort: 6, turnstiles: 4, hats: 4, balloons: 5,
+      market: 9, hype: 12, express: 6, canopy: 5, comfort: 6, turnstiles: 4, hats: 4, balloons: 5, foodCourt: 7,
     },
     staff: { operators: [5, 3], entertainers: [4, 3], mechanics: [4, 2], janitors: [3, 2], photographers: [2, 1], scientists: [2, 2] },
     research: {
@@ -58,7 +58,7 @@ const STAGES = {
   endgame: {
     upgrades: {
       car: 16, seats: 19, speed: 20, train: 6, queue: 20, snacks: 12, ticket: 22,
-      market: 14, hype: 18, express: 12, canopy: 9, comfort: 11, turnstiles: 8, hats: 8, balloons: 8,
+      market: 14, hype: 18, express: 12, canopy: 9, comfort: 11, turnstiles: 8, hats: 8, balloons: 8, foodCourt: 12,
     },
     staff: { operators: [8, 6], entertainers: [6, 4], mechanics: [6, 4], janitors: [4, 3], photographers: [4, 3], scientists: [4, 4] },
     research: {
@@ -234,7 +234,12 @@ for (const [name, stage] of Object.entries(STAGES)) {
   console.log(`\n═══ ${name.toUpperCase()}  (income ${fmtMoney(baseRate)}/min) ═══`);
   console.log('payback   cost      Δ$/min     what');
   for (const r of rows) {
-    const flag = r.payback < 0.5 ? ' ◄◄ UNDERPRICED' : r.payback > 30 && r.payback !== Infinity ? ' ◄ wall' : '';
+    // >500m payback = the mechanic is saturated at this stage (e.g. extra
+    // trains while arrival-bound) — a "skip this for now" signal, not a
+    // mispriced wall. Real walls are era-relevant items in the 30m–500m band.
+    const flag = r.payback < 0.5 ? ' ◄◄ UNDERPRICED'
+      : r.payback > 500 && r.payback !== Infinity ? ' · saturated (skip)'
+      : r.payback > 30 && r.payback !== Infinity ? ' ◄ wall' : '';
     console.log(`${fmtMin(r.payback).padStart(7)}  ${fmtMoney(r.cost).padStart(8)}  ${fmtMoney(r.delta).padStart(9)}  [${r.kind}] ${r.name}${flag}`);
   }
 }

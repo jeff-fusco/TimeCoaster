@@ -3,6 +3,7 @@ import {
   CONCESSIONS,
   CONCESSION_BASE_CAP,
   CONCESSION_CAP_PER_CANOPY,
+  FOODCOURT_SPEND_MULT,
   concessionsRate,
   dwellMultiplier,
   drainSales,
@@ -59,7 +60,7 @@ const upg = (o = {}) => ({
   const plain = concessionsRate({ crowd: 800, upgrades: u({ snacks: 4 }), station });
   const court = concessionsRate({ crowd: 800, upgrades: u({ snacks: 4, foodCourt: 5 }), station });
   assert.ok(court.cap > plain.cap, 'a Food Court serves a bigger crowd');
-  assert.ok(Math.abs(court.foodCourtMult - Math.pow(1.25, 5)) < 1e-9, 'spend multiplier compounds per level');
+  assert.ok(Math.abs(court.foodCourtMult - Math.pow(FOODCOURT_SPEND_MULT, 5)) < 1e-9, 'spend multiplier compounds per level');
   // more served × more spend each → far more income (compounds, not adds)
   assert.ok(court.perMin > plain.perMin * 3, 'the Food Court is a real compounding lever');
 }
