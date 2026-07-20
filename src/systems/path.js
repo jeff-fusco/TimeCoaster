@@ -150,7 +150,9 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       const ref = Math.abs(axisN.y) > 0.85 ? new Vector3(1, 0, 0) : worldUp;
       const n1 = new Vector3().crossVectors(axisN, ref).normalize();
       const n2 = new Vector3().crossVectors(axisN, n1).normalize();
-      const r0 = Math.min(3.2, Math.max(1.8, L * 0.28));
+      // per-spiral radius (node.spiralR), clamped; falls back to length-derived
+      const autoR = Math.min(3.2, Math.max(1.8, L * 0.28));
+      const r0 = Number.isFinite(node.spiralR) ? Math.max(1.2, Math.min(6, node.spiralR)) : autoR;
       const turns = Math.max(1.5, Math.min(3.5, L / 4));
       for (let k = 0; k < samples.spiral; k++) {
         const t = k / samples.spiral;
@@ -169,7 +171,9 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       const ref = Math.abs(axisN.y) > 0.9 ? new Vector3(1, 0, 0) : worldUp;
       const n1 = new Vector3().crossVectors(axisN, ref).normalize();
       const n2 = new Vector3().crossVectors(axisN, n1).normalize();
-      const r0 = Math.min(1.7, L * 0.34);
+      // per-corkscrew radius (node.corkR), clamped; falls back to length-derived
+      const autoR = Math.min(1.7, L * 0.34);
+      const r0 = Number.isFinite(node.corkR) ? Math.max(0.8, Math.min(4, node.corkR)) : autoR;
       const turns = 1;
       for (let k = 0; k < samples.corkscrew; k++) {
         const t = k / samples.corkscrew;
@@ -195,7 +199,11 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
         });
       }
     } else if (seg === 'tunnel') {
-      const depth = Math.max(2.6, Math.min(7.5, p1.distanceTo(p2) * 0.22));
+      // per-tunnel dive depth (node.tunnelDepth), clamped; falls back to length-derived
+      const autoDepth = Math.max(2.6, Math.min(7.5, p1.distanceTo(p2) * 0.22));
+      const depth = Number.isFinite(node.tunnelDepth)
+        ? Math.max(1.5, Math.min(12, node.tunnelDepth))
+        : autoDepth;
       for (let k = 0; k < samples.tunnel; k++) {
         const t = k / samples.tunnel;
         const pos = catmull(Vector3, p0, p1, p2, p3, t);
