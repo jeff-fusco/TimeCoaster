@@ -86,6 +86,7 @@ import { buildTrackGeometry as renderTrackGeometry } from './render/track.js?v=2
 import { buildPropertyGeometry as renderPropertyGeometry } from './render/property.js?v=20260703-13';
 import {
   buildStationAndQueue as renderStationAndQueue,
+  PLAZA_VISUAL_TUNING,
   spawnStationWalkers,
   spawnPlazaVignette,
   updateQueueVisuals as renderQueueVisuals,
@@ -1183,11 +1184,11 @@ function stepSim(dt){
   // a looker who sized up the line at the arch and bailed. Staged from the
   // join flow at the miss rate (1−joinWill), so a punishing wait shows a
   // parade of shrugs while a great ride shows almost none.
-  vignetteAcc=Math.min(vignetteAcc+flows.join, 4);   // don't bank a parade
+  vignetteAcc=Math.min(vignetteAcc+flows.join, PLAZA_VISUAL_TUNING.vignetteJoinBankCap);
   vignetteCool-=dt;
   if(vignetteAcc>=1 && vignetteCool<=0){
     vignetteAcc-=1;
-    if(Math.random()>d.joinWill && spawnPlazaVignette(stationRefs,'balk')) vignetteCool=1.6;
+    if(Math.random()>d.joinWill && spawnPlazaVignette(stationRefs,'balk')) vignetteCool=PLAZA_VISUAL_TUNING.vignetteCooldownSec;
   }
   // snack income scales with guests waiting (capped per stand, raised by
   // Shade Canopies), boosted by Janitors, tickets and theming

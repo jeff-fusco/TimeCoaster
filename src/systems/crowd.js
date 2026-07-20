@@ -14,9 +14,22 @@
 // This module is pure (no DOM, no THREE) so it drives the balance sheet, the
 // offline catch-up, and (Phase 2) the live crowd integrator identically.
 
-// Base minutes a guest stays in the park before leaving, with nothing built.
-export const VISIT_BASE_MIN = 6;
-export const VISIT_MAX_MIN = 90;
+// PLAYTEST TUNABLES: visit length, balking, and both stepCrowdFlows join rates.
+// Rates are per second unless the property name says `Min`.
+export const CROWD_TUNING = Object.freeze({
+  visitBaseMin: 6,
+  visitMaxMin: 90,
+  excitementForVisitStep: 120,
+  excitementVisitCap: 2.5,
+  comfortVisitPerLevel: 0.05,
+  diningVisitPerLevel: 0.06,
+  balkWaitMin: 12,
+  minimumResidenceSec: 30,
+  freshArrivalJoinShare: 0.7,
+  plazaJoinRatePerSec: 0.008,
+});
+export const VISIT_BASE_MIN = CROWD_TUNING.visitBaseMin;
+export const VISIT_MAX_MIN = CROWD_TUNING.visitMaxMin;
 
 // Average minutes a guest lingers in the park. Grows with how much there is to
 // do and how pleasant it is — the destination lever. A great ride is worth
@@ -29,10 +42,10 @@ export function visitLengthMin({
 } = {}) {
   const appeal =
     1 +
-    Math.min(2.5, Math.max(0, excitement) / 120) + // a thrilling park draws long stays
-    0.05 * Math.max(0, comfortLvl) +
+    Math.min(CROWD_TUNING.excitementVisitCap, Math.max(0, excitement) / CROWD_TUNING.excitementForVisitStep) +
+    CROWD_TUNING.comfortVisitPerLevel * Math.max(0, comfortLvl) +
     Math.max(0, cleanMult - 1) +
-    0.06 * Math.max(0, diningLvl);
+    CROWD_TUNING.diningVisitPerLevel * Math.max(0, diningLvl);
   return Math.min(VISIT_MAX_MIN, VISIT_BASE_MIN * appeal);
 }
 
@@ -46,7 +59,7 @@ export function plazaPopulation({ arrivalPerMin = 0, visitMin = 0, capacity = In
 // How willing a plaza guest is to join the ride queue, in [0,1]. A strong ride
 // pulls people in; a punishing wait makes them balk and go shop instead. This
 // governs how much of the footfall converts to ride income vs. lingering spend.
-export const BALK_WAIT_MIN = 12;   // wait (min) at which willingness is roughly halved
+export const BALK_WAIT_MIN = CROWD_TUNING.balkWaitMin;
 export function joinWillingness({ appeal = 1, waitMin = 0 } = {}) {
   const draw = Math.min(1, Math.max(0, appeal));           // ride's pull, normalized
   const balk = 1 / (1 + Math.max(0, waitMin) / BALK_WAIT_MIN);
@@ -75,10 +88,13 @@ export function stepCrowdFlows({
   let p = Math.max(0, plaza);
   let q = Math.max(0, queue);
   p += Math.max(0, arrivalPerSec) * dt;                       // walk in
-  p -= p * dt / Math.max(30, visitMin * 60);                  // wander home
+  p -= p * dt / Math.max(CROWD_TUNING.minimumResidenceSec, visitMin * 60);
   // join the line: ~70% of fresh arrivals beeline for the ride, plus a slow
   // drift out of the milling crowd — both scaled by willingness
-  const joinPerSec = Math.max(0, joinWill) * (0.7 * Math.max(0, arrivalPerSec) + p * 0.008);
+  const joinPerSec = Math.max(0, joinWill) * (
+    CROWD_TUNING.freshArrivalJoinShare * Math.max(0, arrivalPerSec) +
+    p * CROWD_TUNING.plazaJoinRatePerSec
+  );
   const join = Math.min(p, Math.max(0, queueCap - q), joinPerSec * dt);
   p -= join;
   q += join;

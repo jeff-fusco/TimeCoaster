@@ -678,6 +678,14 @@ function buildCrowd({ THREE, grp, coords, plazaTop, headColors, guestColors, hat
   };
 }
 
+// PLAYTEST TUNABLES: visual-only crowd cost and walk-up vignette cadence. Main
+// reads the cadence values; this renderer owns the theatre defaults.
+export const PLAZA_VISUAL_TUNING = Object.freeze({
+  wandererPoolSize: 90,
+  vignetteJoinBankCap: 4,
+  vignetteCooldownSec: 1.6,
+});
+
 // The forecourt crowd: plaza guests who mill between the fountain, the carts
 // and the benches — window-shopping rather than queueing. Same instanced
 // per-colour trick as the queue crowd; movement is a tiny seeded state machine
@@ -698,7 +706,7 @@ function pushOutOfObstacles(w, obstacles) {
   }
 }
 
-function buildPlazaCrowd({ THREE, grp, plazaTop, bounds, pois, obstacles = [], headColors, guestColors, hatFrac, balloonFrac, poolSize = 90 }) {
+function buildPlazaCrowd({ THREE, grp, plazaTop, bounds, pois, obstacles = [], headColors, guestColors, hatFrac, balloonFrac, poolSize = PLAZA_VISUAL_TUNING.wandererPoolSize }) {
   if (!pois?.length) return null;
   const n = poolSize;
   const make = (geo, colorHex, count, shadow = true) => {

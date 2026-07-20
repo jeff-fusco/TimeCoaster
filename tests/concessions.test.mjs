@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   CONCESSIONS,
+  CONCESSION_TUNING,
   CONCESSION_BASE_CAP,
   CONCESSION_CAP_PER_CANOPY,
   FOODCOURT_SPEND_MULT,
@@ -9,6 +10,9 @@ import {
   drainSales,
   pickConcessionSale,
 } from '../src/systems/concessions.js';
+
+assert.equal(FOODCOURT_SPEND_MULT, CONCESSION_TUNING.foodCourtSpendMult);
+assert.equal(CONCESSION_BASE_CAP, CONCESSION_TUNING.baseServeCap);
 
 const station = { snackCap: 30 };
 const upg = (o = {}) => ({

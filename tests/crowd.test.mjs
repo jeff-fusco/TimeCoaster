@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import {
+  CROWD_TUNING,
   VISIT_BASE_MIN,
   visitLengthMin,
   plazaPopulation,
   joinWillingness,
   stepCrowdFlows,
 } from '../src/systems/crowd.js';
+
+assert.equal(VISIT_BASE_MIN, CROWD_TUNING.visitBaseMin);
+assert.ok(CROWD_TUNING.freshArrivalJoinShare > 0 && CROWD_TUNING.plazaJoinRatePerSec > 0);
 
 // visit length: a bare park keeps guests the base minutes; appeal extends it,
 // bounded so it can't run away.

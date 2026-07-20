@@ -21,10 +21,20 @@ export const CONCESSIONS = [
   { key: 'hat',     name: 'Hats',     icon: '🎩', upgrade: 'hats',     basePrice: 14, pricePerTicket: 0.8, freqPerLevel: 0.035 },
 ];
 
-export const CONCESSION_BASE_CAP = 30;         // guests the stands can serve at once
-export const CONCESSION_CAP_PER_CANOPY = 40;   // Shade Canopies raise the servable crowd
-export const CONCESSION_CAP_PER_FOODCOURT = 60;  // a Food Court seats a big crowd
-export const FOODCOURT_SPEND_MULT = 1.15;      // ×spend per Food Court level (compounds)
+// PLAYTEST TUNABLES: service caps, Food Court spend, and the dwell curve.
+// Item prices and buy frequencies are the CONCESSIONS table directly above.
+export const CONCESSION_TUNING = Object.freeze({
+  baseServeCap: 30,
+  serveCapPerCanopy: 40,
+  serveCapPerFoodCourt: 60,
+  foodCourtSpendMult: 1.15,
+  dwellRefMin: 3.5,
+  dwellGain: 3.0,
+});
+export const CONCESSION_BASE_CAP = CONCESSION_TUNING.baseServeCap;
+export const CONCESSION_CAP_PER_CANOPY = CONCESSION_TUNING.serveCapPerCanopy;
+export const CONCESSION_CAP_PER_FOODCOURT = CONCESSION_TUNING.serveCapPerFoodCourt;
+export const FOODCOURT_SPEND_MULT = CONCESSION_TUNING.foodCourtSpendMult;
 
 // Dwell reward — the "destination build" lever. Guests who spend longer in a
 // slow, full queue buy more; a fast-dispatch thrill park clears the line before
@@ -32,8 +42,8 @@ export const FOODCOURT_SPEND_MULT = 1.15;      // ×spend per Food Court level (
 //   dwellMult = 1 + GAIN * (1 - e^(-avgDwellMin / REF)),  bounded to [1, 1+GAIN]
 // avgDwellMin = queue length / boardings-per-min (Little's Law). REF is the wait
 // (minutes) at which the bonus reaches ~63% of its max.
-export const DWELL_REF_MIN = 3.5;
-export const DWELL_GAIN = 3.0;
+export const DWELL_REF_MIN = CONCESSION_TUNING.dwellRefMin;
+export const DWELL_GAIN = CONCESSION_TUNING.dwellGain;
 
 export function dwellMultiplier(avgDwellMin = 0) {
   const w = Math.max(0, Number.isFinite(avgDwellMin) ? avgDwellMin : 0);
