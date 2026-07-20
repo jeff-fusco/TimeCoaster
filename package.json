@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node scripts/serve.mjs",
     "check": "node scripts/check.mjs",
-    "test": "node tests/economy.test.mjs && node tests/path.test.mjs && node tests/save.test.mjs && node tests/trainSim.test.mjs && node tests/staff.test.mjs && node tests/staffPeople.test.mjs && node tests/maintenance.test.mjs && node tests/property.test.mjs && node tests/decorations.test.mjs && node tests/concessions.test.mjs && node tests/crowd.test.mjs && node tests/incomeTracker.test.mjs && node tests/offline.test.mjs && node tests/legacy.test.mjs && node tests/biomes.test.mjs && node tests/marketing.test.mjs",
+    "test": "node tests/economy.test.mjs && node tests/path.test.mjs && node tests/save.test.mjs && node tests/trainSim.test.mjs && node tests/staff.test.mjs && node tests/staffPeople.test.mjs && node tests/maintenance.test.mjs && node tests/property.test.mjs && node tests/decorations.test.mjs && node tests/concessions.test.mjs && node tests/crowd.test.mjs && node tests/progression.test.mjs && node tests/incomeTracker.test.mjs && node tests/offline.test.mjs && node tests/legacy.test.mjs && node tests/biomes.test.mjs && node tests/marketing.test.mjs",
     "test:browser": "playwright test"
   },
   "dependencies": {
