@@ -8,7 +8,9 @@ import {
   hasResearchKey,
   maxTrackHeight,
   upgradeCost,
-} from './systems/economy.js?v=20260703-13';
+} from './systems/economy.js?v=20260703-14';
+import { drainSales, pickConcessionSale } from './systems/concessions.js?v=20260703-14';
+import { stepCrowdFlows } from './systems/crowd.js?v=20260703-14';
 import {
   createResearchState,
   clampResearchFundingPct,
@@ -18,25 +20,31 @@ import {
   pathProjectState,
   researchFundingCap,
   stepResearch,
-} from './systems/research.js?v=20260703-13';
+} from './systems/research.js?v=20260703-14';
 import {
   DEFAULT_STATION,
   buildPath as buildTrackPath,
   samplePathAt,
   speedAtPath,
-} from './systems/path.js?v=20260703-13';
+} from './systems/path.js?v=20260703-14';
 import {
   applySaveData,
+  ACTIVE_SLOT_KEY,
+  exportSaveString,
+  importSaveToSlot,
   readSave,
   SAVE_KEYS,
+  saveSlotMetadata,
+  setSlotName,
+  SLOT_KEYS,
   writeSave,
-} from './systems/save.js?v=20260703-13';
+} from './systems/save.js?v=20260703-14';
 import {
   createMaintenanceState,
   enqueueInstall,
   pendingCount,
   stepMaintenance,
-} from './systems/maintenance.js?v=20260703-13';
+} from './systems/maintenance.js?v=20260703-14';
 import {
   buyLand,
   chunkBounds,
@@ -44,22 +52,25 @@ import {
   expansionCandidates,
   normalizePropertyState,
   pointInOwnedLand,
-} from './systems/property.js?v=20260703-13';
+} from './systems/property.js?v=20260703-14';
 import {
   buyPerk as legacyBuyPerk,
+  achieveCapstone,
+  canAchieveCapstone,
   canRetire,
   createLegacyState,
   createMonument,
   fameFor,
   monumentIncome,
-  monumentNearMissBonus,
   openingGrant,
+  parkRating,
   qualityScore,
+  ratingDemandMult,
   renownMult,
   totalLegacyIncome,
-} from './systems/legacy.js?v=20260703-13';
-import { buildMonuments, stepMonuments } from './render/monuments.js?v=20260703-13';
-import { createLegacyPanel } from './ui/legacyPanel.js?v=20260703-13';
+} from './systems/legacy.js?v=20260703-14';
+import { createSnowglobeStudio } from './render/snowglobe.js?v=20260703-14';
+import { createLegacyPanel } from './ui/legacyPanel.js?v=20260703-14';
 import {
   BIOMES,
   BIOME_ORDER,
@@ -70,25 +81,28 @@ import {
   biomeOf,
   biomeUnlocked,
   normalizeBiome,
-} from './systems/biomes.js?v=20260703-13';
-import { buildTrackGeometry as renderTrackGeometry } from './render/track.js?v=20260703-13';
-import { buildPropertyGeometry as renderPropertyGeometry } from './render/property.js?v=20260703-13';
+} from './systems/biomes.js?v=20260703-14';
+import { buildTrackGeometry as renderTrackGeometry } from './render/track.js?v=20260703-14';
+import { buildPropertyGeometry as renderPropertyGeometry } from './render/property.js?v=20260703-14';
 import {
   buildStationAndQueue as renderStationAndQueue,
+  PLAZA_VISUAL_TUNING,
   spawnStationWalkers,
+  spawnPlazaVignette,
   updateQueueVisuals as renderQueueVisuals,
-} from './render/station.js?v=20260703-13';
+  updatePlazaVisuals,
+} from './render/station.js?v=20260703-14';
 import {
   CAR_LEN,
   placeCar as renderPlaceCar,
   rebuildTrains as renderRebuildTrains,
   setTrainGlow,
   setTrainOccupancy,
-} from './render/train.js?v=20260703-13';
-import { dispatchTrain, stepTrains } from './systems/trainSim.js?v=20260703-13';
-import { createIncomeTracker } from './systems/incomeTracker.js?v=20260703-13';
-import { OFFLINE_EFFICIENCY, computeOfflineProgress, formatDuration } from './systems/offline.js?v=20260703-13';
-import { createAudio } from './systems/audio.js?v=20260703-13';
+} from './render/train.js?v=20260703-14';
+import { dispatchTrain, stepTrains } from './systems/trainSim.js?v=20260703-14';
+import { createIncomeTracker } from './systems/incomeTracker.js?v=20260703-14';
+import { OFFLINE_EFFICIENCY, computeOfflineProgress, formatDuration } from './systems/offline.js?v=20260703-14';
+import { createAudio } from './systems/audio.js?v=20260703-14';
 import {
   CHANNELS,
   MAX_CHANNEL_WEIGHT,
@@ -106,8 +120,8 @@ import {
   rebalanceChannelWeights,
   steadyStateDemand,
   stepMarketing,
-} from './systems/marketing.js?v=20260703-13';
-import { staffStatus } from './systems/staff.js?v=20260703-13';
+} from './systems/marketing.js?v=20260703-14';
+import { staffStatus } from './systems/staff.js?v=20260703-14';
 import {
   aggregateStaff,
   canTrainPerson,
@@ -116,15 +130,17 @@ import {
   rollApplicants,
   signingFee,
   totalPayroll,
+  payrollScale,
   TRAITS,
   marketingTraitFx,
   offlineEfficiencyBonus,
   researchEffMult,
   showstopperArrivalMult,
   trainingFee,
-} from './systems/staffPeople.js?v=20260703-13';
-import { buildChunkScenery, createClouds } from './render/scenery.js?v=20260703-13';
-import { createStaffActors } from './render/staffActors.js?v=20260703-13';
+} from './systems/staffPeople.js?v=20260703-14';
+import { buildChunkScenery, createClouds } from './render/scenery.js?v=20260703-14';
+import { createStaffActors } from './render/staffActors.js?v=20260703-14';
+import { createStaffPortraitStudio } from './render/staffPortrait.js?v=20260703-14';
 import {
   canPlaceDecoration,
   createDecorationsState,
@@ -133,15 +149,15 @@ import {
   placeDecoration,
   removeDecoration,
   themingBonus,
-} from './systems/decorations.js?v=20260703-13';
-import { buildDecorationModel, buildDecorations as renderDecorations } from './render/decorations.js?v=20260703-13';
-import { initBuildControls } from './input/buildControls.js?v=20260703-13';
-import { createBalancePanel } from './ui/balancePanel.js?v=20260703-13';
-import { createHudShop } from './ui/hudShop.js?v=20260703-13';
-import { createResearchPanel } from './ui/researchPanel.js?v=20260703-13';
-import { createStaffPanel } from './ui/staffPanel.js?v=20260703-13';
-import { createLandPopup } from './ui/landPopup.js?v=20260703-13';
-import { createMarketingPanel } from './ui/marketingPanel.js?v=20260703-13';
+} from './systems/decorations.js?v=20260703-14';
+import { buildDecorationModel, buildDecorations as renderDecorations } from './render/decorations.js?v=20260703-14';
+import { initBuildControls } from './input/buildControls.js?v=20260703-14';
+import { createBalancePanel } from './ui/balancePanel.js?v=20260703-14';
+import { createHudShop } from './ui/hudShop.js?v=20260703-14';
+import { createResearchPanel } from './ui/researchPanel.js?v=20260703-14';
+import { createStaffPanel } from './ui/staffPanel.js?v=20260703-14';
+import { createLandPopup } from './ui/landPopup.js?v=20260703-14';
+import { createMarketingPanel } from './ui/marketingPanel.js?v=20260703-14';
 import {
   BLOCK_GAP,
   CATS,
@@ -165,7 +181,7 @@ import {
   STAFF_ORDER,
   STN,
   UPGRADES,
-} from './config/gameData.js?v=20260703-13';
+} from './config/gameData.js?v=20260703-14';
 
 /* =========================================================================
    TIME COASTER 3D
@@ -175,6 +191,11 @@ import {
 
 const WORLD_UP = new THREE.Vector3(0,1,0);
 const TEST = window.__TIME_COASTER_TEST__ === true;
+// Floating coin/pop/delta cues self-remove after their ~1s CSS animation. In
+// test mode we keep them alive far longer so assertions that count them are
+// deterministic regardless of how slowly the run executes (parallel WebGL).
+const POP_TTL = TEST ? 30000 : 1000;
+const BANK_DELTA_TTL = TEST ? 30000 : 1050;
 
 // procedural sound; stays silent until unlocked by the splash's Play gesture
 const audio = createAudio(typeof localStorage !== 'undefined' ? localStorage : null);
@@ -194,7 +215,9 @@ function currentMaxHeight(){
 }
 
 const state = { money:0, rides:0 };
-const sim   = { queue:0 };     // live count of guests waiting in line
+// Live guest stocks: `plaza` mills around the forecourt shopping; `queue` waits
+// in line. Guests flow plaza → queue (stepCrowdFlows) → ride → back to plaza.
+const sim   = { queue:0, plaza:0 };
 // Staff v2: `roster` (individuals: {seed, level}) is the source of truth; the
 // economy reads `staff`, the aggregate view, kept in sync via syncStaff().
 let roster = createRoster();
@@ -238,7 +261,13 @@ function paidRerollBoard(role){
   return cost;
 }
 
+// A role is full once its roster hits the config's hireMax (Staff v2 dropped
+// this cap in the rewrite — re-enforce it so hiring stays a bounded choice).
+function rosterFull(role){
+  return roster[role].length >= (STAFF[role]?.hireMax ?? Infinity);
+}
 function hirePerson(role, index){
+  if(rosterFull(role)) return 0;
   const b = ensureBoard(role);
   const person = b.applicants[index];
   if(!person) return 0;
@@ -295,7 +324,9 @@ const property = createPropertyState();
 const decorations = createDecorationsState(); // placed decor pieces [{type,x,z}]
 const marketing = createMarketingState(); // campaign budget + channel portfolio
 const legacy = createLegacyState();  // fame, generation, perks, retired-coaster monuments
-let coasterName = '';         // player-chosen name for the active coaster (Legacy panel)
+let coasterName = '';         // player-chosen name for the active coaster (set at birth)
+const escHtml = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+const escAttr = escHtml;
 let monumentExtent = 0;       // how far the hall-of-fame row reaches (for camera limits)
 let activeBiome = 'meadow';   // biome of the current coaster (chosen at retirement)
 let biomeCol = { ...COL };    // palette for scene geometry, repainted per biome
@@ -335,17 +366,20 @@ function rideUpgrades(){
 
 function derived(){
   const mfx = marketingFx();
+  const effectiveExc = path ? path.stats.excitement + excitementBonus() : 0;
+  const stars = parkRating(legacy.fame, legacy.monuments.length, effectiveExc);
   return deriveEconomy({
     upgrades: rideUpgrades(),
     // decor and monument near-misses raise effective excitement for the economy
     pathStats: path ? { ...path.stats, excitement: path.stats.excitement + excitementBonus() } : null,
     simQueue: sim.queue,
+    simPlaza: sim.plaza,     // live shopping crowd (null → analytic steady state)
     researchDone: research.done,
     staff,
     station: STN,
     fallbackMaxSpeed: PHYS.vMin,
     // Fame renown x campaign arrivals x Showstopper entertainers' crowd aura
-    demandMult: renownMult(legacy.perks) * mfx.arrivalMult * showstopperArrivalMult(staff.entertainers.people),
+    demandMult: renownMult(legacy.perks) * ratingDemandMult(stars) * mfx.arrivalMult * showstopperArrivalMult(staff.entertainers.people),
     snackMult: biomeFx(activeBiome).snackMult,   // Desert: thirsty guests
     ticketMult: mfx.ticketMult,                  // Ride Spotlight premium
     vendorMult: mfx.vendorMult,                  // Family Package spend
@@ -477,8 +511,11 @@ function refreshExcitementBonuses(){
     matchTypes: biomeMatchTypes(activeBiome),
     mult: biomeFx(activeBiome).themeMult,
   });
-  monumentBonus = monumentNearMissBonus(path.pos, monumentGhosts.map(ghost => ghost.path?.pos || []));
-  path.stats.monumentNearMiss = monumentBonus;
+  // Retired coasters now live in the Hall of Coasters as snowglobes rather than
+  // standing in the world, so there is nothing on the map to thread the track
+  // past — the near-miss bonus retires with them.
+  monumentBonus = 0;
+  path.stats.monumentNearMiss = 0;
 }
 
 function buildPath(){
@@ -511,6 +548,7 @@ const sceneryGrp=new THREE.Group(); scene.add(sceneryGrp);
 const trackGrp=new THREE.Group(); scene.add(trackGrp);
 const stationGrp=new THREE.Group(); scene.add(stationGrp);
 staffActors=createStaffActors({ THREE, scene, disposeGroup });
+const portraitStudio=createStaffPortraitStudio({ THREE });   // bakes 3D busts for the roster panel
 staffActors.rebuild(staff);
 
 function buildPropertyGeometry(){
@@ -547,21 +585,14 @@ function buildDecorGeometry(){
 }
 
 // ── hall of fame: retired coasters as standing monuments with ghost trains ──
-const monumentsGrp=new THREE.Group(); scene.add(monumentsGrp);
-let monumentGhosts=[];
+// Retired coasters no longer stand in the world as monument slabs — they live
+// on the Hall of Coasters shelf as snowglobe trophies (see snowglobe.js). The
+// legacy data, their passive income, near-miss bonus and perks are untouched;
+// only the world rendering retired, which also ends the grass-slab sprawl a
+// long coaster used to produce.
+const globeStudio=createSnowglobeStudio({ THREE, baseColors: COL });
 function buildMonumentsAll(){
-  const res=buildMonuments({
-    THREE,
-    group: monumentsGrp,
-    monuments: legacy.monuments,
-    colors: COL,
-    renderTrackGeometry,
-    renderDecorations,
-    disposeGroup,
-    worldUp: WORLD_UP,
-  });
-  monumentGhosts=res.ghosts;
-  monumentExtent=res.extent;
+  monumentExtent=0;   // no world footprint to frame the camera around
 }
 
 function buildTrackGeometry(){
@@ -591,7 +622,8 @@ function applyBiome(rebuild=false){
 
 function queueSignature(d = derived()){
   const station = `${ctrlPts[0]?.x},${ctrlPts[0]?.z},${ctrlPts[1]?.x},${ctrlPts[1]?.z}`;
-  return `${d.queueCap}|${UPGRADES.snacks.level}|${UPGRADES.canopy.level}|${UPGRADES.hats.level}|${UPGRADES.balloons.level}|${d.berths}|${station}`;
+  // coaster name + hype drive the entrance name marquee (name text + tier)
+  return `${d.queueCap}|${UPGRADES.snacks.level}|${UPGRADES.canopy.level}|${UPGRADES.hats.level}|${UPGRADES.balloons.level}|${UPGRADES.hype.level}|${UPGRADES.foodCourt?.level || 0}|${UPGRADES.comfort?.level || 0}|${UPGRADES.turnstiles?.level || 0}|${UPGRADES.express?.level || 0}|${coasterName.trim()}|${d.berths}|${station}`;
 }
 
 function refreshDecorBlockers(){
@@ -617,13 +649,17 @@ function buildStationAndQueue(){
     guestColors: GUEST_COLS,
     worldUp: WORLD_UP,
     disposeGroup,
+    coasterName: coasterName.trim() || `Coaster ${legacy.generation}`,
+    hypeLevel: UPGRADES.hype.level,
   });
   queueVisualSignature = queueSignature(d);
   refreshDecorBlockers();
 }
 
 function updateQueueVisuals(dt=0){
-  renderQueueVisuals({ queue: sim.queue, stationRefs, dt, time: performance.now()*0.001 });
+  const time=performance.now()*0.001;
+  renderQueueVisuals({ queue: sim.queue, stationRefs, dt, time });
+  updatePlazaVisuals({ plaza: sim.plaza, stationRefs, dt, time });
 }
 
 function ensureQueueVisualFresh(d = derived()){
@@ -742,7 +778,8 @@ if(window.__TIME_COASTER_TEST__){
     coasterStats: () => ({ ...(path?.stats || {}), excitement: (path?.stats.excitement || 0) + excitementBonus(), themeBonus, monumentBonus }),
     selectBuildPoint: idx => buildControls.selectHandle(idx),
     pointBank: idx => ctrlPts[idx]?.bank ?? null,
-    legacy: () => ({ fame: legacy.fame, generation: legacy.generation, monuments: legacy.monuments.length, biome: activeBiome, excitement: (path?.stats.excitement || 0) + excitementBonus(), themeBonus, monumentBonus }),
+    legacy: () => ({ fame: legacy.fame, generation: legacy.generation, monuments: legacy.monuments.length, capstone: legacy.capstone ? { ...legacy.capstone } : null, biome: activeBiome, excitement: (path?.stats.excitement || 0) + excitementBonus(), themeBonus, monumentBonus }),
+    awardCapstone: () => completeImpossibleCoaster({ force:true }),
     marketing: () => ({
       fundingPct: marketing.fundingPct,
       channels: Object.fromEntries(CHANNELS.map(c => [c.key, {
@@ -759,6 +796,11 @@ if(window.__TIME_COASTER_TEST__){
       visualCapacity: stationRefs.queueVisualCapacity,
       lanes: stationRefs.queueLanes,
       guests: stationRefs.crowd?.poolSize || 0,
+      simQueue: sim.queue,
+      plaza: sim.plaza,
+      // walk-in accounting: standing instances vs joiners still in the lanes
+      settled: stationRefs.queueInbound?.settled ?? -1,
+      inFlight: stationRefs.queueInbound?.inFlight ?? 0,
     }),
     canPlaceDecor: (type, x, z) => canPlaceDecoration({ property, decorations, type, x, z, blockers:decorBlockers }),
     screenPoint: (x, z, y = 0) => {
@@ -799,6 +841,9 @@ if(window.__TIME_COASTER_TEST__){
 //  GAME LOOP
 // =========================================================================
 let coinThrottle=0, hudAccum=0, dispatchHinted=false;
+let concAcc=0;   // concessions point-of-sale accumulator (fractional sales)
+let vignetteAcc=0, vignetteCool=0;   // walk-up-and-decide theater at the arch
+const stallState={ active:false };   // hard-stall latch (fires the toast once on change)
 const stationBusy=()=>trains.some(t=>t.mode==='dwell');
 // measured income: every credited dollar is recorded so the HUD can show what
 // the park actually earns (projected rate overstates it when trains back up)
@@ -814,12 +859,29 @@ const dispatchDeposit=(tr,income)=>{
 };
 
 function updateTrains(dt,d){
+  // Hard stall: a crest the launch/lift energy can't clear. The physics sweep
+  // flags it (path.stats.rollback) and marks where it dies (stallS). A stalled
+  // ride pays nothing until the track is fixed — one train climbs to the crest,
+  // gives up, and rolls back to the empty platform to show why.
+  const stalled=!!path?.stats?.rollback;
+  if(stalled!==stallState.active){
+    stallState.active=stalled;
+    if(stalled){
+      const h=path.stats.stallHeight;
+      showToast(`⚠ STALLED — the train can't clear the ${h}m crest. Lower the hill, add a ⛓ Lift, or buy Faster Track.`);
+      audio.play('error');
+    } else {
+      showToast('Ride cleared — trains are running again!');
+    }
+    refreshHUD();
+  }
   stepTrains({
     trains, dt, economy:d, pathLen:path.len, stopS:stationRefs.stopS, sim, state,
     speedAt, stationBusy,
     carLen:CAR_LEN, blockGap:BLOCK_GAP,
     berths:d.berths, advanceTime:d.advanceTime,
     autoDispatch:d.autoDispatch, dispatchDelay:d.dispatchDelay,
+    stalled, stallS: path?.stats?.stallS ?? -1,
     placeTrain: tr => tr.cars.forEach((car,i)=>placeCar(car, tr.s-i*CAR_LEN)),
     setOccupancy: setTrainOccupancy,
     onDeposit: dispatchDeposit,
@@ -831,8 +893,12 @@ function updateTrains(dt,d){
     const cur=tr.mode==='dwell'?tr.phase:'run';
     if(tr._animPhase!==cur){
       const dual=d.berths>1;
-      if(cur==='unload'&&tr.startBoard>0)
+      if(cur==='unload'&&tr.startBoard>0){
         spawnStationWalkers(stationRefs,'exit',tr.startBoard,d.unloadTime,dual?(tr.berth==='front'?'front':'rear'):'all');
+        // riders walk off into the plaza and keep their visit going (shop,
+        // wander, maybe ride again) — the plaza's departure flow retires them
+        sim.plaza=Math.min(d.plazaCapacity, sim.plaza + tr.startBoard);
+      }
       else if(cur==='load'&&tr.cycleBoard>0)
         spawnStationWalkers(stationRefs,'board',tr.cycleBoard,d.loadTime,dual?'front':'all');
       tr._animPhase=cur;
@@ -1098,22 +1164,65 @@ function updateMaintenance(dt){
 function stepSim(dt){
   updateMaintenance(dt);
   const d=derived();
-  // guests arrive at the queue (capped by capacity)
-  sim.queue=Math.min(d.queueCap, sim.queue + d.arrivalRate*dt);
+  // The guest funnel: arrivals land in the plaza (marketing), mill and shop,
+  // and file into the queue when the ride and the wait look worth it. Boarding
+  // drains the queue in trainSim; riders return to the plaza after unloading.
+  const flows=stepCrowdFlows({
+    plaza: sim.plaza,
+    queue: sim.queue,
+    dt,
+    arrivalPerSec: d.arrivalRate,
+    visitMin: d.visitMin,
+    joinWill: d.joinWill,
+    queueCap: d.queueCap,
+    plazaCap: d.plazaCapacity,
+  });
+  sim.plaza=flows.plaza;
+  sim.queue=flows.queue;
+  // Joiners now walk the lanes for real (queue walk-ins spawned by the
+  // renderer when the count rises). The theater that remains is the BALK —
+  // a looker who sized up the line at the arch and bailed. Staged from the
+  // join flow at the miss rate (1−joinWill), so a punishing wait shows a
+  // parade of shrugs while a great ride shows almost none.
+  vignetteAcc=Math.min(vignetteAcc+flows.join, PLAZA_VISUAL_TUNING.vignetteJoinBankCap);
+  vignetteCool-=dt;
+  if(vignetteAcc>=1 && vignetteCool<=0){
+    vignetteAcc-=1;
+    if(Math.random()>d.joinWill && spawnPlazaVignette(stationRefs,'balk')) vignetteCool=PLAZA_VISUAL_TUNING.vignetteCooldownSec;
+  }
   // snack income scales with guests waiting (capped per stand, raised by
   // Shade Canopies), boosted by Janitors, tickets and theming
   let passive=0;
-  if(UPGRADES.snacks.level>0) passive += d.snackPerMin/60*dt;
+  // Concessions: the whole waiting crowd buys snacks/hats/balloons at the point
+  // of sale — credited here (not at dispatch) with coin pops over the queue.
+  const conc=d.concessions;
+  if(conc && conc.perMin>0){
+    const drained=drainSales(concAcc, conc.salesPerMin, dt, 2);
+    concAcc=drained.acc;
+    if(drained.sales>0){
+      const avg=conc.salesPerMin>0 ? conc.perMin/conc.salesPerMin : 0;
+      let earned=0;
+      for(let k=0;k<drained.popped;k++){
+        const sale=pickConcessionSale(conc.items, Math.random());
+        const price=sale?sale.price:avg;
+        earned+=price;
+        if(sale && coinThrottle<=0){ spawnConcessionPop(sale, price); coinThrottle=0.12; }
+      }
+      earned += (drained.sales - drained.popped) * avg;   // overflow, no pop
+      passive += earned;
+    }
+  }
   // Reality Licensing royalties trickle in passively from impossible rides
   if(d.royaltyPerMin>0) passive += d.royaltyPerMin/60*dt;
   // retired coasters keep drawing tourists ("visit the classics") — Heritage
   // Tours campaigns multiply the take while their demand lasts
   if(legacy.monuments.length) passive += totalLegacyIncome(legacy.monuments, legacy.perks)*marketingFx().legacyMult/60*dt;
   if(passive>0){ state.money += passive; incomeTracker.record(passive, nowSec()); }
-  // payroll: wages drain continuously while the park is open. Skipped when the
-  // bank is empty — a broke park simply can't make payroll, no death spiral.
+  // payroll: wages drain continuously while the park is open, scaled by era —
+  // a famous park pays famous salaries (payrollScale of gross). Skipped when
+  // the bank is empty — a broke park simply can't make payroll, no death spiral.
   if(state.money>0){
-    const wage=totalPayroll(roster)/60*dt;
+    const wage=totalPayroll(roster)*payrollScale(d.ratePerMin)/60*dt;
     if(wage>0) state.money=Math.max(0, state.money-wage);
   }
   // marketing: Marketers split a chosen % of projected income across the
@@ -1159,13 +1268,14 @@ function tick(){
     if(d){
       ensureQueueVisualFresh(d);
       updateQueueVisuals(frameDt);
-      if(stationRefs.walkerGeom) staffActors?.update({
+      // an entertainer mid-show returns their spot; wanderers drift to watch
+      if(stationRefs.walkerGeom) stationRefs.plazaShow = staffActors?.update({
         dt: frameDt,
         time: performance.now()*0.001,
         geom: stationRefs.walkerGeom,
         frame: stationRefs.frameGroup,
         installing: !!maintenance.current,
-      });
+      }) || null;
     }
     hudAccum+=frameDt;
     if(hudAccum>=0.2){ refreshHUD(); hudAccum=0; }
@@ -1173,7 +1283,6 @@ function tick(){
     updateDispatchButton(false);
   }
   clouds.forEach((c,i)=>{c.position.x+=(0.15+i*0.02)*frameDt;if(c.position.x>30)c.position.x=-30;});
-  if(!paused && monumentGhosts.length) stepMonuments(monumentGhosts, frameDt, THREE);
   coinThrottle-=frameDt; placeCamera(); renderer.render(scene,camera); requestAnimationFrame(tick);
 }
 
@@ -1198,6 +1307,11 @@ const ui=createHudShop({
   getSim: () => sim,
   getMeasuredRate: measuredRate,
   getExcitementBonus: () => excitementBonus(),
+  getParkRating: () => parkRating(
+    legacy.fame,
+    legacy.monuments.length,
+    path ? path.stats.excitement + excitementBonus() : 0,
+  ),
   hasResearch,
   gradeFor,
   upgradeCost,
@@ -1247,7 +1361,8 @@ function openBiomePicker(){
   if(!canRetire(path.stats, excitementBonus(), legacy.generation)) return false;
   if(legacyUI.isOpen()) legacyUI.close();
   const gained=fameFor(path.stats, excitementBonus());
-  const name=(coasterName.trim() || `Coaster ${legacy.generation}`).slice(0,40);
+  const oldName=(coasterName.trim() || `Coaster ${legacy.generation}`).slice(0,40);
+  const defaultNewName=`Coaster ${legacy.generation + 1}`;
   const title=$('ceremonyTitle'); if(title) title.textContent='Where Next?';
   const cards=BIOME_ORDER.map(key=>{
     const b=BIOMES[key];
@@ -1258,34 +1373,96 @@ function openBiomePicker(){
   }).join('');
   const body=$('ceremonyBody');
   if(body) body.innerHTML=
-    `<div class="cer-name">Retire “${name}”</div>`+
+    `<div class="cer-name">Retire “${escHtml(oldName)}”</div>`+
     `<div class="cer-fame">+${fmt(gained)} <span>Fame</span></div>`+
-    `<div class="cer-sub">Choose where your next coaster rises:</div>`+
+    `<div class="cer-sub">Name your next coaster, then choose where it rises:</div>`+
+    `<input id="newCoasterName" class="lg-name" maxlength="40" value="${escAttr(defaultNewName)}" placeholder="Name your coaster">`+
     `<div class="biome-grid">${cards}</div>`;
   body?.querySelectorAll('.biome-card').forEach(btn=>{
-    btn.addEventListener('click', ()=>doRetire(btn.dataset.biome, name, gained));
+    btn.addEventListener('click', ()=>{
+      const newName=($('newCoasterName')?.value || '').trim().slice(0,40) || defaultNewName;
+      doRetire(btn.dataset.biome, oldName, gained, newName);
+    });
   });
   const panel=$('ceremonyPanel'); if(panel) panel.hidden=false;
   return true;
 }
 
-function spawnRetirementBurst(){
+// One firework: a ring of sparks bursting from (cx%, cy%) of the viewport.
+const CER_COLORS=['#ffb84d','#ff7a59','#8fd3ff','#b58cff','#7ce7a8','#ffe36e'];
+function spawnFirework(cx, cy, hue, delay=0){
   const panel=$('ceremonyPanel');
   if(!panel || panel.hidden) return;
-  for(let i=0;i<18;i++){
+  const n=16;
+  for(let i=0;i<n;i++){
     const spark=document.createElement('div');
     spark.className='cer-spark';
-    const angle=(Math.PI*2*i)/18;
-    const dist=72 + (i%4)*18;
+    const angle=(Math.PI*2*i)/n + (hue%2?0.2:0);
+    const dist=58 + (i%4)*20;
+    spark.style.left=`${cx}%`;
+    spark.style.top=`${cy}%`;
+    spark.style.background=CER_COLORS[hue%CER_COLORS.length];
     spark.style.setProperty('--dx', `${Math.cos(angle)*dist}px`);
     spark.style.setProperty('--dy', `${Math.sin(angle)*dist}px`);
-    spark.style.setProperty('--delay', `${(i%5)*35}ms`);
+    spark.style.setProperty('--delay', `${delay + (i%5)*30}ms`);
     panel.appendChild(spark);
-    setTimeout(()=>spark.remove(),950);
+    setTimeout(()=>spark.remove(), delay+1000);
   }
 }
 
-function doRetire(nextBiome, name, gained){
+// The ascension salute: staggered bursts across the panel. Test mode fires a
+// single quick burst so the retire smoke test never waits on theatre.
+function spawnRetirementBurst(){
+  const panel=$('ceremonyPanel');
+  if(!panel || panel.hidden) return;
+  if(TEST){ spawnFirework(50, 45, 0, 0); return; }
+  const shots=[[50,42,0,0],[28,34,1,260],[72,36,2,420],[38,56,3,680],[64,58,4,860]];
+  shots.forEach(([x,y,h,d])=>{
+    setTimeout(()=>spawnFirework(x,y,h,0), d);
+    void h;
+  });
+  // a second fanfare swell as the last shells go up
+  setTimeout(()=>audio.play('fanfare'), 700);
+}
+
+function spawnImpossibleBurst(){
+  const panel=$('ceremonyPanel');
+  if(!panel || panel.hidden) return;
+  if(TEST){ spawnFirework(50, 42, 5, 0); return; }
+  const shots=[
+    [50,38,5,0],[22,30,1,140],[78,30,2,260],[34,50,3,380],[66,50,4,500],
+    [16,56,0,650],[84,56,5,760],[50,60,2,900],[28,40,4,1080],[72,42,1,1220],
+  ];
+  shots.forEach(([x,y,h,d])=>setTimeout(()=>spawnFirework(x,y,h,0),d));
+  setTimeout(()=>audio.play('fanfare'), 450);
+  setTimeout(()=>audio.play('fanfare'), 1100);
+}
+
+function completeImpossibleCoaster({ force = false } = {}){
+  if(!path) return false;
+  if(!force && !canAchieveCapstone(legacy, path.stats, excitementBonus())) return false;
+  const name=(coasterName.trim() || 'Impossible Coaster').slice(0,40);
+  if(!achieveCapstone(legacy, { name })) return false;
+  legacyUI?.close();
+  saveGame();
+  const title=$('ceremonyTitle'); if(title) title.textContent='The Impossible Is Real!';
+  const body=$('ceremonyBody');
+  if(body) body.innerHTML=
+    `<div class="cer-name">${escHtml(name)}</div>`+
+    `<div class="cer-fame">∞ <span>Impossible Coaster</span></div>`+
+    `<div class="cer-stats">`+
+      `<div><b>${Math.round(path.stats.excitement + excitementBonus())}</b><span>EXC</span></div>`+
+      `<div><b>${Math.round(qualityScore(path.stats))}</b><span>Craft</span></div>`+
+      `<div><b>★5</b><span>Park</span></div>`+
+    `</div>`+
+    `<div class="cer-sub">🏆 Permanent trophy unlocked. This park and coaster remain yours to keep building.</div>`;
+  const panel=$('ceremonyPanel'); if(panel) panel.hidden=false;
+  audio.play('fanfare');
+  spawnImpossibleBurst();
+  return true;
+}
+
+function doRetire(nextBiome, name, gained, newName=''){
   if(!path || !canRetire(path.stats, excitementBonus(), legacy.generation)) return false;
   const retiredStats={ ...path.stats };
   const retiredBonus=excitementBonus();
@@ -1298,7 +1475,7 @@ function doRetire(nextBiome, name, gained){
   legacy.monuments.push(monument);
   legacy.fame+=gained;
   legacy.generation+=1;
-  coasterName='';
+  coasterName=(newName||'').trim().slice(0,40);   // named at birth, in the biome picker
   activeBiome=normalizeBiome(nextBiome);
 
   // reset the active coaster; research, staff and Fame persist
@@ -1311,7 +1488,7 @@ function doRetire(nextBiome, name, gained){
   resetActiveProperty();
   decorations.length=0; themeBonus=0; monumentBonus=0;
   ctrlPts=DEFAULT_CTRL.map(p=>({...p}));
-  paidLength=0; sim.queue=0;
+  paidLength=0; sim.queue=0; sim.plaza=0;
   buildControls.resetHistory?.();
   resetCameraView();
   applyResearchEffects();
@@ -1321,6 +1498,7 @@ function doRetire(nextBiome, name, gained){
   rebuildTrains();
   trains.forEach((tr,i)=>{tr.s=(i/trains.length)*path.len;tr.prevS=tr.s;tr.L=path.len;});
   sim.queue=Math.min(derived().queueCap, 8);
+  sim.plaza=12;   // opening-day stragglers milling in the forecourt
   buildMonumentsAll();
   refreshHUD(); saveGame();
   audio.play('fanfare');
@@ -1328,7 +1506,14 @@ function doRetire(nextBiome, name, gained){
   const b=biomeOf(activeBiome);
   const title=$('ceremonyTitle'); if(title) title.textContent='Coaster Retired!';
   const body=$('ceremonyBody');
-  if(body) body.innerHTML=`<div class="cer-name">${name}</div>`+
+  // the coaster that just retired, shrunk into its trophy — it animates down
+  // into place, then lives on the Hall of Coasters shelf
+  const globeImg=globeStudio.globeFor(monument);
+  const globeHtml=globeImg
+    ? `<img class="cer-globe" src="${globeImg}" alt="${escAttr(name)} snowglobe">`
+    : '';
+  if(body) body.innerHTML=`<div class="cer-name">${escHtml(name)}</div>`+
+    globeHtml+
     `<div class="cer-fame">+${fmt(gained)} <span>Fame</span></div>`+
     `<div class="cer-stats">`+
       `<div><b>${Math.round(retiredStats.excitement + retiredBonus)}</b><span>EXC</span></div>`+
@@ -1336,7 +1521,7 @@ function doRetire(nextBiome, name, gained){
       `<div><b>${fmt(retiredIncome)}</b><span>$/min</span></div>`+
       `<div><b>${fmt(grant)}</b><span>Grant</span></div>`+
     `</div>`+
-    (retiredStats.monumentNearMiss>0.05?`<div class="cer-sub">History thread bonus +${retiredStats.monumentNearMiss.toFixed(1)} EXC.</div>`:'')+
+    `<div class="cer-sub">🔮 Sealed in a snowglobe — find it in your Hall of Coasters.</div>`+
     `<div class="cer-sub">Generation ${legacy.generation} begins on the ${b.icon} ${b.name}.</div>`;
   spawnRetirementBurst();
   return true;
@@ -1355,7 +1540,7 @@ const balanceUI=createBalancePanel({
   getMarketingFundingPct: () => clampMarketingPct(marketing.fundingPct, staff),
   canSpendMarketing: () => hasMarketer(staff),
   getMarketingFx: marketingFx,
-  getPayroll: () => totalPayroll(roster),
+  getPayroll: () => totalPayroll(roster) * payrollScale(derived().ratePerMin),
   researchPaths: RESEARCH_PATHS,
   projects: RESEARCH,
   pathProjectState,
@@ -1380,8 +1565,10 @@ const legacyUI=createLegacyPanel({
   getThemeBonus: () => excitementBonus(),
   getCoasterName: () => coasterName,
   setCoasterName: v => { coasterName=v; },
+  getGlobe: monument => globeStudio.globeFor(monument),
   fmt,
   onRetire: openBiomePicker,
+  onCapstone: () => completeImpossibleCoaster(),
   onBuyPerk: key => {
     if(buyLegacyPerk(key)){ audio.play('buy'); return true; }
     return false;
@@ -1471,6 +1658,7 @@ const staffUI=createStaffPanel({
   staffOrder: STAFF_ORDER,
   getStaff: () => staff,
   getRoster: () => roster,
+  getPortrait: person => portraitStudio.portraitFor(person),
   getApplicants: role => ensureBoard(role).applicants,
   getBoardRefreshSeconds: role => Math.max(0, (ensureBoard(role).refreshAt-Date.now())/1000),
   getState: () => state,
@@ -1487,11 +1675,16 @@ const staffUI=createStaffPanel({
       return m ? trainingFee(generatePerson(role,m.seed), m.level) : 0;
     },
     reroll: role => rerollCost(role),
-    canHire: role => cheapestApplicantIndex(role) >= 0,
+    canHire: role => cheapestApplicantIndex(role) >= 0 && !rosterFull(role),
     canTrain: role => lowestTrainableIndex(role) >= 0,
+    atCap: role => rosterFull(role),
+    cap: role => STAFF[role]?.hireMax ?? Infinity,
   },
   describe: (role, entry) => staffStatus(role, { hired: entry.hired, trained: Math.round(entry.trained||0) }),
   traits: TRAITS,
+  // era wages: displayed salaries track the park's gross (a famous park pays
+  // famous salaries) — must match the live payroll drain in stepSim
+  wageScale: () => payrollScale(derived().ratePerMin),
   onSpendFeedback: (amount, x, y) => spawnCoinScreen(Math.max(0,x-26), Math.max(0,y-14), amount, true),
   onHire: (role, index=cheapestApplicantIndex(role)) => {
     const prevResearchCap=researchFundingCap(staff);
@@ -1630,10 +1823,40 @@ function spawnCoin(worldPos,amount){
   _v.copy(worldPos).project(camera);
   spawnCoinScreen((_v.x*.5+.5)*host.clientWidth,(-_v.y*.5+.5)*host.clientHeight,amount,false);
 }
+// A concession sale: an item icon + price floating over a random queue guest.
+function spawnConcessionPop(item, price){
+  const g=stationRefs.frameGroup, coords=stationRefs.queueSlotCoords;
+  if(!g) return;
+  // sales ring up at the stands: pop over the matching forecourt POI (hat cart,
+  // balloon cart, fountain snackers), jittered so a busy stand reads as a crowd;
+  // fall back to the queue line if the forecourt isn't built
+  const pois=stationRefs.plazaPOIs;
+  let c=null;
+  if(pois && pois.length){
+    const match=pois.filter(p=>p.kind===item.key || (item.key==='snack' && p.kind==='foodcourt'));
+    const pool=match.length?match:pois;
+    const p=pool[(Math.random()*pool.length)|0];
+    c={ x:p.x+(Math.random()-0.5)*p.r, z:p.z+(Math.random()-0.5)*p.r };
+  } else if(coords && coords.length){
+    c=coords[(Math.random()*coords.length)|0];
+  }
+  if(!c) return;
+  _v.set(c.x, (stationRefs.walkerGeom?.plazaTop ?? 0.5)+0.95, c.z);
+  g.localToWorld(_v);
+  _v.project(camera);
+  if(_v.z>1) return;   // behind the camera
+  const el=document.createElement('div');
+  el.className='pop concession';
+  el.textContent=`${item.icon} +$${fmt(price)}`;
+  el.style.left=(_v.x*.5+.5)*host.clientWidth+'px';
+  el.style.top=(-_v.y*.5+.5)*host.clientHeight+'px';
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(),POP_TTL);
+}
 function spawnCoinScreen(x,y,amount,spend){
   const el=document.createElement('div');el.className='pop'+(spend?' spend':'');
   el.textContent=(spend?'-$':'+$')+fmt(amount);el.style.left=x+'px';el.style.top=y+'px';
-  document.body.appendChild(el);setTimeout(()=>el.remove(),1000);
+  document.body.appendChild(el);setTimeout(()=>el.remove(),POP_TTL);
 }
 function spawnBankDelta(amount,spend){
   const bank=document.querySelector('.bank .money') || $('money');
@@ -1645,7 +1868,7 @@ function spawnBankDelta(amount,spend){
   el.style.left=(r.left+r.width/2)+'px';
   el.style.top=(r.bottom+8)+'px';
   document.body.appendChild(el);
-  setTimeout(()=>el.remove(),1050);
+  setTimeout(()=>el.remove(),BANK_DELTA_TTL);
 }
 let toastTimer;
 function showToast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600);}
@@ -1656,6 +1879,45 @@ const escapeMenu = {
   resetArmed: false,
   resetTimer: null,
 };
+let activeSaveSlot=Math.max(1,Math.min(3,Number(localStorage.getItem(ACTIVE_SLOT_KEY))||1));
+let suppressPagehideSave=false;
+
+function formatSlotTime(savedAt){
+  if(!savedAt) return 'unknown time';
+  return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(savedAt));
+}
+function renderSaveSlots(){
+  const host=$('saveSlots');
+  if(!host) return;
+  host.innerHTML=[1,2,3].map(slot=>{
+    const meta=saveSlotMetadata(localStorage,slot);
+    const details=meta.empty
+      ? 'Empty slot'
+      : `Gen ${meta.generation} · ★${fmt(meta.fame)} Fame · $${fmt(meta.money)} · ${formatSlotTime(meta.savedAt)}`;
+    return `<div class="save-slot${slot===activeSaveSlot?' active':''}" data-slot="${slot}">`+
+      `<div class="save-slot-info"><input class="save-slot-name" data-slot-name="${slot}" maxlength="24" value="${escAttr(meta.name)}" aria-label="Slot ${slot} name">`+
+      `<span class="save-slot-meta">${details}</span></div>`+
+      `<button class="slot-btn" data-slot-save="${slot}">Save</button>`+
+      `<button class="slot-btn" data-slot-load="${slot}" ${slot===activeSaveSlot?'disabled':''}>${slot===activeSaveSlot?'Active':'Load'}</button></div>`;
+  }).join('');
+  host.querySelectorAll('[data-slot-name]').forEach(input=>input.addEventListener('change',()=>{
+    setSlotName(localStorage,Number(input.dataset.slotName),input.value);
+    renderSaveSlots();
+  }));
+  host.querySelectorAll('[data-slot-save]').forEach(btn=>btn.addEventListener('click',()=>{
+    const slot=Number(btn.dataset.slotSave);
+    showToast(saveGame(slot)?`Saved to ${saveSlotMetadata(localStorage,slot).name}`:'Save failed');
+    renderSaveSlots();
+  }));
+  host.querySelectorAll('[data-slot-load]').forEach(btn=>btn.addEventListener('click',()=>switchSaveSlot(Number(btn.dataset.slotLoad))));
+}
+function switchSaveSlot(slot){
+  if(slot===activeSaveSlot) return;
+  if(!saveGame()) return showToast('Save failed — slot switch cancelled');
+  localStorage.setItem(ACTIVE_SLOT_KEY,String(slot));
+  suppressPagehideSave=true;
+  location.reload();
+}
 function resetEscapeConfirm(){
   escapeMenu.resetArmed=false;
   const reset=$('escapeReset');
@@ -1675,6 +1937,7 @@ function setEscapeMenu(open){
         ? 'Manage this park session — not saved yet this session.'
         : `Manage this park session — last saved ${age<5?'just now':`${age}s ago`}.`;
     }
+    renderSaveSlots();
   }
   resetEscapeConfirm();
 }
@@ -1690,7 +1953,9 @@ function closeOpenPanels(){
   return closed;
 }
 function resetSaveAndReload(){
-  SAVE_KEYS.forEach(key=>localStorage.removeItem(key));
+  localStorage.removeItem(SLOT_KEYS[activeSaveSlot-1]);
+  if(activeSaveSlot===1) SAVE_KEYS.slice(3).forEach(key=>localStorage.removeItem(key));
+  suppressPagehideSave=true;
   location.reload();
 }
 function armOrResetPark(){
@@ -1706,13 +1971,34 @@ function armOrResetPark(){
   resetSaveAndReload();
 }
 $('escapeResume').addEventListener('click', ()=>setEscapeMenu(false));
+$('escapeCloseX')?.addEventListener('click', ()=>setEscapeMenu(false));
 $('escapeBackdrop').addEventListener('click', ()=>setEscapeMenu(false));
 $('escapeSave').addEventListener('click', ()=>{
   showToast(saveGame() ? 'Game saved' : 'Save failed');
+  renderSaveSlots();
   resetEscapeConfirm();
 });
 $('escapeReload').addEventListener('click', ()=>location.reload());
 $('escapeReset').addEventListener('click', armOrResetPark);
+$('escapeExport').addEventListener('click', async ()=>{
+  saveGame();
+  const encoded=exportSaveString(readSave(localStorage,activeSaveSlot));
+  const field=$('saveTransfer');
+  if(!encoded || !field) return showToast('Nothing to export');
+  field.value=encoded;
+  field.select();
+  try{ await navigator.clipboard.writeText(encoded); showToast('Save exported and copied'); }
+  catch(_){ showToast('Save exported — copy the string'); }
+  const status=$('saveTransferStatus'); if(status) status.textContent='Active slot exported as one copy-pasteable string.';
+});
+$('escapeImport').addEventListener('click', ()=>{
+  const field=$('saveTransfer');
+  const result=importSaveToSlot(localStorage,field?.value,activeSaveSlot);
+  const status=$('saveTransferStatus'); if(status) status.textContent=result.ok?'Import valid — loading saved park…':result.error;
+  if(!result.ok) return showToast(result.error);
+  suppressPagehideSave=true;
+  location.reload();
+});
 
 // =========================================================================
 //  SAVE / LOAD
@@ -1733,7 +2019,7 @@ function currentActiveRate(){
   if(m===null) return path ? derived().ratePerMin : 0;
   return Math.max(0, m - currentLegacyRate());
 }
-function saveGame(){
+function saveGame(slot=activeSaveSlot){
   const lastActiveRate=currentActiveRate();
   const lastLegacyRate=currentLegacyRate();
   const ok=writeSave(localStorage, {
@@ -1757,7 +2043,7 @@ function saveGame(){
     lastRate: lastActiveRate + lastLegacyRate,
     lastActiveRate,
     lastLegacyRate,
-  });
+  }, slot);
   if(ok){
     saveFailures=0;
     lastSavedAt=Date.now();
@@ -1772,7 +2058,7 @@ function saveGame(){
 }
 let restoredSavedAt=0, restoredRate=0, restoredActiveRate=null, restoredLegacyRate=0;   // for offline-progress on this boot
 function loadGame(){
-  const restored = applySaveData(readSave(localStorage), {
+  const restored = applySaveData(readSave(localStorage,activeSaveSlot), {
     state,
     sim,
     upgrades: UPGRADES,
@@ -1789,6 +2075,7 @@ function loadGame(){
     legacy.generation=restored.legacy.generation;
     legacy.perks=restored.legacy.perks;
     legacy.monuments=restored.legacy.monuments;
+    legacy.capstone=restored.legacy.capstone;
   }
   if(restored.marketing){
     const restoredMarketing=normalizeMarketingState(restored.marketing);
@@ -1838,8 +2125,8 @@ function loadGame(){
 }
 setInterval(saveGame,15000);
 // closing or backgrounding the tab must never lose progress
-window.addEventListener('pagehide', saveGame);
-document.addEventListener('visibilitychange', ()=>{ if(document.hidden) saveGame(); });
+window.addEventListener('pagehide', ()=>{ if(!suppressPagehideSave) saveGame(); });
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden && !suppressPagehideSave) saveGame(); });
 
 // =========================================================================
 //  BOOT
@@ -1848,7 +2135,7 @@ document.addEventListener('visibilitychange', ()=>{ if(document.hidden) saveGame
 // otherwise overwrite a save planted in localStorage just before a reload
 try{
   const seed=sessionStorage.getItem('tc3d_seed');
-  if(seed){ localStorage.setItem(SAVE_KEYS[0], seed); sessionStorage.removeItem('tc3d_seed'); }
+  if(seed){ localStorage.setItem(SLOT_KEYS[activeSaveSlot-1], seed); sessionStorage.removeItem('tc3d_seed'); }
 }catch(_){}
 loadGame();
 if(restoredSavedAt>0) decayDemand(marketing, (Date.now()-restoredSavedAt)/1000, marketingTraitFx(staff.marketers.people));
@@ -1863,6 +2150,7 @@ if(!paidLength)paidLength=path.len;   // first run: starter track is free
 rebuildTrains();
 trains.forEach((tr,i)=>{tr.s=(i/trains.length)*path.len;tr.prevS=tr.s;tr.L=path.len;});
 if(sim.queue<=0)sim.queue=Math.min(derived().queueCap, 8);   // start with a small crowd
+if(sim.plaza<=0)sim.plaza=12;                                // …and forecourt stragglers
 updateQueueVisuals();
 resize();
 refreshHUD();
@@ -1883,6 +2171,30 @@ window.__TC3D_BOOTED = true;
   muteBtn?.addEventListener('click',()=>{ audio.set('muted',!audio.isMuted()); syncMute(); });
 })();
 
+// ── graphics settings (escape menu toggles) ─────────────────────────────────
+// Real, persisted toggles so a slow machine has an escape hatch. Shadows and
+// pixel-ratio are the two cheapest big wins.
+(function wireGraphicsSettings(){
+  let gfx={ shadows:true, detail:true };
+  try{ const raw=localStorage.getItem('tc3d_gfx'); if(raw) gfx={ ...gfx, ...JSON.parse(raw) }; }catch(_){}
+  const save=()=>{ try{ localStorage.setItem('tc3d_gfx', JSON.stringify(gfx)); }catch(_){} };
+  function applyShadows(){
+    renderer.shadowMap.enabled=gfx.shadows;
+    // already-compiled materials need a recompile to pick up the change
+    scene.traverse(o=>{ if(o.material){ const m=Array.isArray(o.material)?o.material:[o.material]; m.forEach(mat=>{mat.needsUpdate=true;}); } });
+  }
+  function applyDetail(){ renderer.setPixelRatio(gfx.detail?Math.min(devicePixelRatio,2):1); resize(); }
+  const bind=(id,key,apply)=>{
+    const btn=$(id); if(!btn) return;
+    const sync=()=>btn.setAttribute('aria-checked', gfx[key]?'true':'false');
+    sync();
+    btn.addEventListener('click',()=>{ gfx[key]=!gfx[key]; sync(); apply(); save(); audio.play('ui'); });
+  };
+  applyShadows(); applyDetail();
+  bind('gfxShadows','shadows',applyShadows);
+  bind('gfxDetail','detail',applyDetail);
+})();
+
 // ── offline progress + title splash ─────────────────────────────────────────
 // Compute what the park earned while away, then hold behind the splash. The
 // Play click is also the user gesture that unlocks WebAudio.
@@ -1891,7 +2203,7 @@ const offline=restoredSavedAt>0 ? computeOfflineProgress({
   rate:restoredRate,
   activeRate:restoredActiveRate,
   legacyRate:restoredLegacyRate,
-  payrollPerMin:totalPayroll(roster),   // wages accrue while away too
+  payrollPerMin:totalPayroll(roster)*payrollScale(restoredRate),   // era wages accrue while away too
   // Early Birds keep the park earning while you sleep (+3% each, cap +20%)
   efficiency:OFFLINE_EFFICIENCY + offlineEfficiencyBonus(roster),
   research, researchPaths:RESEARCH_PATHS, projects:RESEARCH, staff,
@@ -1900,12 +2212,20 @@ const offline=restoredSavedAt>0 ? computeOfflineProgress({
 function applyOffline(){
   if(offline.money>0) state.money+=offline.money;
   if(offline.unlocked?.length){ offline.unlocked.forEach(handleResearchUnlock); }
-  if(offline.seconds>60){ sim.queue=Math.min(derived().queueCap, sim.queue); } // caught up while away
+  if(offline.seconds>60){
+    const dOff=derived();
+    sim.queue=Math.min(dOff.queueCap, sim.queue);          // caught up while away
+    // the plaza settles to its steady state while away (arrivals × visit length)
+    sim.plaza=Math.min(dOff.plazaCapacity, Math.max(sim.plaza, dOff.plazaPop));
+  }
   if(offline.money>0){ spawnBankDelta(offline.money,false); incomeTracker.record(offline.money, nowSec()); }
   refreshHUD();
 }
 
 function startGame(){
+  // name at birth: a fresh game names its first coaster right on the splash
+  const nm=$('splashName');
+  if(nm && nm.value.trim()) coasterName=nm.value.trim().slice(0,40);
   const splash=$('splash');
   if(splash){ splash.classList.add('hiding'); setTimeout(()=>{ splash.hidden=true; }, 520); }
   audio.unlock();
@@ -1924,9 +2244,13 @@ function showSplash(){
   }
   const playBtn=$('splashPlay');
   if(playBtn){
-    playBtn.textContent=restoredSavedAt>0?'Continue':'Play';
+    playBtn.textContent=restoredSavedAt>0?'▶ Continue':'▶ Play';
     playBtn.addEventListener('click', startGame, { once:true });
   }
+  // a fresh game (no save) names its first coaster before building
+  if(restoredSavedAt===0) $('splashNameWrap')?.removeAttribute('hidden');
+  const ver=$('splashVersion');
+  if(ver) ver.textContent=`v${window.__TC3D_VERSION||''}`;
 }
 
 if(TEST){

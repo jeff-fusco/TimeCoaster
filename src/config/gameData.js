@@ -44,7 +44,7 @@ export const PHYS = {
   brakeSpeed: 3.0,
   stationSpeed: 2.6,
   friction: 0.012,
-  maxBank: 0.62,
+  maxBank: 0.9,   // ≈52° max roll — expressive banking without going fully inverted
 };
 
 export const MPH = 2.7;
@@ -78,24 +78,25 @@ export const DEFAULT_CTRL = [
 
 export const UPGRADES = {
   car: { name: 'Add a Car', desc: '+4 seats · longer platform', icon: '🚃', base: 90, growth: 2.9, level: 0, max: 16, cat: 'ride' },
-  seats: { name: 'Roomier Cars', desc: '+2 seats per car', icon: '💺', base: 130, growth: 2.6, level: 0, max: 24, cat: 'ride' },
+  seats: { name: 'Roomier Cars', desc: '+2 seats per car', icon: '💺', base: 130, growth: 2.6, level: 0, max: 19, cat: 'ride' },
   speed: { name: 'Faster Track', desc: 'More launch energy', icon: '⚡', base: 120, growth: 2.08, level: 0, max: 30, cat: 'ride' },
   train: { name: 'Add a Train', desc: 'Another train on track', icon: '🎢', base: 2500, growth: 5.8, level: 0, max: 4, cat: 'ride' },
-  queue: { name: 'Bigger Queue', desc: '+10 people can wait in line', icon: '🚧', base: 170, growth: 2.08, level: 0, max: 24, cat: 'queue' },
+  queue: { name: 'Bigger Queue', desc: '+10 people can wait in line', icon: '🚧', base: 170, growth: 1.9, level: 0, max: 24, cat: 'queue' },
   snacks: { name: 'Snack Stands', desc: 'Sell to the line · scales with tickets & hype', icon: '🍿', base: 320, growth: 2.0, level: 0, max: 18, cat: 'queue' },
-  canopy: { name: 'Shade Canopies', desc: '+15 waiting guests buy snacks', icon: '⛱️', base: 260, growth: 2.35, level: 0, max: 12, cat: 'queue' },
+  canopy: { name: 'Shade Canopies', desc: 'Serve more of the crowd at once', icon: '⛱️', base: 260, growth: 2.35, level: 0, max: 12, cat: 'queue' },
+  foodCourt: { name: 'Food Court', desc: '×1.15 concession sales · sit-down dining serves far more', icon: '🍔', base: 2400, growth: 2.5, level: 0, max: 15, cat: 'queue' },
   comfort: { name: 'Queue Comfort', desc: 'Benches & fans · +8% guest arrivals', icon: '🪑', base: 380, growth: 2.4, level: 0, max: 15, cat: 'queue' },
   turnstiles: { name: 'Smart Turnstiles', desc: 'Guests board 6% faster', icon: '🎫', base: 520, growth: 2.45, level: 0, max: 12, cat: 'queue' },
   hats: { name: 'Hat Cart', desc: '+6% of riders buy a $12 hat', icon: '🎩', base: 300, growth: 2.4, level: 0, max: 8, cat: 'queue' },
   balloons: { name: 'Balloon Cart', desc: '+8% of riders buy a $6 balloon', icon: '🎈', base: 220, growth: 2.35, level: 0, max: 8, cat: 'queue' },
-  express: { name: 'Express Lane', desc: '+$5 bonus per rider', icon: '🌟', base: 1500, growth: 2.6, level: 0, max: 18, cat: 'marketing' },
-  ticket: { name: 'Ticket Price', desc: '+$1 per rider', icon: '🎟️', base: 85, growth: 1.92, level: 0, max: 30, cat: 'marketing' },
+  express: { name: 'Express Lane', desc: '+$5 bonus per rider', icon: '🌟', base: 1500, growth: 2.6, level: 0, max: 16, cat: 'marketing' },
+  ticket: { name: 'Ticket Price', desc: '+$1 per rider', icon: '🎟️', base: 85, growth: 1.92, level: 0, max: 27, cat: 'marketing' },
   // the flat 'market' upgrade was retired in M5 — guest demand is now driven by
   // the Marketing Department (hire Marketers, fund campaigns, build Demand)
-  hype: { name: 'Theming & Hype', desc: '×1.12 to all earnings', icon: '🎪', base: 260, growth: 2.35, level: 0, max: 24, cat: 'marketing' },
+  hype: { name: 'Theming & Hype', desc: '×1.12 to all earnings', icon: '🎪', base: 260, growth: 2.35, level: 0, max: 20, cat: 'marketing' },
 };
 
-export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'canopy', 'comfort', 'turnstiles', 'hats', 'balloons', 'ticket', 'hype', 'express'];
+export const SHOP_ORDER = ['car', 'seats', 'speed', 'train', 'queue', 'snacks', 'canopy', 'foodCourt', 'comfort', 'turnstiles', 'hats', 'balloons', 'ticket', 'hype', 'express'];
 
 export const CATS = [
   { id: 'ride', icon: '🎢', name: 'Ride' },
@@ -121,8 +122,8 @@ export const STAFF = {
     desc: 'Work the crowd outside the gates.',
     hireDesc: 'each hire draws more guests to the park',
     trainDesc: 'better shows keep a longer line happy (+queue capacity)',
-    hireBase: 220, hireGrowth: 2.05, hireMax: 8,
-    trainBase: 460, trainGrowth: 2.4, trainMax: 6,
+    hireBase: 220, hireGrowth: 2.2, hireMax: 8,
+    trainBase: 400, trainGrowth: 2.4, trainMax: 6,
   },
   mechanics: {
     name: 'Mechanics', icon: '🔧',
@@ -145,7 +146,7 @@ export const STAFF = {
     desc: 'Sell on-ride photos at the exit ramp.',
     hireDesc: 'each hire sells photos on every dispatched train',
     trainDesc: 'better shots sell for more (scales with excitement)',
-    hireBase: 420, hireGrowth: 2.15, hireMax: 6,
+    hireBase: 340, hireGrowth: 2.15, hireMax: 6,
     trainBase: 820, trainGrowth: 2.55, trainMax: 5,
   },
   scientists: {
@@ -178,7 +179,7 @@ export const RESEARCH = {
   teleporters: { path: 'track', name: 'Teleporter Track', desc: 'Unlock portal-linked accelerator segments', icon: '🌀', cost: 18000000 },
 
   launch: { path: 'operations', name: 'Launch System', desc: 'Raise launch energy like +1 Faster Track level', icon: '🚀', cost: 1800 },
-  train3: { path: 'operations', name: 'Block Sections', desc: 'Raise train cap to 9 trains', icon: '🚆', cost: 12000 },
+  train3: { path: 'operations', name: 'Block Sections', desc: 'Raise train cap to 8 trains', icon: '🚆', cost: 12000 },
   stationCrew: { path: 'operations', name: 'Station Crew Systems', desc: 'Load and unload guests 25% faster', icon: '⏱️', cost: 65000 },
   dualBerth: { path: 'operations', name: 'Dual-Berth Station', desc: 'Rear berth unloads while the front berth loads — two trains work the station at once', icon: '🚉', cost: 180000 },
   movingPlatform: { path: 'operations', name: 'Moving Platform Station', desc: 'Cut station dwell time again with moving platforms', icon: '🛤️', cost: 450000 },

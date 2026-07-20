@@ -15,6 +15,7 @@ import {
   stepResearch,
 } from '../src/systems/research.js';
 import { RESEARCH, RESEARCH_PATHS } from '../src/config/gameData.js';
+import { CONCESSION_CAP_PER_CANOPY } from '../src/systems/concessions.js';
 
 function makeUpgrades() {
   return {
@@ -159,8 +160,22 @@ const station = {
   assert.equal(economy.seatsPerCar, 8);
   assert.equal(economy.seatsCap, 16);
   assert.equal(economy.queueCap, 50);
-  // 12 in line × snacks lv1 × ($3 base + $0.4 × ticket lv2) per guest
-  assert.ok(Math.abs(economy.snackPerMin - 12 * (3 + 0.8)) < 1e-9);
+  // concessions now come from the plaza (arrivals × visit length), not the ride
+  // queue: served guests × snack freq (0.14 × lv1) × ($3 + $0.5 × ticket lv2) ×
+  // dwell multiplier. plazaPop is the whole park population Little's-Law estimate.
+  // arrivalRate is per second; the plaza formula is per-minute Little's Law
+  assert.ok(economy.plazaPop > 0, 'the park holds a crowd');
+  const expectPlaza = Math.min(economy.plazaCapacity, economy.arrivalRate * 60 * economy.visitMin);
+  assert.ok(Math.abs(economy.plazaPop - expectPlaza) < 1e-6, 'plaza = arrivals/min × visit length, capped');
+  assert.ok(economy.joinWill > 0 && economy.joinWill <= 1, 'join willingness is a sane fraction');
+  // served × snack freq (0.10 × lv1) × ($3 + $0.5 × ticket lv2) × dwell × the
+  // thrill splurge (1 + excitement/60 — this fixture rides at excitement 55)
+  assert.ok(Math.abs(
+    economy.concessions.perMin -
+    economy.concessions.served * 0.10 * (3 + 0.5 * 2) * economy.concessions.dwellMult * (1 + 55 / 60),
+  ) < 1e-9);
+  assert.ok(economy.concessions.dwellMult >= 1, 'dwell multiplier is at least neutral');
+  assert.ok(economy.ratePerMin > economy.ridePerMin, 'concessions add to the projected rate');
   assert.ok(economy.perRideFull > 140);
 }
 
@@ -205,9 +220,12 @@ const station = {
   const spotlit = deriveEconomy({ upgrades, pathStats, simQueue: 20, researchDone: {}, station, fallbackMaxSpeed: 4, ticketMult: 1.4 });
   assert.ok(Math.abs(spotlit.ticket - baseline.ticket * 1.4) < 1e-9, 'Ride Spotlight adds a ticket premium');
   assert.equal(spotlit.arrivalRate, baseline.arrivalRate, 'ticket premium does not touch arrivals');
-  const bundled = deriveEconomy({ upgrades, pathStats, simQueue: 20, researchDone: {}, station, fallbackMaxSpeed: 4, vendorMult: 1.5 });
-  assert.ok(Math.abs(bundled.vendorPerRider - baseline.vendorPerRider * 1.5) < 1e-9, 'Family Package lifts vendor spend');
-  assert.ok(Math.abs(bundled.snackPerMin - baseline.snackPerMin * 1.5) < 1e-6, 'Family Package lifts snack spend');
+  // Family Package (vendorMult) lifts point-of-sale concession income
+  const cu = makeUpgrades(); cu.snacks.level = 2; cu.hats = { level: 2 };
+  const cBase = deriveEconomy({ upgrades: cu, pathStats, simQueue: 20, researchDone: {}, station, fallbackMaxSpeed: 4 });
+  const cBundled = deriveEconomy({ upgrades: cu, pathStats, simQueue: 20, researchDone: {}, station, fallbackMaxSpeed: 4, vendorMult: 1.5 });
+  assert.ok(Math.abs(cBundled.concessions.perMin - cBase.concessions.perMin * 1.5) < 1e-6, 'Family Package lifts concession sales');
+  assert.ok(cBase.concessions.perMin > 0, 'concessions sell to the crowd');
   assert.ok(researched.perRider > baseline.perRider, 'premium tickets increase rider value');
   assert.ok(researched.merchPerTrain > 0, 'merch exit adds per-train revenue');
   assert.ok(researched.royaltyPerMin > 0, 'reality licensing adds impossible-ride royalties');
@@ -247,7 +265,7 @@ const station = {
   assert.ok(trainedMech.perRider > baseline.perRider, 'mechanic training raises ride income');
 
   const jan = derive({ janitors: { hired: 4, trained: 0 } });
-  assert.ok(jan.snackPerMin > baseline.snackPerMin, 'janitor hires raise snack sales');
+  assert.ok(jan.concessions.perMin > baseline.concessions.perMin, 'janitor hires raise concession sales');
   assert.equal(jan.perRider, baseline.perRider, 'untrained janitors do not change ride income');
   const trainedJan = derive({ janitors: { hired: 4, trained: 3 } });
   assert.ok(trainedJan.perRider > baseline.perRider, 'janitor training raises park appeal income');
@@ -267,19 +285,28 @@ const station = {
   assert.equal(gradeFor(90), 'Legendary');
 }
 
-// Queue-tab upgrades: Shade Canopies extend snack reach, Queue Comfort raises
-// arrivals, Smart Turnstiles speed boarding.
+// Queue-tab upgrades: Shade Canopies serve more of the crowd, Queue Comfort
+// raises arrivals, Smart Turnstiles speed boarding.
 {
   const base = makeUpgrades();
   base.snacks.level = 2;
-  const args = { pathStats: null, station, simQueue: 200, researchDone: {} };
+  // a park with real draw → a plaza bigger than the stands can serve, so the
+  // serving cap is the meaningful constraint these upgrades act on
+  const args = { pathStats: { excitement: 150, lapTime: 20, maxSpeed: 20, length: 300 }, station, simQueue: 200, researchDone: {} };
   const plain = deriveEconomy({ ...args, upgrades: base });
-  assert.equal(plain.snackCap, station.snackCap, 'base snack cap comes from station config');
-  assert.equal(plain.snackPerMin, 30 * 2 * station.snackPerGuest);
+  assert.equal(plain.concessions.cap, station.snackCap, 'base concession capacity comes from station config');
+  // served (plaza capped at the stands) × snack freq (0.10 × lv2) × $3 (ticket
+  // lv0) × dwell × thrill splurge (excitement 150 here). The plaza is large,
+  // so the stands' cap binds.
+  assert.equal(plain.concessions.served, station.snackCap, 'a big plaza is capped by the stands');
+  assert.ok(Math.abs(
+    plain.concessions.perMin -
+    plain.concessions.served * 0.10 * 2 * 3 * plain.concessions.dwellMult * (1 + 150 / 60),
+  ) < 1e-6);
 
   const withCanopy = deriveEconomy({ ...args, upgrades: { ...base, canopy: { level: 4 } } });
-  assert.equal(withCanopy.snackCap, station.snackCap + 60, 'each canopy level serves +15 guests');
-  assert.ok(withCanopy.snackPerMin > plain.snackPerMin, 'canopies raise snack income with a long line');
+  assert.equal(withCanopy.concessions.cap, station.snackCap + 4 * CONCESSION_CAP_PER_CANOPY, 'each canopy level serves more guests');
+  assert.ok(withCanopy.concessions.perMin > plain.concessions.perMin, 'canopies let more of the crowd buy');
 
   const withComfort = deriveEconomy({ ...args, upgrades: { ...base, comfort: { level: 5 } } });
   assert.ok(Math.abs(withComfort.arrivalRate / plain.arrivalRate - 1.4) < 1e-9, 'comfort adds 8% arrivals per level');
@@ -288,26 +315,29 @@ const station = {
   assert.ok(withTurnstiles.loadTime < plain.loadTime, 'turnstiles speed boarding');
   assert.ok(Math.abs(plain.loadTime / withTurnstiles.loadTime - 1.18) < 1e-9, '6% per level, multiplicative');
 
-  // Desert biome multiplies snack income
+  // Desert biome multiplies snack income (snacks only)
   const desert = deriveEconomy({ ...args, upgrades: base, snackMult: 1.5 });
-  assert.ok(Math.abs(desert.snackPerMin - plain.snackPerMin * 1.5) < 1e-6, 'Desert snack income ×1.5');
+  assert.ok(Math.abs(desert.concessions.perMin - plain.concessions.perMin * 1.5) < 1e-6, 'Desert snack income ×1.5');
 }
 
-// Vendor carts: a level-scaled fraction of riders buy hats/balloons.
+// Vendor carts still drive the visual crowd accessories (hats/balloons), even
+// though their income now flows through the point-of-sale concessions stream.
 {
-  const args = { pathStats: null, station, researchDone: {} };
+  const args = { pathStats: null, station, simQueue: 40, researchDone: {} };
   const plain = deriveEconomy({ ...args, upgrades: makeUpgrades() });
   assert.equal(plain.hatFrac, 0);
-  assert.equal(plain.vendorPerRider, 0);
+  assert.equal(plain.concessions.perMin, 0, 'no carts, no concession income');
 
   const carts = deriveEconomy({
     ...args,
     upgrades: { ...makeUpgrades(), hats: { level: 4 }, balloons: { level: 5 } },
   });
-  assert.ok(Math.abs(carts.hatFrac - 0.24) < 1e-9, '6% of riders per hat level');
+  assert.ok(Math.abs(carts.hatFrac - 0.24) < 1e-9, '6% of the crowd wears a hat per level');
   assert.ok(Math.abs(carts.balloonFrac - 0.4) < 1e-9, '8% per balloon level');
-  assert.ok(Math.abs(carts.vendorPerRider - (0.24 * 12 + 0.4 * 6)) < 1e-9, 'hats $12, balloons $6');
-  assert.ok(carts.ridePerMin > plain.ridePerMin, 'vendor sales raise projected income');
+  const byKey = Object.fromEntries(carts.concessions.items.map(i => [i.key, i]));
+  assert.ok(byKey.hat.perMin > 0 && byKey.balloon.perMin > 0, 'carts sell at the point of sale');
+  assert.ok(carts.concessions.perMin > plain.concessions.perMin, 'vendor sales raise projected income');
+  assert.equal(carts.ridePerMin, plain.ridePerMin, 'vendor sales no longer ride on dispatch income');
 
   const maxed = deriveEconomy({
     ...args,

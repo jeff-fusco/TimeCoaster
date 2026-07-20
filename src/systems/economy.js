@@ -1,3 +1,6 @@
+import { concessionsRate } from './concessions.js?v=20260703-14';
+import { visitLengthMin, plazaPopulation, joinWillingness } from './crowd.js?v=20260703-14';
+
 export function hasResearchKey(done, key) {
   return !!done?.[key];
 }
@@ -79,6 +82,7 @@ export function deriveEconomy({
   upgrades,
   pathStats,
   simQueue = 0,
+  simPlaza = null,     // live plaza stock; null → analytic steady state (tools/offline)
   researchDone = {},
   staff = {},          // { role: { hired, trained } }
   station,
@@ -135,12 +139,13 @@ export function deriveEconomy({
     (hasResearchKey(researchDone, 'stationCrew') ? 1.25 : 1) *
     (hasResearchKey(researchDone, 'movingPlatform') ? 1.45 : 1);
   // queue-tab upgrades (older saves/fixtures may not carry the newer keys)
-  const canopyLvl = U.canopy?.level || 0;
   const comfortLvl = U.comfort?.level || 0;
   const turnstileLvl = U.turnstiles?.level || 0;
+  // Visual only: what fraction of the crowd wears a hat / carries a balloon
+  // (drives the accessories on the rendered guests). Income no longer comes
+  // from these — see the Concessions point-of-sale stream below.
   const hatFrac = Math.min(VENDOR.hatFracMax, VENDOR.hatFracPerLevel * (U.hats?.level || 0));
   const balloonFrac = Math.min(VENDOR.balloonFracMax, VENDOR.balloonFracPerLevel * (U.balloons?.level || 0));
-  const vendorPerRider = (hatFrac * VENDOR.hatPrice + balloonFrac * VENDOR.balloonPrice) * Math.max(0, vendorMult);
   const loadDiv = (1 + FX.operatorBoard * op.hired * sk(op)) * stationResearchDiv * (1 + 0.06 * turnstileLvl);
   const unloadTime = station.baseUnload / loadDiv;
   const loadTime = station.baseLoad / loadDiv;
@@ -186,19 +191,60 @@ export function deriveEconomy({
   // boosters only pay off when arrivals are the true bottleneck.
   const estBoard =
     Math.min(seatsCap, queueCap, arrivalRate * cycle / Math.max(1, trains));
-  const snackCap = station.snackCap + canopyLvl * 15;
-  // snack spend per guest rises with ticket prestige and theming, so stands
-  // stay a relevant income line beyond the early game
-  const snackPerGuest = station.snackPerGuest + 0.4 * U.ticket.level;
-  const snackPerMin =
-    Math.min(Math.round(simQueue), snackCap) *
-    U.snacks.level *
-    snackPerGuest *
-    janitorMult *
-    hype *
-    Math.max(0, snackMult) *
-    Math.max(0, vendorMult);
   const trainCyclesPerMin = (60 / cycle) * trains;
+  // Average time a guest waits in line = queue length / boardings-per-min
+  // (Little's Law). A fast-dispatch thrill park clears the line quickly (low
+  // dwell); a slow, full "destination" queue makes guests wait — and shop.
+  const boardingsPerMin = estBoard * trainCyclesPerMin;
+  const avgDwellMin = boardingsPerMin > 0.01
+    ? Math.min(30, Math.round(simQueue) / boardingsPerMin)   // clamp: no infinite dwell
+    : (Math.round(simQueue) > 0 ? 30 : 0);
+  // Park population (the plaza): marketing fills the park, and guests linger for
+  // a visit — this is the shopping crowd, decoupled from the ride's throughput.
+  // A destination park draws big crowds that stay long; a thrill park cycles a
+  // smaller crowd through fast. Capacity scales with park size (queue capacity
+  // is a proxy) plus the physical space concession investment adds.
+  // NOTE: arrivalRate is per SECOND everywhere in the engine; the plaza formula
+  // wants per-minute (Little's Law against visit minutes).
+  const visitMin = visitLengthMin({
+    excitement: st.excitement,
+    cleanMult,
+    comfortLvl,
+    diningLvl: U.foodCourt?.level || 0,
+  });
+  const plazaCapacity = 300 + queueCap * 3 + (U.foodCourt?.level || 0) * 120 + (U.canopy?.level || 0) * 40;
+  const plazaPop = plazaPopulation({ arrivalPerMin: arrivalRate * 60, visitMin, capacity: plazaCapacity });
+  // How readily a plaza guest joins the ride line: the ride's pull vs. the balk
+  // at the current expected wait. The live sim gates the plaza→queue flow on it.
+  const joinWill = joinWillingness({
+    appeal: 0.35 + st.excitement / 100,
+    waitMin: avgDwellMin,
+  });
+  // Concessions: the whole present crowd (plaza shoppers + the waiting line)
+  // buys snacks/hats/balloons at the point of sale (credited by the sim's POS
+  // tick, not here and not at dispatch). Live play passes the real plaza stock;
+  // tools and offline use the analytic steady state (which already counts the
+  // would-be line as part of "guests present").
+  const shopCrowd = Number.isFinite(simPlaza)
+    ? Math.max(0, simPlaza) + Math.max(0, Math.round(simQueue))
+    : plazaPop;
+  const concessions = concessionsRate({
+    crowd: shopCrowd,
+    upgrades: U,
+    station,
+    ticketLevel: U.ticket.level,
+    janitorMult,
+    // theming lifts snack spend at half power — full-strength hype on top of
+    // the Food Court's own compounding made concessions strictly outscale
+    // rides (the greedy sim hit 100% concession income; rides became décor)
+    hype: Math.sqrt(Math.max(0, hype)),
+    vendorMult,
+    snackMult,
+    // thrilled crowds splurge: the excitement coupling that keeps concessions
+    // relevant at scale once the stands' serving cap binds (mirrors photos)
+    thrillMult: 1 + st.excitement / 60,
+    avgDwellMin,
+  });
   const photoPerMin = estBoard > 0.5 ? photoPerRide * trainCyclesPerMin : 0;
   // Merch Exit Shop skims a share of every trainload's ride take (credited at
   // dispatch via merchRate); royalties scale with theming so they stay relevant.
@@ -207,8 +253,12 @@ export function deriveEconomy({
   const royaltyPerMin = hasResearchKey(researchDone, 'realityLicensing')
     ? Math.max(0, st.excitement - 75) * Math.max(1, st.length / 100) * 6 * hype
     : 0;
-  const ridePerMin = Math.round(estBoard * (perRider + vendorPerRider) * trainCyclesPerMin + photoPerMin + merchPerTrain * trainCyclesPerMin + royaltyPerMin);
-  const ratePerMin = ridePerMin + snackPerMin;
+  // income broken out by source so the balance sheet + balance tool can show
+  // where the money really comes from (tickets dominate; support stays linear).
+  const ticketPerMin = estBoard * perRider * trainCyclesPerMin;
+  const merchPerMin = merchPerTrain * trainCyclesPerMin;
+  const ridePerMin = Math.round(ticketPerMin + photoPerMin + merchPerMin + royaltyPerMin);
+  const ratePerMin = ridePerMin + concessions.perMin;
 
   return {
     cars,
@@ -237,10 +287,15 @@ export function deriveEconomy({
     royaltyPerMin,
     hatFrac,
     balloonFrac,
-    vendorPerRider,
-    snackCap,
-    snackPerMin,
+    concessions,
     janitorMult,
+    plazaPop,
+    plazaCapacity,
+    visitMin,
+    joinWill,
+    ticketPerMin,
+    photoPerMin,
+    merchPerMin,
     ridePerMin,
     ratingMult,
     researchMult,

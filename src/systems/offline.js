@@ -7,7 +7,7 @@ import {
   hasScientist,
   pathProjectState,
   stepResearch,
-} from './research.js?v=20260703-13';
+} from './research.js?v=20260703-14';
 
 export const OFFLINE_CAP_SEC = 8 * 3600;   // never credit more than 8 hours away
 export const OFFLINE_EFFICIENCY = 0.5;     // the park runs at half pace unattended

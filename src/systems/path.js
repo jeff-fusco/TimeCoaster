@@ -122,12 +122,21 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       }
     } else if (seg === 'loop' || seg === 'giantLoop') {
       const fwd = horiz(Vector3, new Vector3().subVectors(p1, p0));
-      const R = seg === 'giantLoop' ? 5.2 : 2.3;
+      // per-loop size (node.loopR), clamped; falls back to the feature default
+      const baseR = seg === 'giantLoop' ? 5.2 : 2.3;
+      const R = Number.isFinite(node.loopR) ? Math.max(1.2, Math.min(12, node.loopR)) : baseR;
       const C = p1.clone().addScaledVector(worldUp, R);
       const count = seg === 'giantLoop' ? samples.giantLoop : samples.loop;
       for (let k = 0; k < count; k++) {
         const th = (k / count) * Math.PI * 2;
-        const pos = C.clone().addScaledVector(fwd, Math.sin(th) * R).addScaledVector(worldUp, -Math.cos(th) * R);
+        // teardrop/clothoid profile: the horizontal spread narrows toward the
+        // top (tight rounded apex) and splays at the base — taller than wide,
+        // like a real coaster loop instead of a cartoon circle. Peak height
+        // stays 2R so the energy sweep is unchanged.
+        const widthK = 0.7 + 0.35 * Math.cos(th);
+        const pos = C.clone()
+          .addScaledVector(fwd, Math.sin(th) * R * widthK)
+          .addScaledVector(worldUp, -Math.cos(th) * R);
         const up = new Vector3().subVectors(C, pos).normalize();
         out.push({ pos, kind: seg, featureUp: up });
       }
@@ -141,7 +150,9 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       const ref = Math.abs(axisN.y) > 0.85 ? new Vector3(1, 0, 0) : worldUp;
       const n1 = new Vector3().crossVectors(axisN, ref).normalize();
       const n2 = new Vector3().crossVectors(axisN, n1).normalize();
-      const r0 = Math.min(3.2, Math.max(1.8, L * 0.28));
+      // per-spiral radius (node.spiralR), clamped; falls back to length-derived
+      const autoR = Math.min(3.2, Math.max(1.8, L * 0.28));
+      const r0 = Number.isFinite(node.spiralR) ? Math.max(1.2, Math.min(6, node.spiralR)) : autoR;
       const turns = Math.max(1.5, Math.min(3.5, L / 4));
       for (let k = 0; k < samples.spiral; k++) {
         const t = k / samples.spiral;
@@ -160,7 +171,9 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
       const ref = Math.abs(axisN.y) > 0.9 ? new Vector3(1, 0, 0) : worldUp;
       const n1 = new Vector3().crossVectors(axisN, ref).normalize();
       const n2 = new Vector3().crossVectors(axisN, n1).normalize();
-      const r0 = Math.min(1.7, L * 0.34);
+      // per-corkscrew radius (node.corkR), clamped; falls back to length-derived
+      const autoR = Math.min(1.7, L * 0.34);
+      const r0 = Number.isFinite(node.corkR) ? Math.max(0.8, Math.min(4, node.corkR)) : autoR;
       const turns = 1;
       for (let k = 0; k < samples.corkscrew; k++) {
         const t = k / samples.corkscrew;
@@ -186,7 +199,11 @@ function buildCenterline({ ctrlPts, Vector3, worldUp, samples }) {
         });
       }
     } else if (seg === 'tunnel') {
-      const depth = Math.max(2.6, Math.min(7.5, p1.distanceTo(p2) * 0.22));
+      // per-tunnel dive depth (node.tunnelDepth), clamped; falls back to length-derived
+      const autoDepth = Math.max(2.6, Math.min(7.5, p1.distanceTo(p2) * 0.22));
+      const depth = Number.isFinite(node.tunnelDepth)
+        ? Math.max(1.5, Math.min(12, node.tunnelDepth))
+        : autoDepth;
       for (let k = 0; k < samples.tunnel; k++) {
         const t = k / samples.tunnel;
         const pos = catmull(Vector3, p0, p1, p2, p3, t);
@@ -351,6 +368,7 @@ export function buildPath({
   const energy = new Array(N);
   const frictionK = Math.min(0.6, Math.max(0, physics.friction));
   let rollback = false;
+  let stallIdx = -1;   // first sample the train can't reach on its own energy
   let E = launchEnergy;
   for (let step = 0; step < N; step++) {
     const i = step;
@@ -370,7 +388,8 @@ export function buildPath({
       else if (k === 'brake') E = Math.min(E, potential + ke(brakeSpeed));
       if (E < potential + 0.02) {                          // too tall to reach unassisted
         rollback = true;
-        E = potential + ke(rollbackSpeed);                 // stylized: crawl over, never fully stuck
+        if (stallIdx < 0) stallIdx = i;
+        E = potential + ke(rollbackSpeed);                 // stylized speed floor for the sweep
       }
     }
     energy[i] = E;
@@ -541,6 +560,20 @@ export function buildPath({
     dirChanges,
     maxDrop,
     rollback,
+    // hard-stall telemetry: where the train runs out of energy (the demo train
+    // climbs to stallS, then slides back). stallHeight reports the CREST of the
+    // hill it's failing to clear — walk forward from the stall while the track
+    // keeps rising — so the warning names the height the player over-built.
+    stallS: stallIdx >= 0 ? cum[stallIdx] : -1,
+    stallHeight: stallIdx >= 0 ? +(() => {
+      let peak = height[stallIdx];
+      for (let j = 1; j < N; j++) {
+        const h = height[(stallIdx + j) % N];
+        if (h < peak - 0.05) break;
+        if (h > peak) peak = h;
+      }
+      return peak;
+    })().toFixed(1) : 0,
     featureCounts,
     excitement: +excitement.toFixed(1),
     intensity: +intensity.toFixed(1),

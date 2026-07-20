@@ -1,7 +1,7 @@
 // Decorations: bought from the Decor shop tab and placed anywhere on owned
 // land. Pure state + rules — rendering lives in render/decorations.js.
-import { DECOR } from '../config/gameData.js?v=20260703-13';
-import { pointInOwnedLand } from './property.js?v=20260703-13';
+import { DECOR } from '../config/gameData.js?v=20260703-14';
+import { pointInOwnedLand } from './property.js?v=20260703-14';
 
 // Pieces may overlap and clip through each other on purpose — stacking and
 // clipping is how structures get built. Only an exact same-spot duplicate is

@@ -3,8 +3,8 @@
 // visibility (queue count, train occupancy) and motion for free.
 // Sizes are deliberately chunky so the merch reads from a zoomed-out camera.
 
-export const HAT_SIZE = { radius: 0.13, height: 0.26, yOffset: 0.2 };
-export const BALLOON_SIZE = { radius: 0.14, x: 0.16, y: 0.58, z: 0.05, stringR: 0.014, stringLen: 0.48 };
+export const HAT_SIZE = { radius: 0.18, height: 0.36, yOffset: 0.23 };
+export const BALLOON_SIZE = { radius: 0.2, x: 0.2, y: 0.72, z: 0.05, stringR: 0.016, stringLen: 0.56 };
 
 export function addHat(THREE, head, color) {
   const hat = new THREE.Mesh(

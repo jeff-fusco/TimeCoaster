@@ -2,7 +2,7 @@
 // returns a Group whose base sits at y=0 (callers lift it onto the slab top —
 // plus the piece's stored stacking height).
 // buildDecorationModel is also used for the placement ghost preview.
-import { DECOR } from '../config/gameData.js?v=20260703-13';
+import { DECOR } from '../config/gameData.js?v=20260703-14';
 
 const FLOWER_COLS = [0xe85d75, 0xf2b134, 0xa855f7, 0x4a8fe7, 0xfbf3e2];
 

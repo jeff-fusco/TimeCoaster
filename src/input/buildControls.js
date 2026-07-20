@@ -277,8 +277,11 @@ export function initBuildControls({
     const canDel = idx >= 0 && !isStn && ctrlPts.filter(p => !p.station).length > 2;
     $('delBtn').disabled = !canDel;
     const showEdit = idx >= 0 && !isStn;
+    const selSeg = idx >= 0 ? ctrlPts[idx]?.seg : null;
+    const sizeable = !!FEATURE_SIZE[selSeg];
     $('heightRow').style.display = showEdit ? 'flex' : 'none';
     if ($('bankRow')) $('bankRow').style.display = showEdit ? 'flex' : 'none';
+    if ($('loopRow')) $('loopRow').style.display = (showEdit && sizeable) ? 'flex' : 'none';
     if (idx >= 0) {
       $('heightVal').textContent = ctrlPts[idx].y.toFixed(1);
       $('pointInfo').textContent = isStn
@@ -290,6 +293,72 @@ export function initBuildControls({
     updateHandleColors();
     updateFeatureButtons();
     updateBankUI();
+    updateFeatureSizeUI();
+  }
+
+  // Sizeable features: which point property drives each segment's size, its
+  // clamp range, and the auto value the track derives when the player hasn't
+  // set one (formulas mirror path.js exactly). Stored on the control point, so
+  // it persists with the save; a bigger feature is longer track and flows
+  // through the normal per-metre build charge.
+  const nextDist = idx => {
+    const pts = getCtrlPts();
+    const a = pts[idx];
+    const b = pts[(idx + 1) % pts.length];
+    return a && b ? Math.hypot(b.x - a.x, (b.y ?? 0) - (a.y ?? 0), b.z - a.z) : 8;
+  };
+  const FEATURE_SIZE = {
+    loop:      { prop: 'loopR', label: 'Loop', min: 1.2, max: 12, step: 0.5, auto: () => 2.3 },
+    giantLoop: { prop: 'loopR', label: 'Loop', min: 1.2, max: 12, step: 0.5, auto: () => 5.2 },
+    spiral:    { prop: 'spiralR', label: 'Spiral', min: 1.2, max: 6, step: 0.3, auto: idx => Math.min(3.2, Math.max(1.8, nextDist(idx) * 0.28)) },
+    corkscrew: { prop: 'corkR', label: 'Cork', min: 0.8, max: 4, step: 0.3, auto: idx => Math.min(1.7, nextDist(idx) * 0.34) },
+    tunnel:    { prop: 'tunnelDepth', label: 'Depth', min: 1.5, max: 12, step: 0.5, auto: idx => Math.max(2.6, Math.min(7.5, nextDist(idx) * 0.22)) },
+  };
+
+  function updateFeatureSizeUI() {
+    const el = $('loopVal');
+    if (!el) return;
+    const idx = controls.selectedIdx;
+    const p = idx >= 0 ? getCtrlPts()[idx] : null;
+    const cfg = FEATURE_SIZE[p?.seg];
+    if (!cfg) return;
+    const label = $('loopRowLabel');
+    if (label) label.textContent = cfg.label;
+    const manual = Number.isFinite(p[cfg.prop]);
+    const r = manual ? p[cfg.prop] : cfg.auto(idx);
+    el.textContent = `${r.toFixed(1)}m${manual ? '' : '·auto'}`;
+  }
+
+  function adjustFeatureSize(delta) {
+    const ctrlPts = getCtrlPts();
+    const idx = controls.selectedIdx;
+    if (idx < 0) return;
+    const cfg = FEATURE_SIZE[ctrlPts[idx]?.seg];
+    if (!cfg) return;
+    const snap = ctrlPts.map(p => ({ ...p }));
+    const auto = cfg.auto(idx);
+    const cur = Number.isFinite(ctrlPts[idx][cfg.prop]) ? ctrlPts[idx][cfg.prop] : auto;
+    const next = Math.round(Math.max(cfg.min, Math.min(cfg.max, cur + delta * cfg.step)) * 10) / 10;
+    if (Math.abs(next - auto) < 1e-6) delete ctrlPts[idx][cfg.prop];
+    else ctrlPts[idx][cfg.prop] = next;
+    buildPath();
+    buildTrackGeometry();
+    commitTrackEdit(snap);   // charges/refunds the length change; reverts if broke
+    updateFeatureSizeUI();
+  }
+
+  function resetFeatureSize() {
+    const ctrlPts = getCtrlPts();
+    const idx = controls.selectedIdx;
+    if (idx < 0) return;
+    const cfg = FEATURE_SIZE[ctrlPts[idx]?.seg];
+    if (!cfg || !Number.isFinite(ctrlPts[idx][cfg.prop])) return;
+    const snap = ctrlPts.map(p => ({ ...p }));
+    delete ctrlPts[idx][cfg.prop];
+    buildPath();
+    buildTrackGeometry();
+    commitTrackEdit(snap);
+    updateFeatureSizeUI();
   }
 
   // Bank is stored on a control point as a fraction of maxBank in [-1, 1];
@@ -857,6 +926,9 @@ export function initBuildControls({
   $('bankL')?.addEventListener('click', () => adjustBank(-0.2));
   $('bankR')?.addEventListener('click', () => adjustBank(0.2));
   $('bankAuto')?.addEventListener('click', resetBank);
+  $('loopUp')?.addEventListener('click', () => adjustFeatureSize(1));
+  $('loopDown')?.addEventListener('click', () => adjustFeatureSize(-1));
+  $('loopAuto')?.addEventListener('click', resetFeatureSize);
   $('featRow').addEventListener('click', onFeatureClick);
   $('buildToggle').addEventListener('click', () => (controls.active ? exitBuildMode() : enterBuildMode()));
   $('undoBtn')?.addEventListener('click', undo);

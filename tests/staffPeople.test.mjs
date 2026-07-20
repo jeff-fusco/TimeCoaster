@@ -12,6 +12,8 @@ import {
   migrateCountsToRoster,
   normalizeRoster,
   offlineEfficiencyBonus,
+  payrollScale,
+  PAYROLL_SCALE_BASE,
   personAtLevel,
   personCoverage,
   personSalary,
@@ -307,6 +309,21 @@ const pathStats = { excitement: 60, lapTime: 8, maxSpeed: 18, length: 300 };
   assert.equal(stamped.operators[1].gen, undefined, 'junk gen dropped');
   assert.equal(clean.bogusRole, undefined, 'unknown roles dropped');
   assert.deepEqual(normalizeRoster(null), createRoster(), 'garbage in → empty roster');
+}
+
+// era wages: flat below the threshold (young parks never squeezed), then the
+// wage bill tracks gross income so payroll stays a real slice of a big park
+{
+  assert.equal(payrollScale(0), 1, 'a park with no income pays base wages');
+  assert.equal(payrollScale(PAYROLL_SCALE_BASE), 1, 'flat up to the threshold');
+  assert.equal(payrollScale(PAYROLL_SCALE_BASE / 2), 1, 'below threshold stays flat');
+  assert.ok(payrollScale(PAYROLL_SCALE_BASE * 10) > 5, 'a 10× park pays several-fold wages');
+  assert.ok(payrollScale(1e6) > payrollScale(1e5), 'monotone in gross');
+  assert.ok(Number.isFinite(payrollScale(1e12)) && payrollScale(NaN) === 1, 'sane on extremes and junk');
+  // the wage bill stays a minority slice: scale grows slower than gross itself
+  const shareMid = payrollScale(1e4) / 1e4;
+  const shareLate = payrollScale(1e6) / 1e6;
+  assert.ok(shareLate < shareMid, 'sublinear: wages never outrun income');
 }
 
 console.log('staffPeople tests passed');

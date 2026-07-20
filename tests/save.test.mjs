@@ -1,9 +1,15 @@
 import assert from 'node:assert/strict';
 import {
   CURRENT_SAVE_KEY,
+  SLOT_KEYS,
   applySaveData,
   createSaveData,
+  exportSaveString,
+  importSaveString,
+  importSaveToSlot,
   readSave,
+  saveSlotMetadata,
+  setSlotName,
   writeSave,
 } from '../src/systems/save.js';
 
@@ -19,6 +25,48 @@ class MemoryStorage {
   setItem(key, value) {
     this.items.set(key, String(value));
   }
+
+  removeItem(key) {
+    this.items.delete(key);
+  }
+}
+
+// three independent named slots expose useful metadata and empty state
+{
+  const storage = new MemoryStorage();
+  assert.deepEqual(saveSlotMetadata(storage, 2), { slot: 2, name: 'Park 2', empty: true });
+  assert.equal(setSlotName(storage, 2, 'Moon Park'), true);
+  assert.equal(writeSave(storage, { ...makeGameState(), legacy: { fame: 17, generation: 4, perks: {}, monuments: [] }, savedAt: 123 }, 2), true);
+  const meta = saveSlotMetadata(storage, 2);
+  assert.deepEqual(meta, { slot: 2, name: 'Moon Park', empty: false, generation: 4, fame: 17, money: 1234.5, savedAt: 123 });
+  assert.equal(readSave(storage, 1), null);
+  assert.equal(readSave(storage, 2).active.money, 1234.5);
+  assert.ok(storage.getItem(SLOT_KEYS[1]));
+}
+
+// export/import is lossless, whitespace-tolerant, and atomic on invalid input
+{
+  const data = createSaveData({
+    ...makeGameState(),
+    legacy: { fame: 9, generation: 2, perks: {}, monuments: [], capstone: { name: '∞ Café', achievedAt: 99 } },
+    savedAt: 456,
+  });
+  const exported = exportSaveString(data);
+  assert.ok(typeof exported === 'string' && exported.length > 20);
+  const spaced = `${exported.slice(0, 30)}\n  ${exported.slice(30)}`;
+  const jsonData = JSON.parse(JSON.stringify(data));
+  assert.deepEqual(importSaveString(spaced), { ok: true, data: jsonData });
+  assert.equal(importSaveString('not base64!!').ok, false);
+  assert.match(importSaveString('').error, /Paste/);
+  const wrong = exportSaveString({ ...data, version: 5 });
+  assert.match(importSaveString(wrong).error, /version 6/);
+
+  const storage = new MemoryStorage({ [SLOT_KEYS[2]]: JSON.stringify(data) });
+  const before = storage.getItem(SLOT_KEYS[2]);
+  assert.equal(importSaveToSlot(storage, 'junk', 3).ok, false);
+  assert.equal(storage.getItem(SLOT_KEYS[2]), before, 'corrupt import leaves destination untouched');
+  assert.equal(importSaveToSlot(storage, spaced, 3).ok, true);
+  assert.deepEqual(JSON.parse(storage.getItem(SLOT_KEYS[2])), jsonData);
 }
 
 function makeGameState() {
@@ -116,6 +164,7 @@ function makeGameState() {
     lastLegacyRate: 100,
     legacy: {
       fame: 42, generation: 3, perks: { nestEgg: 2 },
+      capstone: { name: 'Beyond Time', achievedAt: 456 },
       monuments: [{
         name: 'Twister', generation: 1, biome: 'meadow', retiredAt: 123, themeBonus: 12,
         stats: { excitement: 88, intensity: 40, nausea: 20, length: 300, maxSpeed: 20 },
@@ -140,6 +189,7 @@ function makeGameState() {
   assert.equal(restored.marketing.channels.streetTeam.weight, 2, 'channel weights survive the round trip');
   assert.equal(restored.legacy.generation, 3);
   assert.equal(restored.legacy.perks.nestEgg, 2);
+  assert.deepEqual(restored.legacy.capstone, { name: 'Beyond Time', achievedAt: 456 });
   assert.equal(restored.legacy.monuments.length, 1);
   assert.equal(restored.legacy.monuments[0].name, 'Twister');
   assert.equal(restored.legacy.monuments[0].stats.excitement, 88);

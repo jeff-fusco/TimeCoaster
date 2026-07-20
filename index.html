@@ -7,10 +7,11 @@
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
 <title>Time Coaster 3D</title>
+<link rel="icon" href="data:," />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=20260703-13" />
+<link rel="stylesheet" href="styles.css?v=20260703-14" />
 </head>
 <body>
 <div id="scene"></div>
@@ -24,7 +25,7 @@
     </div>
 
     <div class="card ratings">
-      <div class="rtitle"><span>Ride Rating</span><span class="grade" id="grade">—</span></div>
+      <div class="rtitle"><span>Ride Rating</span><span><span class="park-rating" id="parkRating" title="Park Rating">1 ★</span><span class="grade" id="grade">—</span></span></div>
       <div class="rrow"><span class="rk">EXC</span><div class="rbar"><div class="rfill" id="fExc" style="background:var(--exc)"></div></div><span class="rv" id="vExc">0</span></div>
       <div class="rrow"><span class="rk">INT</span><div class="rbar"><div class="rfill" id="fInt" style="background:var(--int)"></div></div><span class="rv" id="vInt">0</span></div>
       <div class="rrow"><span class="rk">NAU</span><div class="rbar"><div class="rfill" id="fNau" style="background:var(--nau)"></div></div><span class="rv" id="vNau">0</span></div>
@@ -77,6 +78,13 @@
       <button class="bp-btn" id="bankR" title="Lean right">↻</button>
       <button class="bp-btn" id="bankAuto" title="Back to automatic banking">Auto</button>
     </div>
+    <div class="bp-row" id="loopRow" style="display:none">
+      <span class="bp-label" id="loopRowLabel">Loop</span>
+      <button class="bp-btn" id="loopDown" title="Smaller">▼</button>
+      <span class="height-val" id="loopVal">2.3m</span>
+      <button class="bp-btn" id="loopUp" title="Bigger">▲</button>
+      <button class="bp-btn" id="loopAuto" title="Back to automatic size">Auto</button>
+    </div>
   </div>
   <div class="bp-row" id="prefabRow">
     <span class="bp-label">Prefab</span>
@@ -106,72 +114,109 @@
 <div class="staff-panel" id="shopPanel" hidden>
   <div class="staff-backdrop" id="shopBackdrop"></div>
   <div class="staff-card shop-card">
-    <div class="staff-title">🎟 Upgrade Shop</div>
-    <div class="staff-sub">Buy ride, queue, decor, and promo upgrades.</div>
-    <div class="shop" id="shop"></div>
-    <button class="bp-btn primary" id="shopClose">Close</button>
+    <div class="modal-head">
+      <div class="modal-icon">🎟️</div>
+      <div class="modal-heading">
+        <div class="staff-title">Upgrade Shop</div>
+        <div class="staff-sub">Buy ride, queue, decor, and promo upgrades.</div>
+      </div>
+      <button class="modal-x" id="shopClose" aria-label="Close shop">✕</button>
+    </div>
+    <div class="modal-body"><div class="shop" id="shop"></div></div>
   </div>
 </div>
 
 <div class="staff-panel" id="staffPanel" hidden>
   <div class="staff-backdrop" id="staffBackdrop"></div>
   <div class="staff-card staff-roster-card">
-    <div class="staff-title">👥 Staff Management</div>
-    <div class="staff-sub">Hire staff and train them to run the park for you.</div>
-    <div class="staff-list" id="staffList"></div>
-    <button class="bp-btn primary" id="staffClose">Close</button>
+    <div class="modal-head">
+      <div class="modal-icon">👥</div>
+      <div class="modal-heading">
+        <div class="staff-title">Staff Management</div>
+        <div class="staff-sub">Hire specialists and train them to run the park.</div>
+      </div>
+      <button class="modal-x" id="staffClose" aria-label="Close staff">✕</button>
+    </div>
+    <div class="modal-body"><div class="staff-list" id="staffList"></div></div>
   </div>
 </div>
 
 <div class="staff-panel" id="balancePanel" hidden>
   <div class="staff-backdrop" id="balanceBackdrop"></div>
   <div class="staff-card balance-card">
-    <div class="staff-title">Park Balance Sheet</div>
-    <div class="staff-sub">Income estimate, bottlenecks, and recurring costs.</div>
-    <div class="balance-sheet" id="balanceSheet"></div>
-    <button class="bp-btn primary" id="balanceClose">Close</button>
+    <div class="modal-head">
+      <div class="modal-icon">📊</div>
+      <div class="modal-heading">
+        <div class="staff-title">Park Balance Sheet</div>
+        <div class="staff-sub">Income estimate, bottlenecks, and recurring costs.</div>
+      </div>
+      <button class="modal-x" id="balanceClose" aria-label="Close balance sheet">✕</button>
+    </div>
+    <div class="modal-body"><div class="balance-sheet" id="balanceSheet"></div></div>
   </div>
 </div>
 
 <div class="staff-panel" id="legacyPanel" hidden>
   <div class="staff-backdrop" id="legacyBackdrop"></div>
   <div class="staff-card legacy-card">
-    <div class="staff-title">🏆 Hall of Fame</div>
-    <div class="staff-sub">Retire a great coaster for Fame, then build the next generation.</div>
-    <div class="legacy-body" id="legacyBody"></div>
-    <button class="bp-btn primary" id="legacyClose">Close</button>
+    <div class="modal-head">
+      <div class="modal-icon">🏆</div>
+      <div class="modal-heading">
+        <div class="staff-title">Hall of Fame</div>
+        <div class="staff-sub">Retire a great coaster for Fame, then build the next generation.</div>
+      </div>
+      <button class="modal-x" id="legacyClose" aria-label="Close hall of fame">✕</button>
+    </div>
+    <div class="modal-body"><div class="legacy-body" id="legacyBody"></div></div>
   </div>
 </div>
 
 <div class="staff-panel" id="researchPanel" hidden>
   <div class="staff-backdrop" id="researchBackdrop"></div>
   <div class="staff-card research-card">
-    <div class="staff-title">🔬 R&D Lab</div>
-    <div class="staff-sub">Fund research from park income and unlock new ride systems.</div>
-    <div class="research-list" id="researchList"></div>
-    <button class="bp-btn primary" id="researchClose">Close</button>
+    <div class="modal-head">
+      <div class="modal-icon">🔬</div>
+      <div class="modal-heading">
+        <div class="staff-title">R&amp;D Lab</div>
+        <div class="staff-sub">Fund research from park income and unlock new ride systems.</div>
+      </div>
+      <button class="modal-x" id="researchClose" aria-label="Close R&D lab">✕</button>
+    </div>
+    <div class="modal-body"><div class="research-list" id="researchList"></div></div>
   </div>
 </div>
 
 <div class="staff-panel" id="marketingPanel" hidden>
   <div class="staff-backdrop" id="marketingBackdrop"></div>
   <div class="staff-card marketing-card">
-    <div class="staff-title">Marketing HQ</div>
-    <div class="staff-sub">Fund campaigns, build Demand, and keep trains full.</div>
-    <div class="marketing-body" id="marketingBody"></div>
-    <button class="bp-btn primary" id="marketingClose">Close</button>
+    <div class="modal-head">
+      <div class="modal-icon">📣</div>
+      <div class="modal-heading">
+        <div class="staff-title">Marketing HQ</div>
+        <div class="staff-sub">Fund campaigns, build Demand, and keep trains full.</div>
+      </div>
+      <button class="modal-x" id="marketingClose" aria-label="Close marketing HQ">✕</button>
+    </div>
+    <div class="modal-body"><div class="marketing-body" id="marketingBody"></div></div>
   </div>
 </div>
 
 <div class="staff-panel" id="landPanel" hidden>
   <div class="staff-backdrop" id="landBackdrop"></div>
   <div class="staff-card land-card">
-    <div class="staff-title">Land For Sale</div>
-    <div class="staff-sub">Expand the park boundary to build bigger coasters.</div>
-    <div class="land-info" id="landInfo"></div>
-    <div class="land-actions">
-      <button class="staff-btn" id="landBuy">Buy</button>
-      <button class="bp-btn" id="landCancel">Not now</button>
+    <div class="modal-head">
+      <div class="modal-icon">🏞️</div>
+      <div class="modal-heading">
+        <div class="staff-title">Land For Sale</div>
+        <div class="staff-sub">Expand the park boundary to build bigger coasters.</div>
+      </div>
+      <button class="modal-x" id="landCancel" aria-label="Close land purchase">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="land-info" id="landInfo"></div>
+      <div class="land-actions">
+        <button class="menu-btn primary" id="landBuy">Buy Plot</button>
+      </div>
     </div>
   </div>
 </div>
@@ -179,20 +224,46 @@
 <div class="staff-panel" id="escapePanel" hidden>
   <div class="staff-backdrop" id="escapeBackdrop"></div>
   <div class="staff-card escape-card">
-    <div class="staff-title">Game Menu</div>
-    <div class="staff-sub" id="escapeSub">Manage this park session.</div>
-    <div class="settings-block">
-      <div class="settings-title">🔊 Sound</div>
-      <label class="settings-row"><span>Master</span><input type="range" id="volMaster" min="0" max="100" value="80"></label>
-      <label class="settings-row"><span>Music</span><input type="range" id="volMusic" min="0" max="100" value="35"></label>
-      <label class="settings-row"><span>Effects</span><input type="range" id="volSfx" min="0" max="100" value="70"></label>
-      <button class="menu-btn" id="muteToggle">Mute</button>
+    <div class="modal-head">
+      <div class="modal-icon">⏸️</div>
+      <div class="modal-heading">
+        <div class="staff-title">Paused</div>
+        <div class="staff-sub" id="escapeSub">Manage this park session.</div>
+      </div>
+      <button class="modal-x" id="escapeCloseX" aria-label="Resume">✕</button>
     </div>
-    <div class="escape-actions">
-      <button class="menu-btn primary" id="escapeResume">Resume</button>
-      <button class="menu-btn" id="escapeSave">Save Now</button>
-      <button class="menu-btn" id="escapeReload">Reload Save</button>
-      <button class="menu-btn danger" id="escapeReset">Reset Park</button>
+    <div class="modal-body">
+      <div class="settings-group">
+        <div class="settings-title">🔊 Sound</div>
+        <label class="settings-row"><span>Master</span><input type="range" id="volMaster" min="0" max="100" value="80"></label>
+        <label class="settings-row"><span>Music</span><input type="range" id="volMusic" min="0" max="100" value="35"></label>
+        <label class="settings-row"><span>Effects</span><input type="range" id="volSfx" min="0" max="100" value="70"></label>
+        <button class="menu-btn subtle" id="muteToggle">Mute</button>
+      </div>
+      <div class="settings-group">
+        <div class="settings-title">🖥️ Graphics</div>
+        <div class="settings-toggle"><span>Shadows</span><button class="toggle" id="gfxShadows" role="switch" aria-checked="true"><i></i></button></div>
+        <div class="settings-toggle"><span>High detail</span><button class="toggle" id="gfxDetail" role="switch" aria-checked="true"><i></i></button></div>
+        <div class="settings-hint">Turn these off if the park runs slow.</div>
+      </div>
+      <div class="settings-group save-slots-group">
+        <div class="settings-title">💾 Save Slots</div>
+        <div class="save-slots" id="saveSlots"></div>
+        <textarea class="save-transfer" id="saveTransfer" rows="3" spellcheck="false" placeholder="Export appears here — or paste a save string to import"></textarea>
+        <div class="escape-actions-row">
+          <button class="menu-btn subtle" id="escapeExport">Export Active</button>
+          <button class="menu-btn subtle" id="escapeImport">Import to Active</button>
+        </div>
+        <div class="settings-hint" id="saveTransferStatus">Imports are validated before the active slot is replaced.</div>
+      </div>
+      <div class="escape-actions">
+        <button class="menu-btn primary" id="escapeResume">▶ Resume</button>
+        <div class="escape-actions-row">
+          <button class="menu-btn" id="escapeSave">Save Now</button>
+          <button class="menu-btn" id="escapeReload">Reload Save</button>
+        </div>
+        <button class="menu-btn danger" id="escapeReset">Reset Park</button>
+      </div>
     </div>
   </div>
 </div>
@@ -206,9 +277,18 @@
     <h1 class="splash-title">Time Coaster 3D</h1>
     <div class="splash-tag">Build the coaster. Watch the number climb.</div>
     <div class="splash-welcome" id="splashWelcome" hidden></div>
-    <button class="splash-play" id="splashPlay">Play</button>
-    <div class="splash-hint">Right-drag to orbit · WASD to pan · scroll to zoom</div>
+    <label class="splash-name-wrap" id="splashNameWrap" hidden>
+      <span>Name your first coaster</span>
+      <input class="splash-name" id="splashName" maxlength="40" placeholder="The Twister" autocomplete="off">
+    </label>
+    <button class="splash-play" id="splashPlay">▶ Play</button>
+    <div class="splash-controls">
+      <span><b>Right-drag</b> orbit</span>
+      <span><b>WASD</b> pan</span>
+      <span><b>Scroll</b> zoom</span>
+    </div>
   </div>
+  <div class="splash-version" id="splashVersion"></div>
 </div>
 
 <div class="splash" id="ceremonyPanel" hidden>
@@ -228,7 +308,7 @@
 }
 </script>
 <script>
-window.__TC3D_VERSION = '20260703-13';
+window.__TC3D_VERSION = '20260703-14';
 window.__TC3D_BOOTED = false;
 window.addEventListener('error', event => {
   window.__TC3D_BOOT_ERROR = event.message || 'Load error';
@@ -251,6 +331,6 @@ setTimeout(() => {
   document.body.appendChild(el);
 }, 8000);
 </script>
-<script type="module" src="src/main.js?v=20260703-13"></script>
+<script type="module" src="src/main.js?v=20260703-14"></script>
 </body>
 </html>

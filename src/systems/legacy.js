@@ -1,6 +1,6 @@
 // Legacy ascension: retire the active coaster into a standing monument, bank
 // Fame scaled by how good it was, and start the next generation fresh. Pure and
-// testable — rendering lives in render/monuments.js, wiring in main.js.
+// testable — retired coasters render as snowglobe trophies (render/snowglobe.js)
 //
 // Design (see ROADMAP.md): building quality is the prestige currency. Fame
 // scales superlinearly with effective excitement (path excitement + decor
@@ -15,13 +15,28 @@ export const PERKS = {
 export const PERK_ORDER = ['nestEgg', 'landmarks', 'renown'];
 
 export function createLegacyState() {
-  return { fame: 0, generation: 1, perks: {}, monuments: [] };
+  return { fame: 0, generation: 1, perks: {}, monuments: [], capstone: null };
 }
 
 const lvl = (perks, key) => Math.max(0, Math.floor(perks?.[key] || 0));
 export const nestEggMult   = perks => 1 + 0.6 * lvl(perks, 'nestEgg');
 export const landmarksMult = perks => 1 + 0.3 * lvl(perks, 'landmarks');
 export const renownMult     = perks => 1 + 0.08 * lvl(perks, 'renown');
+
+// Park reputation combines what the player has banked, the history visible in
+// the park, and the quality of today's headline ride. Each source is capped so
+// no single axis can carry a park to five stars on its own.
+export function parkRating(fame = 0, retiredCount = 0, excitement = 0) {
+  const fameStars = Math.min(1.5, Math.max(0, fame) / 40);
+  const historyStars = Math.min(1.25, Math.max(0, retiredCount) * 0.35);
+  const rideStars = Math.min(1.25, Math.max(0, excitement) / 160);
+  const raw = 1 + fameStars + historyStars + rideStars;
+  return Math.max(1, Math.min(5, Math.round(raw * 2) / 2));
+}
+
+export function ratingDemandMult(rating) {
+  return 0.92 + Math.max(1, Math.min(5, rating || 1)) * 0.04;
+}
 
 export function perkCost(key, level) {
   const p = PERKS[key];
@@ -129,6 +144,31 @@ export function canRetire(stats, themeBonus, generation) {
   );
 }
 
+export const CAPSTONE_EXCITEMENT = 650;
+export const CAPSTONE_CRAFT = 115;
+
+// The Impossible Coaster is a permanent trophy above the retirement ladder.
+// It demands a five-star park plus near-ceiling ride craft; earning it does not
+// reset or end the active park.
+export function canAchieveCapstone(legacy, stats, themeBonus = 0) {
+  if (legacy?.capstone) return false;
+  const eff = effectiveExcitement(stats, themeBonus);
+  return (
+    parkRating(legacy?.fame, legacy?.monuments?.length, eff) >= 5 &&
+    eff >= CAPSTONE_EXCITEMENT &&
+    qualityScore(stats) >= CAPSTONE_CRAFT
+  );
+}
+
+export function achieveCapstone(legacy, { name = 'Impossible Coaster', achievedAt = Date.now() } = {}) {
+  if (!legacy || legacy.capstone) return null;
+  legacy.capstone = {
+    name: String(name || 'Impossible Coaster').slice(0, 40),
+    achievedAt: Number.isFinite(achievedAt) ? achievedAt : Date.now(),
+  };
+  return legacy.capstone;
+}
+
 // Fame banked for retiring a coaster at these stats. Superlinear in excitement,
 // with a theming kicker — never rewards raw length directly.
 export function fameFor(stats, themeBonus = 0) {
@@ -204,6 +244,12 @@ export function normalizeLegacy(raw) {
         retiredAt: finite(m.retiredAt) ? m.retiredAt : Date.now(),
       }))
       .filter(m => m.ctrlPts.length >= 3);
+  }
+  if (raw.capstone && typeof raw.capstone === 'object') {
+    legacy.capstone = {
+      name: String(raw.capstone.name || 'Impossible Coaster').slice(0, 40),
+      achievedAt: finite(raw.capstone.achievedAt) ? raw.capstone.achievedAt : Date.now(),
+    };
   }
   return legacy;
 }

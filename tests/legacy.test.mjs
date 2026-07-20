@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import {
   buyPerk,
+  CAPSTONE_CRAFT,
+  CAPSTONE_EXCITEMENT,
+  achieveCapstone,
+  canAchieveCapstone,
   canBuyPerk,
   canRetire,
   certificationBar,
@@ -12,11 +16,48 @@ import {
   monumentIncome,
   normalizeLegacy,
   openingGrant,
+  parkRating,
   perkCost,
   qualityBar,
   qualityScore,
+  ratingDemandMult,
   totalLegacyIncome,
 } from '../src/systems/legacy.js';
+
+// park rating is monotone on every input, half-star stepped, and bounded
+{
+  assert.equal(parkRating(0, 0, 0), 1);
+  assert.ok(parkRating(20, 0, 0) >= parkRating(0, 0, 0));
+  assert.ok(parkRating(20, 1, 0) >= parkRating(20, 0, 0));
+  assert.ok(parkRating(20, 1, 80) >= parkRating(20, 1, 0));
+  assert.equal(parkRating(1e9, 1e9, 1e9), 5);
+  assert.equal(parkRating(-10, -2, -30), 1);
+  assert.equal((parkRating(35, 2, 100) * 2) % 1, 0);
+  assert.ok(ratingDemandMult(5) > ratingDemandMult(1));
+}
+
+// five-star capstone is harder than retirement and becomes a permanent trophy
+{
+  const legacy = createLegacyState();
+  legacy.fame = 100;
+  legacy.monuments = [{}, {}, {}, {}];
+  const impossible = {
+    excitement: CAPSTONE_EXCITEMENT,
+    maxDrop: 40,
+    airCount: 120,
+    dirChanges: 10,
+    featureCounts: { loop: 2, corkscrew: 2, spiral: 1, giantLoop: 1, vertical: 1, tunnel: 1, teleporter: 1 },
+    monumentNearMiss: 28,
+  };
+  assert.ok(qualityScore(impossible) >= CAPSTONE_CRAFT);
+  assert.equal(canAchieveCapstone(legacy, impossible), true);
+  assert.equal(canAchieveCapstone({ ...legacy, fame: 0 }, impossible), false, 'five-star park is required');
+  assert.equal(canAchieveCapstone(legacy, { ...impossible, excitement: 649 }), false, 'capstone excitement bar is strict');
+  const trophy = achieveCapstone(legacy, { name: 'Beyond Time', achievedAt: 123 });
+  assert.deepEqual(trophy, { name: 'Beyond Time', achievedAt: 123 });
+  assert.equal(canAchieveCapstone(legacy, impossible), false, 'trophy can only be earned once');
+  assert.equal(achieveCapstone(legacy), null);
+}
 
 // certification bar rises each generation
 {

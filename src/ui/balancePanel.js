@@ -66,12 +66,11 @@ export function createBalancePanel({
     const trainsPerMin = 60 / d.cycle * d.trains;
     const express = d.express || 0;
     const fullRide = Math.round(d.seatsCap * d.perRider);
-    const fullVendors = Math.round(d.seatsCap * d.vendorPerRider);
     const fullPhotos = d.seatsCap > 0 ? Math.round(d.photoPerRide) : 0;
     const fullMerch = Math.round(d.seatsCap * d.perRider * d.merchRate);
     const estRideDispatch = Math.round(estBoard * d.perRider);
-    const estVendorDispatch = Math.round(estBoard * d.vendorPerRider);
     const estPhotoDispatch = estBoard > 0.5 ? Math.round(d.photoPerRide) : 0;
+    const conc = d.concessions || { perMin: 0, items: [], served: 0, cap: 0 };
     const estMerchDispatch = Math.round(estBoard * d.perRider * d.merchRate);
 
     const measured = getMeasuredRate();
@@ -81,7 +80,7 @@ export function createBalancePanel({
       gross: Math.floor(d.ratePerMin),
       net: Math.floor(netPerMin),
       ride: Math.floor(d.ridePerMin),
-      snack: Math.floor(d.snackPerMin),
+      conc: Math.floor(conc.perMin),
       royalty: Math.floor(d.royaltyPerMin),
       spend: Math.floor(researchSpend),
       payroll: Math.floor(payroll),
@@ -109,18 +108,23 @@ export function createBalancePanel({
         row('Reliability', mult(d.upkeepMult), 'mechanic training'),
         row('Photo research', mult(d.researchMult), 'On-Ride Photo'),
         row('Ride take', money(d.perRider), 'per boarded guest'),
-        row('Vendors', money(d.vendorPerRider), `${pct(d.hatFrac)} hats, ${pct(d.balloonFrac)} balloons`),
       ]) +
       section('Per Dispatch', [
         row('Full train ride take', money(fullRide), `${d.seatsCap} seats`),
         row('Estimated ride take', money(estRideDispatch), `${estBoard.toFixed(1)} guests expected`),
         row('Photo sales', money(estPhotoDispatch), fullPhotos ? `${money(fullPhotos)} on a full train` : 'hire photographers'),
-        row('Hats and balloons', money(estVendorDispatch), fullVendors ? `${money(fullVendors)} on a full train` : 'vendor carts'),
         row('Exit merch', money(estMerchDispatch), d.merchRate ? `${pct(d.merchRate)} of ride take` : 'locked by research'),
+      ]) +
+      section('Concessions (point of sale)', [
+        ...conc.items.filter(i => i.level > 0).map(i =>
+          row(`${i.icon} ${i.name}`, `${money(i.perMin)}/min`, `${i.sellsPerMin.toFixed(1)} sold/min · $${Math.round(i.price)} each`)),
+        row('Total', `${money(conc.perMin)}/min`, conc.perMin > 0
+          ? `${Math.round(conc.served)}/${Math.round(conc.cap)} guests buying`
+          : 'build snack stands or vendor carts'),
       ]) +
       section('Per Minute', [
         row('Ride dispatches', money(d.ridePerMin), `${trainsPerMin.toFixed(2)} dispatches/min`),
-        row('Snack stands', money(d.snackPerMin), `${Math.round(d.snackCap)} guest snack cap`),
+        row('Concessions', money(conc.perMin), 'sold to the crowd'),
         row('Royalties', money(d.royaltyPerMin), d.royaltyPerMin ? 'Reality Licensing' : 'locked by research'),
         row('Projected gross', `${money(d.ratePerMin)}/min`, 'model estimate'),
         row('Measured income', measured === null ? 'warming up…' : `${money(measured)}/min`, 'actually banked, last 60s'),

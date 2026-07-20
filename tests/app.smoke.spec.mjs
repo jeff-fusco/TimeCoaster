@@ -384,6 +384,18 @@ test('escape menu saves and guards reset', async ({ page }) => {
 
   await page.locator('#escapeSave').click();
   await expect(page.locator('#toast')).toContainText(/saved/i);
+  await expect(page.locator('.save-slot')).toHaveCount(3);
+  await expect(page.locator('.save-slot.active .save-slot-meta')).not.toHaveText('Empty slot');
+
+  await page.locator('[data-slot-save="2"]').click();
+  await expect(page.locator('.save-slot[data-slot="2"] .save-slot-meta')).not.toHaveText('Empty slot');
+  await page.locator('#escapeExport').click();
+  await expect(page.locator('#saveTransfer')).not.toHaveValue('');
+  const intact = await page.evaluate(() => localStorage.getItem('tc3d_v6_slot_1'));
+  await page.locator('#saveTransfer').fill('definitely not a save');
+  await page.locator('#escapeImport').click();
+  await expect(page.locator('#saveTransferStatus')).toContainText(/corrupt|invalid/i);
+  expect(await page.evaluate(() => localStorage.getItem('tc3d_v6_slot_1'))).toBe(intact);
 
   await page.locator('#escapeReset').click();
   await expect(page.locator('#escapeReset')).toHaveText('Confirm Reset');
@@ -414,6 +426,38 @@ test('staff training rebuilds queue visuals when capacity changes', async ({ pag
   await expect.poll(async () => page.evaluate(() => window.__TC3D_DEBUG__.queueVisual().capacity)).toBeGreaterThan(before.capacity);
   const after = await page.evaluate(() => window.__TC3D_DEBUG__.queueVisual());
   expect(after.visualCapacity).toBeGreaterThanOrEqual(after.capacity);
+  expect(pageErrors).toEqual([]);
+});
+
+test('queue joiners walk the lanes to the end of the line (no teleport)', async ({ page }) => {
+  const pageErrors = [];
+  page.on('pageerror', err => pageErrors.push(err.message));
+
+  await page.addInitScript(() => {
+    window.__TIME_COASTER_TEST__ = true;
+    localStorage.clear();
+    // a nearly-empty line: joins flow immediately and have empty switchbacks to walk
+    localStorage.setItem('tc3d_v5', JSON.stringify({ money: 5000, rides: 0, queue: 2 }));
+  });
+  await page.goto('/index.html');
+  await expect.poll(() => page.evaluate(() => window.__TC3D_BOOTED === true)).toBe(true);
+
+  // joins stage walk-in walkers; while one is in flight the standing crowd
+  // (settled) lags the sim count — that lag IS the no-teleport guarantee
+  await expect.poll(
+    () => page.evaluate(() => window.__TC3D_DEBUG__.queueVisual().inFlight),
+    { timeout: 15000 },
+  ).toBeGreaterThan(0);
+  const during = await page.evaluate(() => window.__TC3D_DEBUG__.queueVisual());
+  expect(during.settled).toBeLessThan(Math.round(during.simQueue));
+  // conservation: standing + walking ≈ the sim's count (fractional join in transit)
+  expect(Math.abs(during.settled + during.inFlight - Math.round(during.simQueue))).toBeLessThanOrEqual(1);
+
+  // walkers arrive and hand over to the crowd: settled climbs
+  await expect.poll(
+    () => page.evaluate(() => window.__TC3D_DEBUG__.queueVisual().settled),
+    { timeout: 20000 },
+  ).toBeGreaterThan(during.settled);
   expect(pageErrors).toEqual([]);
 });
 
@@ -764,7 +808,7 @@ test('title splash starts the game on Play', async ({ page }) => {
 
   await expect(page.locator('#splash')).toBeVisible();
   await expect(page.locator('#splash .splash-title')).toHaveText('Time Coaster 3D');
-  await expect(page.locator('#splashPlay')).toHaveText('Play'); // no save → "Play"
+  await expect(page.locator('#splashPlay')).toHaveText('▶ Play'); // no save → "Play"
   await expect(page.locator('#splashWelcome')).toBeHidden();     // no offline earnings
 
   await page.locator('#splashPlay').click();
@@ -839,6 +883,16 @@ test('retiring a coaster banks fame and starts a new generation', async ({ page 
   expect(cam.target.z).toBeCloseTo(0, 1);
   await page.locator('#ceremonyClose').click();
   await expect(page.locator('#ceremonyPanel')).toBeHidden();
+
+  // The endgame capstone uses the same ceremony system, stays fast under TEST,
+  // and persists as a trophy without resetting the current generation.
+  const capstoneGeneration = await page.evaluate(() => window.__TC3D_DEBUG__.legacy().generation);
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.awardCapstone())).toBe(true);
+  await expect(page.locator('#ceremonyPanel')).toBeVisible();
+  await expect(page.locator('#ceremonyTitle')).toHaveText('The Impossible Is Real!');
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.legacy().generation)).toBe(capstoneGeneration);
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.legacy().capstone?.name)).toBeTruthy();
+  await page.locator('#ceremonyClose').click();
   expect(pageErrors).toEqual([]);
 });
 
@@ -859,7 +913,7 @@ test('offline progress credits money on return', async ({ page }) => {
 
   await expect(page.locator('#splashWelcome')).toBeVisible();
   await expect(page.locator('#splashWelcome')).toContainText('While you were away');
-  await expect(page.locator('#splashPlay')).toHaveText('Continue'); // has a save
+  await expect(page.locator('#splashPlay')).toHaveText('▶ Continue'); // has a save
 
   await page.locator('#splashPlay').click();
   await expect(page.locator('#splash')).toBeHidden();

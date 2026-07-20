@@ -160,6 +160,62 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
   }
 }
 
+// parametric feature sizes: spiralR / corkR / tunnelDepth override the
+// length-derived defaults, are clamped, and reshape the geometry
+{
+  const spread = (path, kind, axisFrom, axisTo) => {
+    // max distance of a feature's samples from its straight axis
+    let max = 0;
+    for (let i = 0; i < path.N; i++) {
+      if (path.kind[i] !== kind) continue;
+      const p = { x: path.pos[i].x, y: path.pos[i].y, z: path.pos[i].z };
+      const ab = { x: axisTo.x - axisFrom.x, y: axisTo.y - axisFrom.y, z: axisTo.z - axisFrom.z };
+      const len2 = ab.x ** 2 + ab.y ** 2 + ab.z ** 2;
+      const t = ((p.x - axisFrom.x) * ab.x + (p.y - axisFrom.y) * ab.y + (p.z - axisFrom.z) * ab.z) / len2;
+      const q = { x: axisFrom.x + ab.x * t, y: axisFrom.y + ab.y * t, z: axisFrom.z + ab.z * t };
+      max = Math.max(max, Math.hypot(p.x - q.x, p.y - q.y, p.z - q.z));
+    }
+    return max;
+  };
+
+  const base = makeCtrlPts();
+  base[3].seg = 'spiral';
+  const auto = makePath(base.map(p => ({ ...p })));
+  const big = base.map(p => ({ ...p }));
+  big[3].spiralR = 6;
+  const bigPath = makePath(big);
+  const axisA = base[3];
+  const axisB = base[4];
+  assert.ok(
+    spread(bigPath, 'spiral', axisA, axisB) > spread(auto, 'spiral', axisA, axisB) + 1,
+    'a bigger spiralR swings wider around the axis',
+  );
+  const huge = base.map(p => ({ ...p }));
+  huge[3].spiralR = 999;
+  assert.ok(spread(makePath(huge), 'spiral', axisA, axisB) < 8, 'spiralR is clamped');
+
+  const cork = makeCtrlPts();
+  cork[3].seg = 'corkscrew';
+  const corkAuto = makePath(cork.map(p => ({ ...p })));
+  const corkBig = cork.map(p => ({ ...p }));
+  corkBig[3].corkR = 4;
+  assert.ok(
+    spread(makePath(corkBig), 'corkscrew', axisA, axisB) > spread(corkAuto, 'corkscrew', axisA, axisB) + 0.8,
+    'a bigger corkR rolls wider',
+  );
+
+  const tun = makeCtrlPts();
+  tun[3].seg = 'tunnel';
+  const tunAuto = makePath(tun.map(p => ({ ...p })));
+  const tunDeep = tun.map(p => ({ ...p }));
+  tunDeep[3].tunnelDepth = 12;
+  const deepPath = makePath(tunDeep);
+  assert.ok(Math.min(...deepPath.height) < Math.min(...tunAuto.height) - 3, 'a deeper tunnel dives further');
+  const tunClamp = tun.map(p => ({ ...p }));
+  tunClamp[3].tunnelDepth = 999;
+  assert.ok(Math.min(...makePath(tunClamp).height) >= Math.min(...deepPath.height) - 1e-9, 'tunnelDepth is clamped');
+}
+
 {
   const ctrlPts = makeCtrlPts();
   ctrlPts[3].seg = 'brake';
@@ -200,14 +256,31 @@ function makePath(ctrlPts = makeCtrlPts(), upgrades = makeUpgrades(), researchDo
 
 {
   // a hill taller than the launch energy, with no lift, flags a rollback and
-  // leaves the train crawling (not reversing — trains always complete the loop)
+  // marks the stall point (arc-length + height) the hard-stall mechanic uses
   const ctrlPts = makeCtrlPts();
   ctrlPts[3].y = 12;
   const path = makePath(ctrlPts);
   assert.equal(path.stats.rollback, true, 'an under-powered tall hill flags a rollback');
   const minSpeed = Math.min(...path.speed);
-  assert.ok(minSpeed > 0, 'the train crawls rather than reversing');
+  assert.ok(minSpeed > 0, 'the sweep keeps a speed floor rather than dividing by zero');
   assert.ok(minSpeed <= PHYS.rollbackSpeed + 0.6, 'it barely creeps over the too-tall hill');
+  // stall telemetry: a real arc-length inside the circuit, near the tall crest
+  assert.ok(path.stats.stallS > 0 && path.stats.stallS < path.len, 'stallS is a point on the track');
+  assert.ok(path.stats.stallHeight > 6, `stall height reflects the tall crest (got ${path.stats.stallHeight})`);
+
+  // the starter/normal coaster never stalls
+  const ok = makePath();
+  assert.equal(ok.stats.rollback, false, 'a normal coaster runs clean');
+  assert.equal(ok.stats.stallS, -1, 'no stall point when nothing stalls');
+  assert.equal(ok.stats.stallHeight, 0, 'no stall height when nothing stalls');
+
+  // a chain lift up to the tall crest fixes the stall (energy topped off)
+  const lifted = makeCtrlPts();
+  lifted[2].seg = 'lift';
+  lifted[3].y = 12;
+  const lp = makePath(lifted);
+  assert.equal(lp.stats.rollback, false, 'a chain lift clears the tall hill — no stall');
+  assert.equal(lp.stats.stallS, -1, 'lifted circuit has no stall point');
 }
 
 {

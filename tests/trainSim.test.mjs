@@ -119,13 +119,14 @@ function run(args) {
   assert.equal(state.money, 4 * ECONOMY.perRider + 12, 'no photos sold on an empty train');
 }
 
-// Vendor carts (hats/balloons) add per-rider merch income at dispatch.
+// Hats/balloons no longer pay out at dispatch — they sell at the point of sale
+// (concessions), so a plain dispatch is just the ride take (+ photos/merch).
 {
   const state = { money: 0, rides: 0 };
-  const economy = { ...ECONOMY, vendorPerRider: 2.5 };
+  const economy = { ...ECONOMY };   // no vendor income folded into dispatch
   const full = makeTrain({ mode: 'dwell', phase: 'ready', cycleBoard: 4, boarded: 4 });
   dispatchTrain(full, { economy, state });
-  assert.equal(state.money, 4 * ECONOMY.perRider + Math.round(4 * 2.5), 'ride income + vendor sales');
+  assert.equal(state.money, 4 * ECONOMY.perRider, 'dispatch income is ride take only');
 }
 
 // Merch Exit Shop research skims a share of each trainload's ride income.
@@ -198,6 +199,43 @@ function run(args) {
   assert.equal(trains[0].s, 99.2);
   assert.equal(trains[0].prevS, 100.2);
   assert.equal(trains[0].mode, 'run');
+}
+
+// Hard stall: a broken circuit halts income and demonstrates the failure.
+{
+  const stallS = 40;
+  // one train on the approach (climber) + one waiting to dwell + a full line
+  const climber = makeTrain({ s: 20, prevS: 20 });
+  const other = makeTrain({ s: 70, prevS: 70 });
+  const trains = [climber, other];
+  const sim = { queue: 10 };
+  const state = { money: 0, rides: 0 };
+
+  run({ trains, sim, state, stalled: true, stallS });
+  assert.equal(climber.mode, 'stall-climb', 'the approaching train becomes the demonstrator');
+  assert.equal(other.mode, 'stalled', 'other trains freeze in their block sections');
+  assert.equal(sim.queue, 10, 'a stalled ride boards nobody — the line does not drain');
+
+  // the climber eases up to the crest, then rolls back to the empty platform
+  let guard = 0;
+  while (climber.mode === 'stall-climb' && guard++ < 2000) run({ trains, sim, state, stalled: true, stallS });
+  assert.ok(guard < 2000, 'the climber reaches the crest');
+  assert.equal(climber.mode, 'stall-slide', 'then it gives up and slides back');
+  guard = 0;
+  while (climber.mode === 'stall-slide' && guard++ < 2000) run({ trains, sim, state, stalled: true, stallS });
+  assert.equal(climber.mode, 'stalled', 'the demonstrator parks at the platform');
+  assert.ok(Math.abs(climber.s - STOP_S) < 0.2, 'parked at the station');
+  assert.equal(climber.boarded, 0, 'nobody rides a stalled coaster');
+
+  // no dispatch is possible while stalled
+  const launched = dispatchTrain(climber, { economy: ECONOMY, state, onDeposit: () => {} });
+  assert.equal(launched, false, 'a stalled train cannot be dispatched');
+  assert.equal(state.money, 0, 'zero ride income for the whole stall');
+
+  // fixing the track wakes the fleet
+  run({ trains, sim, state, stalled: false, stallS: -1 });
+  assert.equal(climber.mode, 'run', 'clearing the stall sends trains running again');
+  assert.equal(other.mode, 'run', 'every train wakes up');
 }
 
 console.log('trainSim tests passed');

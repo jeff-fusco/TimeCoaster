@@ -8,6 +8,7 @@ export function createStaffPanel({
   getStaff,
   getState,
   getRoster = () => ({}),
+  getPortrait = () => null,
   getApplicants = () => [],
   getBoardRefreshSeconds = () => 0,
   costs,        // { hire, train, reroll, canHire, canTrain }
@@ -18,6 +19,7 @@ export function createStaffPanel({
   onFire = () => false,
   onReroll = () => 0,
   onSpendFeedback = () => {},
+  wageScale = () => 1,   // era wage multiplier — displayed pay matches the live drain
   fmt,
 }) {
   const $ = id => document.getElementById(id);
@@ -27,6 +29,9 @@ export function createStaffPanel({
   let lastRenderKey = '';
   let feedback = null;
   let suppressClickUntil = 0;
+  let deferredRenderDepth = 0;
+  let renderQueued = false;
+  let eraWage = 1;   // refreshed each render from wageScale()
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -45,8 +50,17 @@ export function createStaffPanel({
 
   function avatar(person, extra = '') {
     const look = person.look || {};
+    const style = `--skin:${hex(look.skin)};--hair:${hex(look.hair)};--uniform:${hex(look.uniform)}`;
+    // Preferred: the person's actual 3D figure baked to a bust image, so the
+    // roster and the walking world actor are the same character.
+    const portrait = getPortrait(person);
+    if (portrait) {
+      return `<div class="person-avatar rendered ${extra}" style="${style}">` +
+        `<img class="pa-render" src="${portrait}" alt="" draggable="false"></div>`;
+    }
+    // Fallback: CSS-drawn face (no WebGL / render failed).
     const cls = `person-avatar ${extra} hair-${esc(look.hairStyle || 'short')} acc-${esc(look.accessory || 'none')}`;
-    return `<div class="${cls}" style="--skin:${hex(look.skin)};--hair:${hex(look.hair)};--uniform:${hex(look.uniform)}">` +
+    return `<div class="${cls}" style="${style}">` +
       `<span class="pa-body"></span><span class="pa-head"></span><span class="pa-hair"></span>` +
       `<span class="pa-face"></span><span class="pa-acc"></span>` +
       `</div>`;
@@ -81,18 +95,18 @@ export function createStaffPanel({
     return { ...lead, label: departmentHead ? 'Department Head' : 'Crew Lead' };
   }
 
-  function renderApplicant(role, person, index, money) {
+  function renderApplicant(role, person, index, money, atCap = false) {
     const fee = costs.hirePerson ? costs.hirePerson(role, index, person) : costs.hire(role);
     const veteran = (person.traits || []).includes('veteran');
     return `<div class="applicant-card">` +
       avatar(person) +
       `<div class="person-main">` +
       `<div class="person-name">${esc(person.name)} ${rarityLabel(person)}</div>` +
-      `<div class="person-meta">Potential ${person.potential} · Wage $${fmt(person.baseSalary)}/min${veteran ? ' · Veteran Lv 2' : ''}</div>` +
+      `<div class="person-meta">Potential ${person.potential} · Wage $${fmt(person.baseSalary * eraWage)}/min${veteran ? ' · Veteran Lv 2' : ''}</div>` +
       `<div class="person-skills">${skillBars(person)}</div>` +
       `<div class="trait-list">${traitChips(person)}</div>` +
       `</div>` +
-      `<button class="staff-btn" data-act="hire-person" data-role="${role}" data-index="${index}" ${money < fee ? 'disabled' : ''}>Hire $${fmt(fee)}</button>` +
+      `<button class="staff-btn" data-act="hire-person" data-role="${role}" data-index="${index}" ${atCap || money < fee ? 'disabled' : ''}>${atCap ? 'Roster Full' : `Hire $${fmt(fee)}`}</button>` +
       `</div>`;
   }
 
@@ -103,7 +117,7 @@ export function createStaffPanel({
       avatar(person) +
       `<div class="person-main">` +
       `<div class="person-name">${esc(person.name)} ${rarityLabel(person)}</div>` +
-      `<div class="person-meta">Level ${person.level}/${person.potential} · Skill ${pct(person.coverage || person.competence)} · Wage $${fmt(person.salaryPerMin)}/min</div>` +
+      `<div class="person-meta">Level ${person.level}/${person.potential} · Skill ${pct(person.coverage || person.competence)} · Wage $${fmt(person.salaryPerMin * eraWage)}/min</div>` +
       `<div class="person-skills">${skillBars(person)}</div>` +
       `<div class="trait-list">${traitChips(person)}</div>` +
       `</div>` +
@@ -114,13 +128,33 @@ export function createStaffPanel({
       `</div>`;
   }
 
+  function queueRender() {
+    if (renderQueued) return;
+    renderQueued = true;
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : cb => setTimeout(cb, 0);
+    raf(() => {
+      renderQueued = false;
+      renderNow();
+    });
+  }
+
   function render() {
+    if (deferredRenderDepth > 0) {
+      queueRender();
+      return;
+    }
+    renderNow();
+  }
+
+  function renderNow() {
     if (!list) return;
     const staff = getStaff();
     const roster = getRoster();
     const money = getState().money;
+    eraWage = Math.max(1, wageScale() || 1);
     const renderKey = JSON.stringify({
       money: Math.floor(money),
+      eraWage: Math.round(eraWage * 10),
       staff: staffOrder.map(role => {
         const entry = staff[role] || {};
         const applicants = getApplicants(role);
@@ -146,6 +180,8 @@ export function createStaffPanel({
       const people = s.people || [];
       const applicants = getApplicants(role);
       const hireable = costs.canHire(role, staff);
+      const atCap = costs.atCap ? costs.atCap(role) : false;
+      const cap = costs.cap ? costs.cap(role) : Infinity;
       const trainable = costs.canTrain(role, staff);
       const hCost = costs.hire(role, staff);
       const tCost = costs.train(role, staff);
@@ -165,19 +201,19 @@ export function createStaffPanel({
         `<div class="s-status">${esc(describe(role, s))}</div>` +
         `</div>` +
         `<div class="s-acts">` +
-        `<button class="staff-btn" data-act="hire" data-role="${role}" ${!hireable || money < hCost ? 'disabled' : ''}>${hireable ? `Hire $${fmt(hCost)}` : 'No applicants'}</button>` +
+        `<button class="staff-btn" data-act="hire" data-role="${role}" ${!hireable || money < hCost ? 'disabled' : ''}>${hireable ? `Hire $${fmt(hCost)}` : (atCap ? 'Roster Full' : 'No applicants')}</button>` +
         `<button class="staff-btn train" data-act="train" data-role="${role}" ${!trainable || money < tCost ? 'disabled' : ''}>${trainable ? `Train $${fmt(tCost)}` : 'Train Max'}</button>` +
         `</div>` +
         `${isFeedback ? `<div class="s-feedback">${esc(feedback.text)}</div>` : ''}` +
         `</div>` +
         `<div class="lead-strip ${lead ? '' : 'empty'}">` +
         (lead
-          ? `${avatar(lead, 'small')}<div><b>${esc(lead.label)}</b><span>${esc(lead.name)} · Lv ${lead.level}/${lead.potential} · $${fmt(lead.salaryPerMin)}/min</span></div>`
+          ? `${avatar(lead, 'small')}<div><b>${esc(lead.label)}</b><span>${esc(lead.name)} · Lv ${lead.level}/${lead.potential} · $${fmt(lead.salaryPerMin * eraWage)}/min</span></div>`
           : `<div><b>No crew yet</b><span>Choose from the job board below.</span></div>`) +
         `</div>` +
         `<div class="board-head"><b>Job Board</b><span>Refresh ${mmss(getBoardRefreshSeconds(role))}</span><button class="staff-btn reroll" data-act="reroll" data-role="${role}" ${money < rCost ? 'disabled' : ''}>Reroll $${fmt(rCost)}</button></div>` +
-        `<div class="applicant-grid">${applicants.map((p, i) => renderApplicant(role, p, i, money)).join('') || '<div class="empty-note">No applicants. Reroll the board.</div>'}</div>` +
-        `<div class="roster-head"><b>Roster</b><span>Payroll $${fmt(s.salaryPerMin || 0)}/min</span></div>` +
+        `<div class="applicant-grid">${applicants.map((p, i) => renderApplicant(role, p, i, money, atCap)).join('') || '<div class="empty-note">No applicants. Reroll the board.</div>'}</div>` +
+        `<div class="roster-head"><b>Roster ${people.length}/${cap === Infinity ? '∞' : cap}</b><span>Payroll $${fmt((s.salaryPerMin || 0) * eraWage)}/min${eraWage > 1.05 ? ` · era wages ×${eraWage.toFixed(1)}` : ''}</span></div>` +
         `<div class="member-grid">${people.map((p, i) => renderMember(role, p, i, money)).join('') || '<div class="empty-note">Nobody hired yet.</div>'}</div>`;
       list.appendChild(row);
     });
@@ -190,18 +226,23 @@ export function createStaffPanel({
     return `Hired -$${fmt(spent)}`;
   }
 
-  function activateButton(btn, point = null) {
+  function activateButton(btn, point = null, deferRender = false) {
     if (!btn || btn.disabled) return;
     const { act, role } = btn.dataset;
     const index = Number(btn.dataset.index);
     let spent = 0;
     let changed = false;
-    if (act === 'hire') { spent = onHire(role); changed = spent > 0; }
-    else if (act === 'train') { spent = onTrain(role); changed = spent > 0; }
-    else if (act === 'hire-person') { spent = onHire(role, index); changed = spent > 0; }
-    else if (act === 'train-person') { spent = onTrain(role, index); changed = spent > 0; }
-    else if (act === 'reroll') { spent = onReroll(role); changed = spent > 0; }
-    else if (act === 'fire-person') { changed = onFire(role, index); }
+    if (deferRender) deferredRenderDepth += 1;
+    try {
+      if (act === 'hire') { spent = onHire(role); changed = spent > 0; }
+      else if (act === 'train') { spent = onTrain(role); changed = spent > 0; }
+      else if (act === 'hire-person') { spent = onHire(role, index); changed = spent > 0; }
+      else if (act === 'train-person') { spent = onTrain(role, index); changed = spent > 0; }
+      else if (act === 'reroll') { spent = onReroll(role); changed = spent > 0; }
+      else if (act === 'fire-person') { changed = onFire(role, index); }
+    } finally {
+      if (deferRender) deferredRenderDepth -= 1;
+    }
 
     if (changed) {
       const rect = btn.getBoundingClientRect();
@@ -211,7 +252,8 @@ export function createStaffPanel({
       if (spent > 0) onSpendFeedback(spent, x, y, { act, role, index });
       lastRenderKey = '';
     }
-    render();
+    if (deferRender && changed) queueRender();
+    else render();
   }
 
   if (list) {
@@ -221,7 +263,7 @@ export function createStaffPanel({
       e.preventDefault();
       suppressClickUntil = performance.now() + 350;
       btn.dataset.pointerHandled = '1';
-      activateButton(btn, { x: e.clientX, y: e.clientY });
+      activateButton(btn, { x: e.clientX, y: e.clientY }, true);
       setTimeout(() => { delete btn.dataset.pointerHandled; }, 0);
     });
 
