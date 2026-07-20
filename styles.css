@@ -398,6 +398,14 @@
   .cer-stats b{display:block;font-family:'Fredoka';font-size:20px;color:var(--ink);line-height:1}
   .cer-stats span{display:block;margin-top:3px;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft)}
   .cer-spark{position:fixed;left:50%;top:45%;width:9px;height:9px;border-radius:50%;background:var(--amber);box-shadow:0 0 0 3px rgba(255,184,77,.28);pointer-events:none;z-index:1001;animation:cerSpark .82s ease-out var(--delay) forwards}
+  /* the retired coaster shrinking into its trophy */
+  .cer-globe{display:block;width:132px;height:132px;object-fit:contain;margin:2px auto 0;
+    filter:drop-shadow(0 4px 6px rgba(28,37,51,.22));animation:cerGlobe .9s cubic-bezier(.22,1.2,.36,1) both}
+  @keyframes cerGlobe{
+    0%{opacity:0;transform:scale(2.1) translateY(-26px)}
+    55%{opacity:1}
+    100%{opacity:1;transform:scale(1) translateY(0)}
+  }
   @keyframes cerSpark{0%{transform:translate(-50%,-50%) scale(.3);opacity:0}18%{opacity:1}100%{transform:translate(calc(-50% + var(--dx)),calc(-50% + var(--dy))) scale(.08);opacity:0}}
   .biome-chip .v{font-size:20px}
   .biome-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-top:14px}

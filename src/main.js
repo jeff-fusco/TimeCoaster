@@ -1369,20 +1369,41 @@ function openBiomePicker(){
   return true;
 }
 
+// One firework: a ring of sparks bursting from (cx%, cy%) of the viewport.
+const CER_COLORS=['#ffb84d','#ff7a59','#8fd3ff','#b58cff','#7ce7a8','#ffe36e'];
+function spawnFirework(cx, cy, hue, delay=0){
+  const panel=$('ceremonyPanel');
+  if(!panel || panel.hidden) return;
+  const n=16;
+  for(let i=0;i<n;i++){
+    const spark=document.createElement('div');
+    spark.className='cer-spark';
+    const angle=(Math.PI*2*i)/n + (hue%2?0.2:0);
+    const dist=58 + (i%4)*20;
+    spark.style.left=`${cx}%`;
+    spark.style.top=`${cy}%`;
+    spark.style.background=CER_COLORS[hue%CER_COLORS.length];
+    spark.style.setProperty('--dx', `${Math.cos(angle)*dist}px`);
+    spark.style.setProperty('--dy', `${Math.sin(angle)*dist}px`);
+    spark.style.setProperty('--delay', `${delay + (i%5)*30}ms`);
+    panel.appendChild(spark);
+    setTimeout(()=>spark.remove(), delay+1000);
+  }
+}
+
+// The ascension salute: staggered bursts across the panel. Test mode fires a
+// single quick burst so the retire smoke test never waits on theatre.
 function spawnRetirementBurst(){
   const panel=$('ceremonyPanel');
   if(!panel || panel.hidden) return;
-  for(let i=0;i<18;i++){
-    const spark=document.createElement('div');
-    spark.className='cer-spark';
-    const angle=(Math.PI*2*i)/18;
-    const dist=72 + (i%4)*18;
-    spark.style.setProperty('--dx', `${Math.cos(angle)*dist}px`);
-    spark.style.setProperty('--dy', `${Math.sin(angle)*dist}px`);
-    spark.style.setProperty('--delay', `${(i%5)*35}ms`);
-    panel.appendChild(spark);
-    setTimeout(()=>spark.remove(),950);
-  }
+  if(TEST){ spawnFirework(50, 45, 0, 0); return; }
+  const shots=[[50,42,0,0],[28,34,1,260],[72,36,2,420],[38,56,3,680],[64,58,4,860]];
+  shots.forEach(([x,y,h,d])=>{
+    setTimeout(()=>spawnFirework(x,y,h,0), d);
+    void h;
+  });
+  // a second fanfare swell as the last shells go up
+  setTimeout(()=>audio.play('fanfare'), 700);
 }
 
 function doRetire(nextBiome, name, gained, newName=''){
@@ -1429,7 +1450,14 @@ function doRetire(nextBiome, name, gained, newName=''){
   const b=biomeOf(activeBiome);
   const title=$('ceremonyTitle'); if(title) title.textContent='Coaster Retired!';
   const body=$('ceremonyBody');
-  if(body) body.innerHTML=`<div class="cer-name">${name}</div>`+
+  // the coaster that just retired, shrunk into its trophy — it animates down
+  // into place, then lives on the Hall of Coasters shelf
+  const globeImg=globeStudio.globeFor(monument);
+  const globeHtml=globeImg
+    ? `<img class="cer-globe" src="${globeImg}" alt="${escAttr(name)} snowglobe">`
+    : '';
+  if(body) body.innerHTML=`<div class="cer-name">${escHtml(name)}</div>`+
+    globeHtml+
     `<div class="cer-fame">+${fmt(gained)} <span>Fame</span></div>`+
     `<div class="cer-stats">`+
       `<div><b>${Math.round(retiredStats.excitement + retiredBonus)}</b><span>EXC</span></div>`+
@@ -1437,7 +1465,7 @@ function doRetire(nextBiome, name, gained, newName=''){
       `<div><b>${fmt(retiredIncome)}</b><span>$/min</span></div>`+
       `<div><b>${fmt(grant)}</b><span>Grant</span></div>`+
     `</div>`+
-    (retiredStats.monumentNearMiss>0.05?`<div class="cer-sub">History thread bonus +${retiredStats.monumentNearMiss.toFixed(1)} EXC.</div>`:'')+
+    `<div class="cer-sub">🔮 Sealed in a snowglobe — find it in your Hall of Coasters.</div>`+
     `<div class="cer-sub">Generation ${legacy.generation} begins on the ${b.icon} ${b.name}.</div>`;
   spawnRetirementBurst();
   return true;
