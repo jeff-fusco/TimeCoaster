@@ -75,6 +75,7 @@ export function createSaveData(gameState) {
       fame: legacy.fame,
       generation: legacy.generation,
       perks: { ...legacy.perks },
+      capstone: legacy.capstone ? { ...legacy.capstone } : null,
       monuments: (legacy.monuments || []).map(m => ({
         ...m,
         stats: { ...m.stats },

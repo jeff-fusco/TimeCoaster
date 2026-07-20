@@ -15,7 +15,7 @@ export const PERKS = {
 export const PERK_ORDER = ['nestEgg', 'landmarks', 'renown'];
 
 export function createLegacyState() {
-  return { fame: 0, generation: 1, perks: {}, monuments: [] };
+  return { fame: 0, generation: 1, perks: {}, monuments: [], capstone: null };
 }
 
 const lvl = (perks, key) => Math.max(0, Math.floor(perks?.[key] || 0));
@@ -144,6 +144,31 @@ export function canRetire(stats, themeBonus, generation) {
   );
 }
 
+export const CAPSTONE_EXCITEMENT = 650;
+export const CAPSTONE_CRAFT = 115;
+
+// The Impossible Coaster is a permanent trophy above the retirement ladder.
+// It demands a five-star park plus near-ceiling ride craft; earning it does not
+// reset or end the active park.
+export function canAchieveCapstone(legacy, stats, themeBonus = 0) {
+  if (legacy?.capstone) return false;
+  const eff = effectiveExcitement(stats, themeBonus);
+  return (
+    parkRating(legacy?.fame, legacy?.monuments?.length, eff) >= 5 &&
+    eff >= CAPSTONE_EXCITEMENT &&
+    qualityScore(stats) >= CAPSTONE_CRAFT
+  );
+}
+
+export function achieveCapstone(legacy, { name = 'Impossible Coaster', achievedAt = Date.now() } = {}) {
+  if (!legacy || legacy.capstone) return null;
+  legacy.capstone = {
+    name: String(name || 'Impossible Coaster').slice(0, 40),
+    achievedAt: Number.isFinite(achievedAt) ? achievedAt : Date.now(),
+  };
+  return legacy.capstone;
+}
+
 // Fame banked for retiring a coaster at these stats. Superlinear in excitement,
 // with a theming kicker — never rewards raw length directly.
 export function fameFor(stats, themeBonus = 0) {
@@ -219,6 +244,12 @@ export function normalizeLegacy(raw) {
         retiredAt: finite(m.retiredAt) ? m.retiredAt : Date.now(),
       }))
       .filter(m => m.ctrlPts.length >= 3);
+  }
+  if (raw.capstone && typeof raw.capstone === 'object') {
+    legacy.capstone = {
+      name: String(raw.capstone.name || 'Impossible Coaster').slice(0, 40),
+      achievedAt: finite(raw.capstone.achievedAt) ? raw.capstone.achievedAt : Date.now(),
+    };
   }
   return legacy;
 }

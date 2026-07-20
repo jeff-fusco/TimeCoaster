@@ -436,6 +436,11 @@
   .lg-retire:active{transform:translateY(2px)}
   .lg-retire:disabled{background:#e7e2d4;color:var(--ink-soft);cursor:not-allowed;box-shadow:none}
   .lg-sub{font-weight:500;font-size:12px;color:var(--ink-soft);margin-top:8px}
+  .capstone-card{border:2px solid #8a62c7;background:linear-gradient(145deg,#f5eeff,#fff8dc);box-shadow:0 5px 18px rgba(83,45,140,.12)}
+  .capstone-card.achieved{border-color:#d6a31d;background:linear-gradient(145deg,#fff3bd,#fffaf0)}
+  .capstone-title{font-family:'Fredoka';font-weight:700;font-size:20px;color:#603a9d;margin-bottom:10px}
+  .capstone-btn{background:linear-gradient(135deg,#6f45ae,#a467d5)}
+  .capstone-trophy{font-weight:600;font-size:13px;color:var(--ink);padding:10px;border-radius:10px;background:rgba(255,255,255,.65)}
   .perk-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid rgba(28,37,51,.08)}
   .perk-row:first-of-type{border-top:none}
   .perk-ic{font-size:22px;width:30px;text-align:center}

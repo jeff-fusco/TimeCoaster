@@ -871,6 +871,16 @@ test('retiring a coaster banks fame and starts a new generation', async ({ page 
   expect(cam.target.z).toBeCloseTo(0, 1);
   await page.locator('#ceremonyClose').click();
   await expect(page.locator('#ceremonyPanel')).toBeHidden();
+
+  // The endgame capstone uses the same ceremony system, stays fast under TEST,
+  // and persists as a trophy without resetting the current generation.
+  const capstoneGeneration = await page.evaluate(() => window.__TC3D_DEBUG__.legacy().generation);
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.awardCapstone())).toBe(true);
+  await expect(page.locator('#ceremonyPanel')).toBeVisible();
+  await expect(page.locator('#ceremonyTitle')).toHaveText('The Impossible Is Real!');
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.legacy().generation)).toBe(capstoneGeneration);
+  expect(await page.evaluate(() => window.__TC3D_DEBUG__.legacy().capstone?.name)).toBeTruthy();
+  await page.locator('#ceremonyClose').click();
   expect(pageErrors).toEqual([]);
 });
 

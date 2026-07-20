@@ -116,6 +116,7 @@ function makeGameState() {
     lastLegacyRate: 100,
     legacy: {
       fame: 42, generation: 3, perks: { nestEgg: 2 },
+      capstone: { name: 'Beyond Time', achievedAt: 456 },
       monuments: [{
         name: 'Twister', generation: 1, biome: 'meadow', retiredAt: 123, themeBonus: 12,
         stats: { excitement: 88, intensity: 40, nausea: 20, length: 300, maxSpeed: 20 },
@@ -140,6 +141,7 @@ function makeGameState() {
   assert.equal(restored.marketing.channels.streetTeam.weight, 2, 'channel weights survive the round trip');
   assert.equal(restored.legacy.generation, 3);
   assert.equal(restored.legacy.perks.nestEgg, 2);
+  assert.deepEqual(restored.legacy.capstone, { name: 'Beyond Time', achievedAt: 456 });
   assert.equal(restored.legacy.monuments.length, 1);
   assert.equal(restored.legacy.monuments[0].name, 'Twister');
   assert.equal(restored.legacy.monuments[0].stats.excitement, 88);

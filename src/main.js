@@ -49,6 +49,8 @@ import {
 } from './systems/property.js?v=20260703-13';
 import {
   buyPerk as legacyBuyPerk,
+  achieveCapstone,
+  canAchieveCapstone,
   canRetire,
   createLegacyState,
   createMonument,
@@ -769,7 +771,8 @@ if(window.__TIME_COASTER_TEST__){
     coasterStats: () => ({ ...(path?.stats || {}), excitement: (path?.stats.excitement || 0) + excitementBonus(), themeBonus, monumentBonus }),
     selectBuildPoint: idx => buildControls.selectHandle(idx),
     pointBank: idx => ctrlPts[idx]?.bank ?? null,
-    legacy: () => ({ fame: legacy.fame, generation: legacy.generation, monuments: legacy.monuments.length, biome: activeBiome, excitement: (path?.stats.excitement || 0) + excitementBonus(), themeBonus, monumentBonus }),
+    legacy: () => ({ fame: legacy.fame, generation: legacy.generation, monuments: legacy.monuments.length, capstone: legacy.capstone ? { ...legacy.capstone } : null, biome: activeBiome, excitement: (path?.stats.excitement || 0) + excitementBonus(), themeBonus, monumentBonus }),
+    awardCapstone: () => completeImpossibleCoaster({ force:true }),
     marketing: () => ({
       fundingPct: marketing.fundingPct,
       channels: Object.fromEntries(CHANNELS.map(c => [c.key, {
@@ -1415,6 +1418,43 @@ function spawnRetirementBurst(){
   setTimeout(()=>audio.play('fanfare'), 700);
 }
 
+function spawnImpossibleBurst(){
+  const panel=$('ceremonyPanel');
+  if(!panel || panel.hidden) return;
+  if(TEST){ spawnFirework(50, 42, 5, 0); return; }
+  const shots=[
+    [50,38,5,0],[22,30,1,140],[78,30,2,260],[34,50,3,380],[66,50,4,500],
+    [16,56,0,650],[84,56,5,760],[50,60,2,900],[28,40,4,1080],[72,42,1,1220],
+  ];
+  shots.forEach(([x,y,h,d])=>setTimeout(()=>spawnFirework(x,y,h,0),d));
+  setTimeout(()=>audio.play('fanfare'), 450);
+  setTimeout(()=>audio.play('fanfare'), 1100);
+}
+
+function completeImpossibleCoaster({ force = false } = {}){
+  if(!path) return false;
+  if(!force && !canAchieveCapstone(legacy, path.stats, excitementBonus())) return false;
+  const name=(coasterName.trim() || 'Impossible Coaster').slice(0,40);
+  if(!achieveCapstone(legacy, { name })) return false;
+  legacyUI?.close();
+  saveGame();
+  const title=$('ceremonyTitle'); if(title) title.textContent='The Impossible Is Real!';
+  const body=$('ceremonyBody');
+  if(body) body.innerHTML=
+    `<div class="cer-name">${escHtml(name)}</div>`+
+    `<div class="cer-fame">∞ <span>Impossible Coaster</span></div>`+
+    `<div class="cer-stats">`+
+      `<div><b>${Math.round(path.stats.excitement + excitementBonus())}</b><span>EXC</span></div>`+
+      `<div><b>${Math.round(qualityScore(path.stats))}</b><span>Craft</span></div>`+
+      `<div><b>★5</b><span>Park</span></div>`+
+    `</div>`+
+    `<div class="cer-sub">🏆 Permanent trophy unlocked. This park and coaster remain yours to keep building.</div>`;
+  const panel=$('ceremonyPanel'); if(panel) panel.hidden=false;
+  audio.play('fanfare');
+  spawnImpossibleBurst();
+  return true;
+}
+
 function doRetire(nextBiome, name, gained, newName=''){
   if(!path || !canRetire(path.stats, excitementBonus(), legacy.generation)) return false;
   const retiredStats={ ...path.stats };
@@ -1521,6 +1561,7 @@ const legacyUI=createLegacyPanel({
   getGlobe: monument => globeStudio.globeFor(monument),
   fmt,
   onRetire: openBiomePicker,
+  onCapstone: () => completeImpossibleCoaster(),
   onBuyPerk: key => {
     if(buyLegacyPerk(key)){ audio.play('buy'); return true; }
     return false;
