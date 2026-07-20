@@ -14,6 +14,7 @@ export function createHudShop({
   getSim,
   getMeasuredRate = () => null,   // rolling actual $/min; null until enough signal
   getExcitementBonus = () => 0,   // decor theming added on top of track excitement
+  getParkRating = () => 1,
   hasResearch,
   gradeFor,
   upgradeCost,
@@ -124,6 +125,9 @@ export function createHudShop({
     $('riders').textContent = d.seatsCap;
     $('perride').textContent = `$${fmt(d.perRideFull)}`;
     $('queue').textContent = `${Math.round(sim.queue)}/${d.queueCap}`;
+    const parkStars = getParkRating();
+    $('parkRating').textContent = `${parkStars.toFixed(1).replace('.0', '')} ★`;
+    $('parkRating').title = `Park Rating: ${parkStars.toFixed(1)} out of 5`;
 
     if (stats) {
       $('topspeed').textContent = Math.round(stats.maxSpeed * mph);

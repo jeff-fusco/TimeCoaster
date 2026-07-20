@@ -8,6 +8,7 @@ import { hireCost, trainCost } from '../src/systems/staff.js';
 import { RESEARCH, RESEARCH_PATHS, STAFF, STN, UPGRADES } from '../src/config/gameData.js';
 import { buyLand, chunkKey, createPropertyState, expansionCandidates } from '../src/systems/property.js';
 import { personSalary, payrollScale, _makeTestPerson } from '../src/systems/staffPeople.js';
+import { parkRating, ratingDemandMult } from '../src/systems/legacy.js';
 
 const clone = obj => JSON.parse(JSON.stringify(obj));
 
@@ -75,6 +76,7 @@ const STAGES = {
 function econFor(stage, { upgrades, staff, research }) {
   const up = makeUpgrades(upgrades);
   applyResearchEffects(up, research);
+  const demandMult = ratingDemandMult(parkRating(0, 0, stage.stats.excitement));
   const d = deriveEconomy({
     upgrades: up,
     pathStats: stage.stats,
@@ -82,6 +84,7 @@ function econFor(stage, { upgrades, staff, research }) {
     researchDone: research,
     staff: makeStaff(staff),
     station: STN,
+    demandMult,
   });
   // clamp simQueue to the real cap for snack income
   return deriveEconomy({
@@ -91,6 +94,7 @@ function econFor(stage, { upgrades, staff, research }) {
     researchDone: research,
     staff: makeStaff(staff),
     station: STN,
+    demandMult,
   });
 }
 
@@ -138,6 +142,7 @@ function deriveAtQueue(stage, { upgrades, staff, research }, simQueue) {
   applyResearchEffects(up, research);
   return deriveEconomy({
     upgrades: up, pathStats: stage.stats, simQueue,
+    demandMult: ratingDemandMult(parkRating(0, 0, stage.stats.excitement)),
     researchDone: research, staff: makeStaff(staff), station: STN,
   });
 }
@@ -149,7 +154,8 @@ function deriveBuild(stage, { upgrades, staff, research, demandMult = 1 }) {
   const up = makeUpgrades(upgrades);
   applyResearchEffects(up, research);
   return deriveEconomy({
-    upgrades: up, pathStats: stage.stats, simQueue: 1e9, demandMult,
+    upgrades: up, pathStats: stage.stats, simQueue: 1e9,
+    demandMult: demandMult * ratingDemandMult(parkRating(0, 0, stage.stats.excitement)),
     researchDone: research, staff: makeStaff(staff), station: STN,
   });
 }

@@ -19,7 +19,7 @@
 import { deriveEconomy, upgradeCost, applyResearchEffects } from '../src/systems/economy.js';
 import { hireCost, trainCost } from '../src/systems/staff.js';
 import { personSalary, payrollScale, _makeTestPerson } from '../src/systems/staffPeople.js';
-import { certificationBar } from '../src/systems/legacy.js';
+import { certificationBar, parkRating, ratingDemandMult } from '../src/systems/legacy.js';
 import { RESEARCH, RESEARCH_PATHS, STAFF, STN, UPGRADES } from '../src/config/gameData.js';
 
 const clone = obj => JSON.parse(JSON.stringify(obj));
@@ -95,7 +95,8 @@ function payrollFor(staff) {
 export function netIncome(state) {
   const stats = statsForProgress(trackProgress(state.research));
   const up = makeUpgrades(state.up, state.research);
-  const demandMult = 1 + 0.4 * state.staff.marketers.hired;
+  const stars = parkRating(0, 0, stats.excitement);
+  const demandMult = (1 + 0.4 * state.staff.marketers.hired) * ratingDemandMult(stars);
   const base = {
     upgrades: up,
     pathStats: stats,

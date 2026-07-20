@@ -55,7 +55,9 @@ import {
   fameFor,
   monumentIncome,
   openingGrant,
+  parkRating,
   qualityScore,
+  ratingDemandMult,
   renownMult,
   totalLegacyIncome,
 } from './systems/legacy.js?v=20260703-13';
@@ -355,6 +357,8 @@ function rideUpgrades(){
 
 function derived(){
   const mfx = marketingFx();
+  const effectiveExc = path ? path.stats.excitement + excitementBonus() : 0;
+  const stars = parkRating(legacy.fame, legacy.monuments.length, effectiveExc);
   return deriveEconomy({
     upgrades: rideUpgrades(),
     // decor and monument near-misses raise effective excitement for the economy
@@ -366,7 +370,7 @@ function derived(){
     station: STN,
     fallbackMaxSpeed: PHYS.vMin,
     // Fame renown x campaign arrivals x Showstopper entertainers' crowd aura
-    demandMult: renownMult(legacy.perks) * mfx.arrivalMult * showstopperArrivalMult(staff.entertainers.people),
+    demandMult: renownMult(legacy.perks) * ratingDemandMult(stars) * mfx.arrivalMult * showstopperArrivalMult(staff.entertainers.people),
     snackMult: biomeFx(activeBiome).snackMult,   // Desert: thirsty guests
     ticketMult: mfx.ticketMult,                  // Ride Spotlight premium
     vendorMult: mfx.vendorMult,                  // Family Package spend
@@ -1293,6 +1297,11 @@ const ui=createHudShop({
   getSim: () => sim,
   getMeasuredRate: measuredRate,
   getExcitementBonus: () => excitementBonus(),
+  getParkRating: () => parkRating(
+    legacy.fame,
+    legacy.monuments.length,
+    path ? path.stats.excitement + excitementBonus() : 0,
+  ),
   hasResearch,
   gradeFor,
   upgradeCost,

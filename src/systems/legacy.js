@@ -23,6 +23,21 @@ export const nestEggMult   = perks => 1 + 0.6 * lvl(perks, 'nestEgg');
 export const landmarksMult = perks => 1 + 0.3 * lvl(perks, 'landmarks');
 export const renownMult     = perks => 1 + 0.08 * lvl(perks, 'renown');
 
+// Park reputation combines what the player has banked, the history visible in
+// the park, and the quality of today's headline ride. Each source is capped so
+// no single axis can carry a park to five stars on its own.
+export function parkRating(fame = 0, retiredCount = 0, excitement = 0) {
+  const fameStars = Math.min(1.5, Math.max(0, fame) / 40);
+  const historyStars = Math.min(1.25, Math.max(0, retiredCount) * 0.35);
+  const rideStars = Math.min(1.25, Math.max(0, excitement) / 160);
+  const raw = 1 + fameStars + historyStars + rideStars;
+  return Math.max(1, Math.min(5, Math.round(raw * 2) / 2));
+}
+
+export function ratingDemandMult(rating) {
+  return 0.92 + Math.max(1, Math.min(5, rating || 1)) * 0.04;
+}
+
 export function perkCost(key, level) {
   const p = PERKS[key];
   if (!p) return Infinity;

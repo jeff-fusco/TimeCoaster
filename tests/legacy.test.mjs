@@ -12,11 +12,25 @@ import {
   monumentIncome,
   normalizeLegacy,
   openingGrant,
+  parkRating,
   perkCost,
   qualityBar,
   qualityScore,
+  ratingDemandMult,
   totalLegacyIncome,
 } from '../src/systems/legacy.js';
+
+// park rating is monotone on every input, half-star stepped, and bounded
+{
+  assert.equal(parkRating(0, 0, 0), 1);
+  assert.ok(parkRating(20, 0, 0) >= parkRating(0, 0, 0));
+  assert.ok(parkRating(20, 1, 0) >= parkRating(20, 0, 0));
+  assert.ok(parkRating(20, 1, 80) >= parkRating(20, 1, 0));
+  assert.equal(parkRating(1e9, 1e9, 1e9), 5);
+  assert.equal(parkRating(-10, -2, -30), 1);
+  assert.equal((parkRating(35, 2, 100) * 2) % 1, 0);
+  assert.ok(ratingDemandMult(5) > ratingDemandMult(1));
+}
 
 // certification bar rises each generation
 {
