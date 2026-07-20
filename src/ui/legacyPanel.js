@@ -15,7 +15,7 @@ import {
   perkCost,
   qualityBar,
   qualityScore,
-} from '../systems/legacy.js?v=20260703-13';
+} from '../systems/legacy.js?v=20260703-14';
 
 export function createLegacyPanel({
   document,

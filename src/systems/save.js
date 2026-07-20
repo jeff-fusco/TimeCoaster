@@ -1,6 +1,6 @@
-import { createLegacyState, normalizeLegacy } from './legacy.js?v=20260703-13';
-import { createMarketingState, normalizeMarketingState } from './marketing.js?v=20260703-13';
-import { migrateCountsToRoster, normalizeRoster } from './staffPeople.js?v=20260703-13';
+import { createLegacyState, normalizeLegacy } from './legacy.js?v=20260703-14';
+import { createMarketingState, normalizeMarketingState } from './marketing.js?v=20260703-14';
+import { migrateCountsToRoster, normalizeRoster } from './staffPeople.js?v=20260703-14';
 
 // v6 nests the park into { legacy, active }. `active` is the v5 flat shape (the
 // current coaster + park); `legacy` holds Fame, perks, generation and the

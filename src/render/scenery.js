@@ -1,4 +1,4 @@
-import { chunkBounds } from '../systems/property.js?v=20260703-13';
+import { chunkBounds } from '../systems/property.js?v=20260703-14';
 
 export function createClouds({ THREE, scene, colors }) {
   const clouds = [];

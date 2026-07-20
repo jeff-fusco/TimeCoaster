@@ -3,7 +3,7 @@
 // character. One tiny offscreen renderer, one render per unique seed, cached as
 // a data URL. Deterministic and cheap — portraits don't animate, so a baked
 // image beats a live canvas per card.
-import { buildStaffFigure, disposeFigure } from './staffFigure.js?v=20260703-13';
+import { buildStaffFigure, disposeFigure } from './staffFigure.js?v=20260703-14';
 
 export function createStaffPortraitStudio({ THREE, size = 128 } = {}) {
   const cache = new Map();

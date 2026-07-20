@@ -7,10 +7,10 @@
 // This replaces the old standing world monuments: a shelf of globes in the
 // Hall of Fame reads as meta-progression you can browse, without the sprawling
 // grass slabs that grew with every long coaster.
-import { PHYS } from '../config/gameData.js?v=20260703-13';
-import { DEFAULT_STATION, buildPath as buildTrackPath } from '../systems/path.js?v=20260703-13';
-import { biomeColors } from '../systems/biomes.js?v=20260703-13';
-import { buildTrackGeometry } from './track.js?v=20260703-13';
+import { PHYS } from '../config/gameData.js?v=20260703-14';
+import { DEFAULT_STATION, buildPath as buildTrackPath } from '../systems/path.js?v=20260703-14';
+import { biomeColors } from '../systems/biomes.js?v=20260703-14';
+import { buildTrackGeometry } from './track.js?v=20260703-14';
 
 // minimal upgrades stub so buildPath can read car/seats/speed levels
 const GLOBE_UPGRADES = { car: { level: 0 }, seats: { level: 0 }, speed: { level: 0 } };

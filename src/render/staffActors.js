@@ -16,7 +16,7 @@
 // All positions are read live from stationRefs.walkerGeom each frame, so
 // station rebuilds (queue upgrades, biome swaps) need no special handling.
 
-import { buildStaffFigure } from './staffFigure.js?v=20260703-13';
+import { buildStaffFigure } from './staffFigure.js?v=20260703-14';
 
 const ROLE_ORDER = ['operators', 'entertainers', 'mechanics', 'janitors', 'photographers', 'scientists', 'marketers'];
 

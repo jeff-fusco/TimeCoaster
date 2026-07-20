@@ -8,9 +8,9 @@ import {
   hasResearchKey,
   maxTrackHeight,
   upgradeCost,
-} from './systems/economy.js?v=20260703-13';
-import { drainSales, pickConcessionSale } from './systems/concessions.js?v=20260703-13';
-import { stepCrowdFlows } from './systems/crowd.js?v=20260703-13';
+} from './systems/economy.js?v=20260703-14';
+import { drainSales, pickConcessionSale } from './systems/concessions.js?v=20260703-14';
+import { stepCrowdFlows } from './systems/crowd.js?v=20260703-14';
 import {
   createResearchState,
   clampResearchFundingPct,
@@ -20,13 +20,13 @@ import {
   pathProjectState,
   researchFundingCap,
   stepResearch,
-} from './systems/research.js?v=20260703-13';
+} from './systems/research.js?v=20260703-14';
 import {
   DEFAULT_STATION,
   buildPath as buildTrackPath,
   samplePathAt,
   speedAtPath,
-} from './systems/path.js?v=20260703-13';
+} from './systems/path.js?v=20260703-14';
 import {
   applySaveData,
   ACTIVE_SLOT_KEY,
@@ -38,13 +38,13 @@ import {
   setSlotName,
   SLOT_KEYS,
   writeSave,
-} from './systems/save.js?v=20260703-13';
+} from './systems/save.js?v=20260703-14';
 import {
   createMaintenanceState,
   enqueueInstall,
   pendingCount,
   stepMaintenance,
-} from './systems/maintenance.js?v=20260703-13';
+} from './systems/maintenance.js?v=20260703-14';
 import {
   buyLand,
   chunkBounds,
@@ -52,7 +52,7 @@ import {
   expansionCandidates,
   normalizePropertyState,
   pointInOwnedLand,
-} from './systems/property.js?v=20260703-13';
+} from './systems/property.js?v=20260703-14';
 import {
   buyPerk as legacyBuyPerk,
   achieveCapstone,
@@ -68,9 +68,9 @@ import {
   ratingDemandMult,
   renownMult,
   totalLegacyIncome,
-} from './systems/legacy.js?v=20260703-13';
-import { createSnowglobeStudio } from './render/snowglobe.js?v=20260703-13';
-import { createLegacyPanel } from './ui/legacyPanel.js?v=20260703-13';
+} from './systems/legacy.js?v=20260703-14';
+import { createSnowglobeStudio } from './render/snowglobe.js?v=20260703-14';
+import { createLegacyPanel } from './ui/legacyPanel.js?v=20260703-14';
 import {
   BIOMES,
   BIOME_ORDER,
@@ -81,9 +81,9 @@ import {
   biomeOf,
   biomeUnlocked,
   normalizeBiome,
-} from './systems/biomes.js?v=20260703-13';
-import { buildTrackGeometry as renderTrackGeometry } from './render/track.js?v=20260703-13';
-import { buildPropertyGeometry as renderPropertyGeometry } from './render/property.js?v=20260703-13';
+} from './systems/biomes.js?v=20260703-14';
+import { buildTrackGeometry as renderTrackGeometry } from './render/track.js?v=20260703-14';
+import { buildPropertyGeometry as renderPropertyGeometry } from './render/property.js?v=20260703-14';
 import {
   buildStationAndQueue as renderStationAndQueue,
   PLAZA_VISUAL_TUNING,
@@ -91,18 +91,18 @@ import {
   spawnPlazaVignette,
   updateQueueVisuals as renderQueueVisuals,
   updatePlazaVisuals,
-} from './render/station.js?v=20260703-13';
+} from './render/station.js?v=20260703-14';
 import {
   CAR_LEN,
   placeCar as renderPlaceCar,
   rebuildTrains as renderRebuildTrains,
   setTrainGlow,
   setTrainOccupancy,
-} from './render/train.js?v=20260703-13';
-import { dispatchTrain, stepTrains } from './systems/trainSim.js?v=20260703-13';
-import { createIncomeTracker } from './systems/incomeTracker.js?v=20260703-13';
-import { OFFLINE_EFFICIENCY, computeOfflineProgress, formatDuration } from './systems/offline.js?v=20260703-13';
-import { createAudio } from './systems/audio.js?v=20260703-13';
+} from './render/train.js?v=20260703-14';
+import { dispatchTrain, stepTrains } from './systems/trainSim.js?v=20260703-14';
+import { createIncomeTracker } from './systems/incomeTracker.js?v=20260703-14';
+import { OFFLINE_EFFICIENCY, computeOfflineProgress, formatDuration } from './systems/offline.js?v=20260703-14';
+import { createAudio } from './systems/audio.js?v=20260703-14';
 import {
   CHANNELS,
   MAX_CHANNEL_WEIGHT,
@@ -120,8 +120,8 @@ import {
   rebalanceChannelWeights,
   steadyStateDemand,
   stepMarketing,
-} from './systems/marketing.js?v=20260703-13';
-import { staffStatus } from './systems/staff.js?v=20260703-13';
+} from './systems/marketing.js?v=20260703-14';
+import { staffStatus } from './systems/staff.js?v=20260703-14';
 import {
   aggregateStaff,
   canTrainPerson,
@@ -137,10 +137,10 @@ import {
   researchEffMult,
   showstopperArrivalMult,
   trainingFee,
-} from './systems/staffPeople.js?v=20260703-13';
-import { buildChunkScenery, createClouds } from './render/scenery.js?v=20260703-13';
-import { createStaffActors } from './render/staffActors.js?v=20260703-13';
-import { createStaffPortraitStudio } from './render/staffPortrait.js?v=20260703-13';
+} from './systems/staffPeople.js?v=20260703-14';
+import { buildChunkScenery, createClouds } from './render/scenery.js?v=20260703-14';
+import { createStaffActors } from './render/staffActors.js?v=20260703-14';
+import { createStaffPortraitStudio } from './render/staffPortrait.js?v=20260703-14';
 import {
   canPlaceDecoration,
   createDecorationsState,
@@ -149,15 +149,15 @@ import {
   placeDecoration,
   removeDecoration,
   themingBonus,
-} from './systems/decorations.js?v=20260703-13';
-import { buildDecorationModel, buildDecorations as renderDecorations } from './render/decorations.js?v=20260703-13';
-import { initBuildControls } from './input/buildControls.js?v=20260703-13';
-import { createBalancePanel } from './ui/balancePanel.js?v=20260703-13';
-import { createHudShop } from './ui/hudShop.js?v=20260703-13';
-import { createResearchPanel } from './ui/researchPanel.js?v=20260703-13';
-import { createStaffPanel } from './ui/staffPanel.js?v=20260703-13';
-import { createLandPopup } from './ui/landPopup.js?v=20260703-13';
-import { createMarketingPanel } from './ui/marketingPanel.js?v=20260703-13';
+} from './systems/decorations.js?v=20260703-14';
+import { buildDecorationModel, buildDecorations as renderDecorations } from './render/decorations.js?v=20260703-14';
+import { initBuildControls } from './input/buildControls.js?v=20260703-14';
+import { createBalancePanel } from './ui/balancePanel.js?v=20260703-14';
+import { createHudShop } from './ui/hudShop.js?v=20260703-14';
+import { createResearchPanel } from './ui/researchPanel.js?v=20260703-14';
+import { createStaffPanel } from './ui/staffPanel.js?v=20260703-14';
+import { createLandPopup } from './ui/landPopup.js?v=20260703-14';
+import { createMarketingPanel } from './ui/marketingPanel.js?v=20260703-14';
 import {
   BLOCK_GAP,
   CATS,
@@ -181,7 +181,7 @@ import {
   STAFF_ORDER,
   STN,
   UPGRADES,
-} from './config/gameData.js?v=20260703-13';
+} from './config/gameData.js?v=20260703-14';
 
 /* =========================================================================
    TIME COASTER 3D
