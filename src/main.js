@@ -181,6 +181,11 @@ import {
 
 const WORLD_UP = new THREE.Vector3(0,1,0);
 const TEST = window.__TIME_COASTER_TEST__ === true;
+// Floating coin/pop/delta cues self-remove after their ~1s CSS animation. In
+// test mode we keep them alive far longer so assertions that count them are
+// deterministic regardless of how slowly the run executes (parallel WebGL).
+const POP_TTL = TEST ? 30000 : 1000;
+const BANK_DELTA_TTL = TEST ? 30000 : 1050;
 
 // procedural sound; stays silent until unlocked by the splash's Play gesture
 const audio = createAudio(typeof localStorage !== 'undefined' ? localStorage : null);
@@ -1766,12 +1771,12 @@ function spawnConcessionPop(item, price){
   el.style.left=(_v.x*.5+.5)*host.clientWidth+'px';
   el.style.top=(-_v.y*.5+.5)*host.clientHeight+'px';
   document.body.appendChild(el);
-  setTimeout(()=>el.remove(),1000);
+  setTimeout(()=>el.remove(),POP_TTL);
 }
 function spawnCoinScreen(x,y,amount,spend){
   const el=document.createElement('div');el.className='pop'+(spend?' spend':'');
   el.textContent=(spend?'-$':'+$')+fmt(amount);el.style.left=x+'px';el.style.top=y+'px';
-  document.body.appendChild(el);setTimeout(()=>el.remove(),1000);
+  document.body.appendChild(el);setTimeout(()=>el.remove(),POP_TTL);
 }
 function spawnBankDelta(amount,spend){
   const bank=document.querySelector('.bank .money') || $('money');
@@ -1783,7 +1788,7 @@ function spawnBankDelta(amount,spend){
   el.style.left=(r.left+r.width/2)+'px';
   el.style.top=(r.bottom+8)+'px';
   document.body.appendChild(el);
-  setTimeout(()=>el.remove(),1050);
+  setTimeout(()=>el.remove(),BANK_DELTA_TTL);
 }
 let toastTimer;
 function showToast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.classList.remove('show'),2600);}
