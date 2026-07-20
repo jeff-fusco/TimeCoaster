@@ -1,6 +1,6 @@
 // Legacy ascension: retire the active coaster into a standing monument, bank
 // Fame scaled by how good it was, and start the next generation fresh. Pure and
-// testable — rendering lives in render/monuments.js, wiring in main.js.
+// testable — retired coasters render as snowglobe trophies (render/snowglobe.js)
 //
 // Design (see ROADMAP.md): building quality is the prestige currency. Fame
 // scales superlinearly with effective excitement (path excitement + decor

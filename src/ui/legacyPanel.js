@@ -21,6 +21,7 @@ export function createLegacyPanel({
   getThemeBonus,
   getCoasterName,
   setCoasterName,
+  getGlobe = () => null,   // baked snowglobe image for a retired coaster
   fmt,
   onRetire,
   onBuyPerk,
@@ -66,12 +67,29 @@ export function createLegacyPanel({
         `</div>`;
     }).join('');
 
+    // Each retired coaster sits on the shelf as a snowglobe holding the real
+    // track the player built. If WebGL can't bake the image we fall back to the
+    // plain stat row, so the hall always reads.
+    const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+    }[c]));
     const monumentsHtml = legacy.monuments.length
-      ? [...legacy.monuments].reverse().map(m => {
+      ? `<div class="globe-shelf">` + [...legacy.monuments].reverse().map(m => {
           const inc = monumentIncome(m, legacy.perks);
-          return `<div class="mon-row"><div class="mon-nm">${m.name}<small>Gen ${m.generation} · EXC ${Math.round(effectiveExcitement(m.stats, m.themeBonus))}</small></div>` +
-            `<div class="mon-inc">+$${fmt(inc)}<small>/min</small></div></div>`;
-        }).join('')
+          const img = getGlobe(m);
+          const eff = Math.round(effectiveExcitement(m.stats, m.themeBonus));
+          return `<figure class="globe-card">` +
+            (img
+              ? `<img class="globe-img" src="${img}" alt="${esc(m.name)} snowglobe" loading="lazy">`
+              : `<div class="globe-img globe-fallback">🔮</div>`) +
+            `<figcaption>` +
+              `<b class="globe-nm">${esc(m.name)}</b>` +
+              `<span class="globe-meta">Gen ${m.generation} · ${esc(m.biome || 'meadow')}</span>` +
+              `<span class="globe-meta">EXC ${eff} · ${Math.round(m.stats.length)}m</span>` +
+              `<span class="globe-inc">+$${fmt(inc)}/min</span>` +
+            `</figcaption>` +
+          `</figure>`;
+        }).join('') + `</div>`
       : `<div class="mon-empty">No retired coasters yet — certify this one to start your Hall of Fame.</div>`;
 
     list.innerHTML =
@@ -92,7 +110,7 @@ export function createLegacyPanel({
         `<div class="lg-sub">${ready ? 'Retiring banks Fame, keeps your research & staff, and starts a fresh coaster with a grant.' : 'Build bigger and theme the track near the rails to raise excitement.'}</div>` +
       `</div>` +
       `<div class="lg-card"><div class="lg-h">Fame Perks</div>${perksHtml}</div>` +
-      `<div class="lg-card"><div class="lg-h">Hall of Fame</div>${monumentsHtml}</div>`;
+      `<div class="lg-card"><div class="lg-h">Hall of Coasters</div>${monumentsHtml}</div>`;
 
     const nameInput = $('lgName');
     if (nameInput) nameInput.addEventListener('input', e => setCoasterName(e.target.value));

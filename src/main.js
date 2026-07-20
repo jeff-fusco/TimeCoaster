@@ -54,13 +54,12 @@ import {
   createMonument,
   fameFor,
   monumentIncome,
-  monumentNearMissBonus,
   openingGrant,
   qualityScore,
   renownMult,
   totalLegacyIncome,
 } from './systems/legacy.js?v=20260703-13';
-import { buildMonuments, stepMonuments } from './render/monuments.js?v=20260703-13';
+import { createSnowglobeStudio } from './render/snowglobe.js?v=20260703-13';
 import { createLegacyPanel } from './ui/legacyPanel.js?v=20260703-13';
 import {
   BIOMES,
@@ -499,8 +498,11 @@ function refreshExcitementBonuses(){
     matchTypes: biomeMatchTypes(activeBiome),
     mult: biomeFx(activeBiome).themeMult,
   });
-  monumentBonus = monumentNearMissBonus(path.pos, monumentGhosts.map(ghost => ghost.path?.pos || []));
-  path.stats.monumentNearMiss = monumentBonus;
+  // Retired coasters now live in the Hall of Coasters as snowglobes rather than
+  // standing in the world, so there is nothing on the map to thread the track
+  // past — the near-miss bonus retires with them.
+  monumentBonus = 0;
+  path.stats.monumentNearMiss = 0;
 }
 
 function buildPath(){
@@ -570,21 +572,14 @@ function buildDecorGeometry(){
 }
 
 // ── hall of fame: retired coasters as standing monuments with ghost trains ──
-const monumentsGrp=new THREE.Group(); scene.add(monumentsGrp);
-let monumentGhosts=[];
+// Retired coasters no longer stand in the world as monument slabs — they live
+// on the Hall of Coasters shelf as snowglobe trophies (see snowglobe.js). The
+// legacy data, their passive income, near-miss bonus and perks are untouched;
+// only the world rendering retired, which also ends the grass-slab sprawl a
+// long coaster used to produce.
+const globeStudio=createSnowglobeStudio({ THREE, baseColors: COL });
 function buildMonumentsAll(){
-  const res=buildMonuments({
-    THREE,
-    group: monumentsGrp,
-    monuments: legacy.monuments,
-    colors: COL,
-    renderTrackGeometry,
-    renderDecorations,
-    disposeGroup,
-    worldUp: WORLD_UP,
-  });
-  monumentGhosts=res.ghosts;
-  monumentExtent=res.extent;
+  monumentExtent=0;   // no world footprint to frame the camera around
 }
 
 function buildTrackGeometry(){
@@ -1274,7 +1269,6 @@ function tick(){
     updateDispatchButton(false);
   }
   clouds.forEach((c,i)=>{c.position.x+=(0.15+i*0.02)*frameDt;if(c.position.x>30)c.position.x=-30;});
-  if(!paused && monumentGhosts.length) stepMonuments(monumentGhosts, frameDt, THREE);
   coinThrottle-=frameDt; placeCamera(); renderer.render(scene,camera); requestAnimationFrame(tick);
 }
 
@@ -1487,6 +1481,7 @@ const legacyUI=createLegacyPanel({
   getThemeBonus: () => excitementBonus(),
   getCoasterName: () => coasterName,
   setCoasterName: v => { coasterName=v; },
+  getGlobe: monument => globeStudio.globeFor(monument),
   fmt,
   onRetire: openBiomePicker,
   onBuyPerk: key => {
