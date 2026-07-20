@@ -328,7 +328,7 @@
   .balance-row span{font-size:12px;min-width:0}
   .balance-row small{display:block;color:var(--ink-soft);font-size:10.5px;line-height:1.15;margin-top:1px}
   .balance-row b{font-family:'Fredoka';font-size:13px;text-align:right;white-space:nowrap}
-  .escape-card{width:min(360px,100%)}
+  .escape-card{width:min(520px,100%)}
   .escape-actions{display:flex;flex-direction:column;gap:8px;margin-top:2px}
   .escape-actions-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
   .menu-btn{height:42px;padding:0 14px;border-radius:11px;border:2px solid var(--ink);background:#fff;box-shadow:0 4px 0 rgba(28,37,51,.12);font-family:'Fredoka';font-weight:700;font-size:15px;color:var(--ink);cursor:pointer;transition:transform .1s,box-shadow .1s,filter .12s}
@@ -349,6 +349,16 @@
   .toggle[aria-checked="true"]{background:var(--good)}
   .toggle[aria-checked="true"] i{transform:translateX(22px)}
   .settings-hint{font-size:11px;color:var(--ink-soft);font-weight:500;line-height:1.3}
+  .save-slots{display:flex;flex-direction:column;gap:7px}
+  .save-slot{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:7px;align-items:center;padding:8px;border:1.5px solid var(--cream-edge);border-radius:11px;background:rgba(255,255,255,.65)}
+  .save-slot.active{border-color:var(--amber-deep);box-shadow:inset 0 0 0 1px var(--amber)}
+  .save-slot-info{min-width:0}
+  .save-slot-name{width:100%;border:0;border-bottom:1px solid transparent;background:transparent;font-family:'Fredoka';font-weight:700;font-size:14px;color:var(--ink);padding:1px 2px}
+  .save-slot-name:focus{outline:0;border-bottom-color:var(--amber-deep)}
+  .save-slot-meta{display:block;font-size:10.5px;color:var(--ink-soft);font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+  .slot-btn{height:31px;padding:0 9px;border:1.5px solid var(--ink);border-radius:8px;background:#fff;font-family:'Fredoka';font-weight:700;font-size:11px;cursor:pointer}
+  .slot-btn:disabled{opacity:.45;cursor:default}
+  .save-transfer{width:100%;resize:vertical;min-height:58px;max-height:130px;border:1.5px solid var(--ink);border-radius:9px;padding:7px;font:10px/1.25 monospace;color:var(--ink);background:#fff}
 
   .title{position:fixed;left:14px;bottom:14px;font-family:'Fredoka';font-weight:700;color:rgba(255,255,255,.92);text-shadow:0 2px 0 rgba(28,37,51,.35);font-size:15px;letter-spacing:.02em;pointer-events:none}
   .toast{position:fixed;bottom:128px;left:50%;transform:translateX(-50%);background:rgba(28,37,51,.9);color:#fff;font-family:'Fredoka';font-size:15px;padding:8px 18px;border-radius:10px;pointer-events:none;z-index:200;opacity:0;transition:opacity .25s;max-width:90vw;text-align:center}

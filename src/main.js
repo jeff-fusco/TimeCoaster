@@ -29,8 +29,14 @@ import {
 } from './systems/path.js?v=20260703-13';
 import {
   applySaveData,
+  ACTIVE_SLOT_KEY,
+  exportSaveString,
+  importSaveToSlot,
   readSave,
   SAVE_KEYS,
+  saveSlotMetadata,
+  setSlotName,
+  SLOT_KEYS,
   writeSave,
 } from './systems/save.js?v=20260703-13';
 import {
@@ -1872,6 +1878,45 @@ const escapeMenu = {
   resetArmed: false,
   resetTimer: null,
 };
+let activeSaveSlot=Math.max(1,Math.min(3,Number(localStorage.getItem(ACTIVE_SLOT_KEY))||1));
+let suppressPagehideSave=false;
+
+function formatSlotTime(savedAt){
+  if(!savedAt) return 'unknown time';
+  return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(savedAt));
+}
+function renderSaveSlots(){
+  const host=$('saveSlots');
+  if(!host) return;
+  host.innerHTML=[1,2,3].map(slot=>{
+    const meta=saveSlotMetadata(localStorage,slot);
+    const details=meta.empty
+      ? 'Empty slot'
+      : `Gen ${meta.generation} · ★${fmt(meta.fame)} Fame · $${fmt(meta.money)} · ${formatSlotTime(meta.savedAt)}`;
+    return `<div class="save-slot${slot===activeSaveSlot?' active':''}" data-slot="${slot}">`+
+      `<div class="save-slot-info"><input class="save-slot-name" data-slot-name="${slot}" maxlength="24" value="${escAttr(meta.name)}" aria-label="Slot ${slot} name">`+
+      `<span class="save-slot-meta">${details}</span></div>`+
+      `<button class="slot-btn" data-slot-save="${slot}">Save</button>`+
+      `<button class="slot-btn" data-slot-load="${slot}" ${slot===activeSaveSlot?'disabled':''}>${slot===activeSaveSlot?'Active':'Load'}</button></div>`;
+  }).join('');
+  host.querySelectorAll('[data-slot-name]').forEach(input=>input.addEventListener('change',()=>{
+    setSlotName(localStorage,Number(input.dataset.slotName),input.value);
+    renderSaveSlots();
+  }));
+  host.querySelectorAll('[data-slot-save]').forEach(btn=>btn.addEventListener('click',()=>{
+    const slot=Number(btn.dataset.slotSave);
+    showToast(saveGame(slot)?`Saved to ${saveSlotMetadata(localStorage,slot).name}`:'Save failed');
+    renderSaveSlots();
+  }));
+  host.querySelectorAll('[data-slot-load]').forEach(btn=>btn.addEventListener('click',()=>switchSaveSlot(Number(btn.dataset.slotLoad))));
+}
+function switchSaveSlot(slot){
+  if(slot===activeSaveSlot) return;
+  if(!saveGame()) return showToast('Save failed — slot switch cancelled');
+  localStorage.setItem(ACTIVE_SLOT_KEY,String(slot));
+  suppressPagehideSave=true;
+  location.reload();
+}
 function resetEscapeConfirm(){
   escapeMenu.resetArmed=false;
   const reset=$('escapeReset');
@@ -1891,6 +1936,7 @@ function setEscapeMenu(open){
         ? 'Manage this park session — not saved yet this session.'
         : `Manage this park session — last saved ${age<5?'just now':`${age}s ago`}.`;
     }
+    renderSaveSlots();
   }
   resetEscapeConfirm();
 }
@@ -1906,7 +1952,9 @@ function closeOpenPanels(){
   return closed;
 }
 function resetSaveAndReload(){
-  SAVE_KEYS.forEach(key=>localStorage.removeItem(key));
+  localStorage.removeItem(SLOT_KEYS[activeSaveSlot-1]);
+  if(activeSaveSlot===1) SAVE_KEYS.slice(3).forEach(key=>localStorage.removeItem(key));
+  suppressPagehideSave=true;
   location.reload();
 }
 function armOrResetPark(){
@@ -1926,10 +1974,30 @@ $('escapeCloseX')?.addEventListener('click', ()=>setEscapeMenu(false));
 $('escapeBackdrop').addEventListener('click', ()=>setEscapeMenu(false));
 $('escapeSave').addEventListener('click', ()=>{
   showToast(saveGame() ? 'Game saved' : 'Save failed');
+  renderSaveSlots();
   resetEscapeConfirm();
 });
 $('escapeReload').addEventListener('click', ()=>location.reload());
 $('escapeReset').addEventListener('click', armOrResetPark);
+$('escapeExport').addEventListener('click', async ()=>{
+  saveGame();
+  const encoded=exportSaveString(readSave(localStorage,activeSaveSlot));
+  const field=$('saveTransfer');
+  if(!encoded || !field) return showToast('Nothing to export');
+  field.value=encoded;
+  field.select();
+  try{ await navigator.clipboard.writeText(encoded); showToast('Save exported and copied'); }
+  catch(_){ showToast('Save exported — copy the string'); }
+  const status=$('saveTransferStatus'); if(status) status.textContent='Active slot exported as one copy-pasteable string.';
+});
+$('escapeImport').addEventListener('click', ()=>{
+  const field=$('saveTransfer');
+  const result=importSaveToSlot(localStorage,field?.value,activeSaveSlot);
+  const status=$('saveTransferStatus'); if(status) status.textContent=result.ok?'Import valid — loading saved park…':result.error;
+  if(!result.ok) return showToast(result.error);
+  suppressPagehideSave=true;
+  location.reload();
+});
 
 // =========================================================================
 //  SAVE / LOAD
@@ -1950,7 +2018,7 @@ function currentActiveRate(){
   if(m===null) return path ? derived().ratePerMin : 0;
   return Math.max(0, m - currentLegacyRate());
 }
-function saveGame(){
+function saveGame(slot=activeSaveSlot){
   const lastActiveRate=currentActiveRate();
   const lastLegacyRate=currentLegacyRate();
   const ok=writeSave(localStorage, {
@@ -1974,7 +2042,7 @@ function saveGame(){
     lastRate: lastActiveRate + lastLegacyRate,
     lastActiveRate,
     lastLegacyRate,
-  });
+  }, slot);
   if(ok){
     saveFailures=0;
     lastSavedAt=Date.now();
@@ -1989,7 +2057,7 @@ function saveGame(){
 }
 let restoredSavedAt=0, restoredRate=0, restoredActiveRate=null, restoredLegacyRate=0;   // for offline-progress on this boot
 function loadGame(){
-  const restored = applySaveData(readSave(localStorage), {
+  const restored = applySaveData(readSave(localStorage,activeSaveSlot), {
     state,
     sim,
     upgrades: UPGRADES,
@@ -2006,6 +2074,7 @@ function loadGame(){
     legacy.generation=restored.legacy.generation;
     legacy.perks=restored.legacy.perks;
     legacy.monuments=restored.legacy.monuments;
+    legacy.capstone=restored.legacy.capstone;
   }
   if(restored.marketing){
     const restoredMarketing=normalizeMarketingState(restored.marketing);
@@ -2055,8 +2124,8 @@ function loadGame(){
 }
 setInterval(saveGame,15000);
 // closing or backgrounding the tab must never lose progress
-window.addEventListener('pagehide', saveGame);
-document.addEventListener('visibilitychange', ()=>{ if(document.hidden) saveGame(); });
+window.addEventListener('pagehide', ()=>{ if(!suppressPagehideSave) saveGame(); });
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden && !suppressPagehideSave) saveGame(); });
 
 // =========================================================================
 //  BOOT
@@ -2065,7 +2134,7 @@ document.addEventListener('visibilitychange', ()=>{ if(document.hidden) saveGame
 // otherwise overwrite a save planted in localStorage just before a reload
 try{
   const seed=sessionStorage.getItem('tc3d_seed');
-  if(seed){ localStorage.setItem(SAVE_KEYS[0], seed); sessionStorage.removeItem('tc3d_seed'); }
+  if(seed){ localStorage.setItem(SLOT_KEYS[activeSaveSlot-1], seed); sessionStorage.removeItem('tc3d_seed'); }
 }catch(_){}
 loadGame();
 if(restoredSavedAt>0) decayDemand(marketing, (Date.now()-restoredSavedAt)/1000, marketingTraitFx(staff.marketers.people));

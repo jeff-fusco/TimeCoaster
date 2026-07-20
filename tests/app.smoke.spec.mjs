@@ -384,6 +384,18 @@ test('escape menu saves and guards reset', async ({ page }) => {
 
   await page.locator('#escapeSave').click();
   await expect(page.locator('#toast')).toContainText(/saved/i);
+  await expect(page.locator('.save-slot')).toHaveCount(3);
+  await expect(page.locator('.save-slot.active .save-slot-meta')).not.toHaveText('Empty slot');
+
+  await page.locator('[data-slot-save="2"]').click();
+  await expect(page.locator('.save-slot[data-slot="2"] .save-slot-meta')).not.toHaveText('Empty slot');
+  await page.locator('#escapeExport').click();
+  await expect(page.locator('#saveTransfer')).not.toHaveValue('');
+  const intact = await page.evaluate(() => localStorage.getItem('tc3d_v6_slot_1'));
+  await page.locator('#saveTransfer').fill('definitely not a save');
+  await page.locator('#escapeImport').click();
+  await expect(page.locator('#saveTransferStatus')).toContainText(/corrupt|invalid/i);
+  expect(await page.evaluate(() => localStorage.getItem('tc3d_v6_slot_1'))).toBe(intact);
 
   await page.locator('#escapeReset').click();
   await expect(page.locator('#escapeReset')).toHaveText('Confirm Reset');

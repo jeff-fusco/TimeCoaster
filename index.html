@@ -246,6 +246,16 @@
         <div class="settings-toggle"><span>High detail</span><button class="toggle" id="gfxDetail" role="switch" aria-checked="true"><i></i></button></div>
         <div class="settings-hint">Turn these off if the park runs slow.</div>
       </div>
+      <div class="settings-group save-slots-group">
+        <div class="settings-title">💾 Save Slots</div>
+        <div class="save-slots" id="saveSlots"></div>
+        <textarea class="save-transfer" id="saveTransfer" rows="3" spellcheck="false" placeholder="Export appears here — or paste a save string to import"></textarea>
+        <div class="escape-actions-row">
+          <button class="menu-btn subtle" id="escapeExport">Export Active</button>
+          <button class="menu-btn subtle" id="escapeImport">Import to Active</button>
+        </div>
+        <div class="settings-hint" id="saveTransferStatus">Imports are validated before the active slot is replaced.</div>
+      </div>
       <div class="escape-actions">
         <button class="menu-btn primary" id="escapeResume">▶ Resume</button>
         <div class="escape-actions-row">

@@ -6,9 +6,16 @@ import { migrateCountsToRoster, normalizeRoster } from './staffPeople.js?v=20260
 // current coaster + park); `legacy` holds Fame, perks, generation and the
 // retired-coaster monuments that persist across generations. Older flat saves
 // are migrated by wrapping them as `active` with a fresh legacy.
-export const CURRENT_SAVE_KEY = 'tc3d_v6';
-export const SAVE_KEYS = [CURRENT_SAVE_KEY, 'tc3d_v5', 'tc3d_v4', 'tc3d_v3'];
+export const CURRENT_SAVE_KEY = 'tc3d_v6_slot_1';
+export const SLOT_KEYS = [CURRENT_SAVE_KEY, 'tc3d_v6_slot_2', 'tc3d_v6_slot_3'];
+export const LEGACY_SAVE_KEYS = ['tc3d_v6', 'tc3d_v5', 'tc3d_v4', 'tc3d_v3'];
+export const SAVE_KEYS = [...SLOT_KEYS, ...LEGACY_SAVE_KEYS];
+export const ACTIVE_SLOT_KEY = 'tc3d_active_slot';
 export const SAVE_VERSION = 6;
+
+const slotIndex = slot => Math.max(1, Math.min(3, Math.floor(slot || 1))) - 1;
+const slotKey = slot => SLOT_KEYS[slotIndex(slot)];
+const slotNameKey = slot => `tc3d_slot_name_${slotIndex(slot) + 1}`;
 
 // Build the flat "active coaster" payload (v5 shape + biome).
 function createActiveData({
@@ -87,18 +94,19 @@ export function createSaveData(gameState) {
   };
 }
 
-export function writeSave(storage, gameState) {
+export function writeSave(storage, gameState, slot = 1) {
   try {
-    storage.setItem(CURRENT_SAVE_KEY, JSON.stringify(createSaveData(gameState)));
+    storage.setItem(slotKey(slot), JSON.stringify(createSaveData(gameState)));
     return true;
   } catch (_) {
     return false;
   }
 }
 
-export function readSave(storage) {
+export function readSave(storage, slot = 1) {
   try {
-    for (const key of SAVE_KEYS) {
+    const keys = [slotKey(slot), ...(slotIndex(slot) === 0 ? LEGACY_SAVE_KEYS : [])];
+    for (const key of keys) {
       const raw = storage.getItem(key);
       if (raw) return JSON.parse(raw);
     }
@@ -106,6 +114,80 @@ export function readSave(storage) {
     return null;
   }
   return null;
+}
+
+export function setSlotName(storage, slot, name) {
+  try {
+    const clean = String(name || '').trim().slice(0, 24);
+    if (clean) storage.setItem(slotNameKey(slot), clean);
+    else storage.removeItem(slotNameKey(slot));
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+export function saveSlotMetadata(storage, slot) {
+  const index = slotIndex(slot) + 1;
+  let name = `Park ${index}`;
+  try { name = storage.getItem(slotNameKey(index)) || name; } catch (_) { /* use default */ }
+  const raw = readSave(storage, index);
+  if (!raw) return { slot: index, name, empty: true };
+  const migrated = migrateSave(raw);
+  if (!migrated) return { slot: index, name, empty: true };
+  return {
+    slot: index,
+    name,
+    empty: false,
+    generation: Math.max(1, Math.floor(migrated.legacy?.generation || 1)),
+    fame: Math.max(0, Number(migrated.legacy?.fame) || 0),
+    money: Math.max(0, Number(migrated.active?.money) || 0),
+    savedAt: Number.isFinite(migrated.savedAt) ? migrated.savedAt : 0,
+  };
+}
+
+function bytesToBase64(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+export function exportSaveString(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  return bytesToBase64(new TextEncoder().encode(JSON.stringify(raw)));
+}
+
+export function importSaveString(input) {
+  try {
+    const compact = String(input || '').replace(/\s+/g, '');
+    if (!compact) return { ok: false, error: 'Paste a save string first.' };
+    const binary = atob(compact);
+    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+    const json = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+    const data = JSON.parse(json);
+    if (!data || typeof data !== 'object' || data.version !== SAVE_VERSION) {
+      return { ok: false, error: `Save must be version ${SAVE_VERSION}.` };
+    }
+    if (!data.active || typeof data.active !== 'object' || !data.legacy || typeof data.legacy !== 'object') {
+      return { ok: false, error: 'Save data is incomplete.' };
+    }
+    return { ok: true, data };
+  } catch (_) {
+    return { ok: false, error: 'That save string is corrupt or invalid.' };
+  }
+}
+
+export function importSaveToSlot(storage, input, slot) {
+  const parsed = importSaveString(input);
+  if (!parsed.ok) return parsed;
+  try {
+    // Validation is complete before this sole write, so a rejected import can
+    // never partially replace the destination slot.
+    storage.setItem(slotKey(slot), JSON.stringify(parsed.data));
+    return parsed;
+  } catch (_) {
+    return { ok: false, error: 'Browser storage rejected the imported save.' };
+  }
 }
 
 // Normalize any stored shape into v6 { version, savedAt, lastRate, legacy, active }.
