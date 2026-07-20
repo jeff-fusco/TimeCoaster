@@ -19,6 +19,7 @@ export function createStaffPanel({
   onFire = () => false,
   onReroll = () => 0,
   onSpendFeedback = () => {},
+  wageScale = () => 1,   // era wage multiplier — displayed pay matches the live drain
   fmt,
 }) {
   const $ = id => document.getElementById(id);
@@ -30,6 +31,7 @@ export function createStaffPanel({
   let suppressClickUntil = 0;
   let deferredRenderDepth = 0;
   let renderQueued = false;
+  let eraWage = 1;   // refreshed each render from wageScale()
 
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -100,7 +102,7 @@ export function createStaffPanel({
       avatar(person) +
       `<div class="person-main">` +
       `<div class="person-name">${esc(person.name)} ${rarityLabel(person)}</div>` +
-      `<div class="person-meta">Potential ${person.potential} · Wage $${fmt(person.baseSalary)}/min${veteran ? ' · Veteran Lv 2' : ''}</div>` +
+      `<div class="person-meta">Potential ${person.potential} · Wage $${fmt(person.baseSalary * eraWage)}/min${veteran ? ' · Veteran Lv 2' : ''}</div>` +
       `<div class="person-skills">${skillBars(person)}</div>` +
       `<div class="trait-list">${traitChips(person)}</div>` +
       `</div>` +
@@ -115,7 +117,7 @@ export function createStaffPanel({
       avatar(person) +
       `<div class="person-main">` +
       `<div class="person-name">${esc(person.name)} ${rarityLabel(person)}</div>` +
-      `<div class="person-meta">Level ${person.level}/${person.potential} · Skill ${pct(person.coverage || person.competence)} · Wage $${fmt(person.salaryPerMin)}/min</div>` +
+      `<div class="person-meta">Level ${person.level}/${person.potential} · Skill ${pct(person.coverage || person.competence)} · Wage $${fmt(person.salaryPerMin * eraWage)}/min</div>` +
       `<div class="person-skills">${skillBars(person)}</div>` +
       `<div class="trait-list">${traitChips(person)}</div>` +
       `</div>` +
@@ -149,8 +151,10 @@ export function createStaffPanel({
     const staff = getStaff();
     const roster = getRoster();
     const money = getState().money;
+    eraWage = Math.max(1, wageScale() || 1);
     const renderKey = JSON.stringify({
       money: Math.floor(money),
+      eraWage: Math.round(eraWage * 10),
       staff: staffOrder.map(role => {
         const entry = staff[role] || {};
         const applicants = getApplicants(role);
@@ -204,12 +208,12 @@ export function createStaffPanel({
         `</div>` +
         `<div class="lead-strip ${lead ? '' : 'empty'}">` +
         (lead
-          ? `${avatar(lead, 'small')}<div><b>${esc(lead.label)}</b><span>${esc(lead.name)} · Lv ${lead.level}/${lead.potential} · $${fmt(lead.salaryPerMin)}/min</span></div>`
+          ? `${avatar(lead, 'small')}<div><b>${esc(lead.label)}</b><span>${esc(lead.name)} · Lv ${lead.level}/${lead.potential} · $${fmt(lead.salaryPerMin * eraWage)}/min</span></div>`
           : `<div><b>No crew yet</b><span>Choose from the job board below.</span></div>`) +
         `</div>` +
         `<div class="board-head"><b>Job Board</b><span>Refresh ${mmss(getBoardRefreshSeconds(role))}</span><button class="staff-btn reroll" data-act="reroll" data-role="${role}" ${money < rCost ? 'disabled' : ''}>Reroll $${fmt(rCost)}</button></div>` +
         `<div class="applicant-grid">${applicants.map((p, i) => renderApplicant(role, p, i, money, atCap)).join('') || '<div class="empty-note">No applicants. Reroll the board.</div>'}</div>` +
-        `<div class="roster-head"><b>Roster ${people.length}/${cap === Infinity ? '∞' : cap}</b><span>Payroll $${fmt(s.salaryPerMin || 0)}/min</span></div>` +
+        `<div class="roster-head"><b>Roster ${people.length}/${cap === Infinity ? '∞' : cap}</b><span>Payroll $${fmt((s.salaryPerMin || 0) * eraWage)}/min${eraWage > 1.05 ? ` · era wages ×${eraWage.toFixed(1)}` : ''}</span></div>` +
         `<div class="member-grid">${people.map((p, i) => renderMember(role, p, i, money)).join('') || '<div class="empty-note">Nobody hired yet.</div>'}</div>`;
       list.appendChild(row);
     });

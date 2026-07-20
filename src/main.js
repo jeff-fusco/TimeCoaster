@@ -120,6 +120,7 @@ import {
   rollApplicants,
   signingFee,
   totalPayroll,
+  payrollScale,
   TRAITS,
   marketingTraitFx,
   offlineEfficiencyBonus,
@@ -1185,10 +1186,11 @@ function stepSim(dt){
   // Tours campaigns multiply the take while their demand lasts
   if(legacy.monuments.length) passive += totalLegacyIncome(legacy.monuments, legacy.perks)*marketingFx().legacyMult/60*dt;
   if(passive>0){ state.money += passive; incomeTracker.record(passive, nowSec()); }
-  // payroll: wages drain continuously while the park is open. Skipped when the
-  // bank is empty — a broke park simply can't make payroll, no death spiral.
+  // payroll: wages drain continuously while the park is open, scaled by era —
+  // a famous park pays famous salaries (payrollScale of gross). Skipped when
+  // the bank is empty — a broke park simply can't make payroll, no death spiral.
   if(state.money>0){
-    const wage=totalPayroll(roster)/60*dt;
+    const wage=totalPayroll(roster)*payrollScale(d.ratePerMin)/60*dt;
     if(wage>0) state.money=Math.max(0, state.money-wage);
   }
   // marketing: Marketers split a chosen % of projected income across the
@@ -1437,7 +1439,7 @@ const balanceUI=createBalancePanel({
   getMarketingFundingPct: () => clampMarketingPct(marketing.fundingPct, staff),
   canSpendMarketing: () => hasMarketer(staff),
   getMarketingFx: marketingFx,
-  getPayroll: () => totalPayroll(roster),
+  getPayroll: () => totalPayroll(roster) * payrollScale(derived().ratePerMin),
   researchPaths: RESEARCH_PATHS,
   projects: RESEARCH,
   pathProjectState,
@@ -1577,6 +1579,9 @@ const staffUI=createStaffPanel({
   },
   describe: (role, entry) => staffStatus(role, { hired: entry.hired, trained: Math.round(entry.trained||0) }),
   traits: TRAITS,
+  // era wages: displayed salaries track the park's gross (a famous park pays
+  // famous salaries) — must match the live payroll drain in stepSim
+  wageScale: () => payrollScale(derived().ratePerMin),
   onSpendFeedback: (amount, x, y) => spawnCoinScreen(Math.max(0,x-26), Math.max(0,y-14), amount, true),
   onHire: (role, index=cheapestApplicantIndex(role)) => {
     const prevResearchCap=researchFundingCap(staff);
@@ -2032,7 +2037,7 @@ const offline=restoredSavedAt>0 ? computeOfflineProgress({
   rate:restoredRate,
   activeRate:restoredActiveRate,
   legacyRate:restoredLegacyRate,
-  payrollPerMin:totalPayroll(roster),   // wages accrue while away too
+  payrollPerMin:totalPayroll(roster)*payrollScale(restoredRate),   // era wages accrue while away too
   // Early Birds keep the park earning while you sleep (+3% each, cap +20%)
   efficiency:OFFLINE_EFFICIENCY + offlineEfficiencyBonus(roster),
   research, researchPaths:RESEARCH_PATHS, projects:RESEARCH, staff,

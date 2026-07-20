@@ -7,7 +7,7 @@ import { deriveEconomy, upgradeCost, applyResearchEffects } from '../src/systems
 import { hireCost, trainCost } from '../src/systems/staff.js';
 import { RESEARCH, RESEARCH_PATHS, STAFF, STN, UPGRADES } from '../src/config/gameData.js';
 import { buyLand, chunkKey, createPropertyState, expansionCandidates } from '../src/systems/property.js';
-import { personSalary, _makeTestPerson } from '../src/systems/staffPeople.js';
+import { personSalary, payrollScale, _makeTestPerson } from '../src/systems/staffPeople.js';
 
 const clone = obj => JSON.parse(JSON.stringify(obj));
 
@@ -125,7 +125,7 @@ for (const [name, stage] of Object.entries(STAGES)) {
   const merchRoy = d.merchPerMin + d.royaltyPerMin;
   const conc = d.concessions.perMin;
   const gross = ticket + photo + merchRoy + conc;
-  const pay = payrollFor(stage.staff);
+  const pay = payrollFor(stage.staff) * payrollScale(gross);   // era wages
   const cell = v => `${fmtMoney(v)} (${pct(v, gross)})`.padEnd(15);
   console.log(
     `${name.padEnd(9)}  ${cell(ticket)}  ${cell(photo)}  ${cell(merchRoy)}  ${cell(conc)}  | ${fmtMoney(pay).padStart(8)}   ${fmtMoney(gross - pay).padStart(8)}`

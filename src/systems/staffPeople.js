@@ -267,6 +267,17 @@ export function tenureMult(generations = 0) {
   return 1 + TENURE_BONUS * Math.max(0, generations | 0);
 }
 
+// Era wages: a famous park pays famous salaries. The wage bill scales with
+// gross income past a threshold, so payroll stays a real slice (~4–10%) of a
+// growing park instead of vanishing to rounding error — below the threshold
+// (a young park) wages are flat and the early game is never squeezed.
+export const PAYROLL_SCALE_BASE = 800;   // gross $/min where era wages start rising
+export const PAYROLL_SCALE_EXP = 0.85;
+export function payrollScale(grossPerMin = 0) {
+  const g = Math.max(0, Number.isFinite(grossPerMin) ? grossPerMin : 0);
+  return Math.max(1, Math.pow(g / PAYROLL_SCALE_BASE, PAYROLL_SCALE_EXP));
+}
+
 // ── roster + aggregation ─────────────────────────────────────────────────────
 export const STAFF_ROLES = Object.keys(ROLE_BASE);
 

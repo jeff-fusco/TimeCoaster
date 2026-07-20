@@ -18,7 +18,7 @@
 //    never free.
 import { deriveEconomy, upgradeCost, applyResearchEffects } from '../src/systems/economy.js';
 import { hireCost, trainCost } from '../src/systems/staff.js';
-import { personSalary, _makeTestPerson } from '../src/systems/staffPeople.js';
+import { personSalary, payrollScale, _makeTestPerson } from '../src/systems/staffPeople.js';
 import { certificationBar } from '../src/systems/legacy.js';
 import { RESEARCH, RESEARCH_PATHS, STAFF, STN, UPGRADES } from '../src/config/gameData.js';
 
@@ -106,7 +106,11 @@ export function netIncome(state) {
   };
   const probe = deriveEconomy({ ...base, simQueue: 1e9 });
   const d = deriveEconomy({ ...base, simQueue: probe.queueCap });
-  return { gross: d.ratePerMin, net: d.ratePerMin - payrollFor(state.staff), stats, derived: d };
+  const gross = d.ratePerMin;
+  // era wages: the wage bill scales with gross (a famous park pays famous
+  // salaries) — same formula the live game drains with
+  const net = gross - payrollFor(state.staff) * payrollScale(gross);
+  return { gross, net, stats, derived: d };
 }
 
 // ── the purchase menu, with marginal payback for each option ─────────────────
